@@ -314,7 +314,8 @@ export const RESOURCES: Record<string, Resource> = {
     pageSize: 100,
     notes: [
       "'รหัสสั่งซ่อม' อาจซ้ำกันได้คนละอู่ ระบบจึงจับคู่กับใบวางบิลโดยใช้ รหัสสั่งซ่อม + อู่ ร่วมกันเสมอ",
-      "มูลค่าที่เบิกคิดจาก 'ราคาต่อหน่วยล่าสุดที่รับเข้า' × จำนวน",
+      "มูลค่าที่เบิกคิดจาก 'ราคาต่อหน่วยล่าสุดที่รับเข้า' × จำนวน (กรอกทับเองได้)",
+      "ของรายชิ้น (ยาง/แบตเตอรี่): กรอกรหัสอุปกรณ์ใหม่ที่ติดตั้งและรหัสเก่าที่ถอด ระบบจะเดินสถานะในทะเบียนให้เอง",
     ],
     fields: [
       { name: "date", label: "วันที่เบิก", type: "date", required: true, format: "date", span: 1 },
@@ -324,6 +325,22 @@ export const RESOURCES: Record<string, Resource> = {
       { name: "position", label: "ตำแหน่ง (เช่น ล้อหน้าซ้าย)", type: "text", span: 1 },
       { name: "vendor", label: "อู่ / ผู้ขาย", type: "select", options: { kind: "lookup", lookupKind: "supplier" }, allowEmpty: true, span: 1 },
       { name: "workOrder", label: "รหัสสั่งซ่อม", type: "text", span: 1 },
+      {
+        name: "newUnitCode",
+        label: "รหัสอุปกรณ์ใหม่ที่ติดตั้ง",
+        type: "text",
+        span: 1,
+        placeholder: "TU00001",
+        help: "เฉพาะของรายชิ้น (ยาง/แบตเตอรี่) — ดูรหัสได้ที่หน้าทะเบียนยาง/แบตเตอรี่",
+      },
+      {
+        name: "oldUnitCode",
+        label: "รหัสอุปกรณ์เก่าที่ถอด",
+        type: "text",
+        span: 1,
+        placeholder: "TU00007",
+        help: "กรอกแล้วชิ้นนี้จะเข้าทะเบียนของเก่ารอขายทันที",
+      },
       { name: "issuedBy", label: "ผู้เบิก", type: "text", span: 1, hideInTable: true },
       { name: "cost", label: "มูลค่าที่เบิก (บาท)", type: "number", step: "0.01", format: "money", span: 1, help: "เว้นว่างเพื่อให้คิดจากราคาทุนล่าสุด" },
       { name: "note", label: "หมายเหตุ", type: "text", span: 2, hideInTable: true },

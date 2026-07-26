@@ -53,6 +53,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/stock/balance", label: "สรุปคงเหลือ" },
       { href: "/stock/items", label: "รายการสินค้า" },
+      { href: "/stock/units", label: "ทะเบียนยาง/แบตเตอรี่" },
       { href: "/stock/in", label: "รับเข้าสต็อก" },
       { href: "/stock/out", label: "เบิกใช้สต็อก" },
       { href: "/stock/bills", label: "ใบวางบิลอู่/ผู้ขาย" },
