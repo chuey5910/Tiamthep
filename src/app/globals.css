@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Sarabun", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #d9ebff;
+  --color-brand-200: #bcdcff;
+  --color-brand-300: #8ec7ff;
+  --color-brand-400: #59a8ff;
+  --color-brand-500: #3286fb;
+  --color-brand-600: #1c67f0;
+  --color-brand-700: #1552dd;
+  --color-brand-800: #1844b3;
+  --color-brand-900: #1a3d8d;
+}
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e3e6ea;
+  --text: #14181f;
+  --muted: #667085;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.05);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── ตาราง ── */
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+.tbl thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f2f4f7;
+  color: #475467;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.tbl tbody td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f0f1f3;
+  vertical-align: middle;
+}
+.tbl tbody tr:hover td {
+  background: #fafbfc;
+}
+.tbl tfoot td {
+  padding: 0.55rem 0.75rem;
+  font-weight: 700;
+  background: #f9fafb;
+  border-top: 2px solid var(--border);
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── ฟอร์ม ── */
+.inp {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.875rem;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.inp:focus {
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 3px rgb(50 134 251 / 0.15);
+}
+.inp:disabled {
+  background: #f4f5f7;
+  color: var(--muted);
+}
+.lbl {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475467;
+  margin-bottom: 0.25rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--color-brand-600);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--color-brand-700);
+}
+.btn-ghost {
+  background: #fff;
+  border-color: var(--border);
+  color: #344054;
+}
+.btn-ghost:hover {
+  background: #f8f9fb;
+}
+.btn-danger {
+  background: #fff;
+  border-color: #fecdca;
+  color: #b42318;
+}
+.btn-danger:hover {
+  background: #fef3f2;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-ok    { background: #ecfdf3; color: #027a48; }
+.badge-warn  { background: #fffaeb; color: #b54708; }
+.badge-error { background: #fef3f2; color: #b42318; }
+.badge-info  { background: #eff8ff; color: #175cd3; }
+.badge-muted { background: #f2f4f7; color: #475467; }
+
+/* พิมพ์รายงาน — ซ่อนเมนูและปุ่ม */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .card { border: none; box-shadow: none; }
+  main { padding: 0 !important; }
+}

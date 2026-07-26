@@ -1,0 +1,2040 @@
+{
+ "lookups": {
+  "vehicleTypes": [
+   "รถพ่วง",
+   "รถเดี่ยว 10 ล้อ",
+   "รถ 6 ล้อ",
+   "เทรลเลอร์"
+  ],
+  "expenseCategories": [
+   "ซ่อมบำรุง",
+   "ค่ายาง",
+   "ค่าทางด่วน",
+   "ค่าปรับ",
+   "ประกันภัย",
+   "ภาษี/พรบ.",
+   "เงินเดือนสำนักงาน",
+   "ค่าบริหาร",
+   "อื่นๆ"
+  ],
+  "locations": [
+   "โรงงานนครปฐม",
+   "ท่าเรือแหลมฉบัง",
+   "คลังอยุธยา",
+   "โรงงานระยอง"
+  ],
+  "outsources": [
+   "หจก.ขนส่งรุ่งเรือง"
+  ],
+  "fuelPriceBases": [
+   "ราคาวันที่ 1",
+   "เฉลี่ย 16-15",
+   "ราคาวันขนส่ง"
+  ],
+  "priceUnits": [
+   "ต่อเที่ยว",
+   "ต่อตัน"
+  ],
+  "weightBases": [
+   "น้ำหนักปลายทาง",
+   "น้ำหนักต้นทาง"
+  ],
+  "suppliers": [
+   "ร้านยางเฮงเฮง",
+   "อู่ช่างดำ"
+  ]
+ },
+ "settings": {
+  "fuelBuybackRate": 30,
+  "docAlertDays": 30
+ },
+ "vehicles": [
+  {
+   "plate": "70-1779",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "31/03/2570",
+   "cargoInsDue": null
+  },
+  {
+   "plate": "71-2560",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "31/03/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2472",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "31/03/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2473",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "31/03/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2474",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "31/03/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-3880",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "31/03/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1931",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "23/07/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1937",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "28/07/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1938",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "28/07/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1948",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "20/07/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2308",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "25/09/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2309",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "25/09/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-5272",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": "30/06/2027",
+   "insuranceDue": "06/06/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1853",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "27/10/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1856",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "27/10/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1983",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "28/08/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-1984",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "28/08/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2161",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "21/11/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2366",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "02/12/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-2367",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "02/12/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-4009",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2570",
+   "actDue": "09/09/2027",
+   "insuranceDue": "05/11/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-4010",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "05/11/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-4323",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "31/08/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-4324",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": "30/09/2026",
+   "insuranceDue": "31/08/2569",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "รถร่วม",
+   "vehicleType": "รถดั๊ม",
+   "ownerType": "รถร่วม",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "-",
+   "actDue": "-",
+   "insuranceDue": "-",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-5599",
+   "vehicleType": "หัวลาก",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "27/04/2570",
+   "actDue": "27/04/2027",
+   "insuranceDue": "24/04/2570",
+   "cargoInsDue": "08/05/2570"
+  },
+  {
+   "plate": "70-5600",
+   "vehicleType": "หัวลาก",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "27/04/2027",
+   "insuranceDue": "24/04/2570",
+   "cargoInsDue": "04/06/2570"
+  },
+  {
+   "plate": "รถร่วม-70-5551",
+   "vehicleType": "หัวลาก",
+   "ownerType": "รถร่วม",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/12/2569",
+   "actDue": "31/12/2026",
+   "insuranceDue": "-",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-5617",
+   "vehicleType": "หัวลาก",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "22/05/2570",
+   "cargoInsDue": "04/06/2570"
+  },
+  {
+   "plate": "70-5618",
+   "vehicleType": "หัวลาก",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "22/05/2570",
+   "cargoInsDue": "04/06/2570"
+  },
+  {
+   "plate": "70-5615",
+   "vehicleType": "รถกระบะ",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "25/05/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-5616",
+   "vehicleType": "รถกระบะ",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": "31/03/2027",
+   "insuranceDue": "22/05/2570",
+   "cargoInsDue": "-"
+  },
+  {
+   "plate": "70-0843",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2475",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2476",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2477",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-4190",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-4191",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0899",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0983",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0984",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0985",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-1260",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-1261",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-1262",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-1263",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-1932",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2084",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2085",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2258",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-2259",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-4232",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0809",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0810",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0811",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0812",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0813",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0942",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0946",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0947",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/09/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0835",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/12/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0839",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/12/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-0841",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/12/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-1222",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/12/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-5273",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "30/06/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-5568",
+   "vehicleType": "หางพื้นเรียบ 3 เพลา",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-5598",
+   "vehicleType": "หางพื้นเรียบ 3 เพลา",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "รถร่วม-70-4508",
+   "vehicleType": "หางพื้นเรียบ 3 เพลา",
+   "ownerType": "รถร่วม",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/12/2569",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-5566",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  },
+  {
+   "plate": "70-5565",
+   "vehicleType": "หางพ่วง",
+   "ownerType": "รถบริษัท",
+   "outsourceName": null,
+   "startDate": null,
+   "taxDue": "31/03/2570",
+   "actDue": null,
+   "insuranceDue": null,
+   "cargoInsDue": null
+  }
+ ],
+ "drivers": [
+  {
+   "code": "D002",
+   "firstName": "ชัดชัย",
+   "lastName": "พงษ์ทอง",
+   "nationalId": "3220300501491",
+   "licenseNo": "RYG/00010/2012",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "06/07/2570"
+  },
+  {
+   "code": "D003",
+   "firstName": "ชัยรัตน์",
+   "lastName": "สงนอก",
+   "nationalId": "1301290003560",
+   "licenseNo": "RYG/00320/2014",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "08/09/2569"
+  },
+  {
+   "code": "D010",
+   "firstName": "วิชิตชัย",
+   "lastName": "ยอดแสง",
+   "nationalId": "1430500259067",
+   "licenseNo": "RYG.1/00049/2018",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "29/03/2570"
+  },
+  {
+   "code": "D013",
+   "firstName": "สยาม",
+   "lastName": "ธรรมวัฒน์",
+   "nationalId": "3601101322381",
+   "licenseNo": "RYG/00241/2016",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "30/05/2571"
+  },
+  {
+   "code": "D014",
+   "firstName": "สำรวม",
+   "lastName": "รักดี",
+   "nationalId": "3160800173434",
+   "licenseNo": "CNT.1/00080/2022",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "14/10/2571"
+  },
+  {
+   "code": "D019",
+   "firstName": "อนุศร",
+   "lastName": "ดวงแก้ว",
+   "nationalId": "1720200004427",
+   "licenseNo": "RYG/00513/2025",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "20/06/2571"
+  },
+  {
+   "code": "D020",
+   "firstName": "อภิชิต",
+   "lastName": "ตื้อแอ้",
+   "nationalId": "1400500041886",
+   "licenseNo": "RYG/00798/2024",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "07/12/2571"
+  },
+  {
+   "code": "D023",
+   "firstName": "อำมร",
+   "lastName": "โผยเขียว",
+   "nationalId": "3360500504352",
+   "licenseNo": "RYG/00769/2023",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "03/01/2570"
+  },
+  {
+   "code": "D025",
+   "firstName": "สัตยา",
+   "lastName": "คำชม",
+   "nationalId": "1679900254930",
+   "licenseNo": "RYG/00186/2026",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "04/03/2572"
+  },
+  {
+   "code": "D026",
+   "firstName": "ยงยุทธ",
+   "lastName": "ศรีชมไพร",
+   "nationalId": "3600700928501",
+   "licenseNo": "NSW.1/00030/2022",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "13/10/2569"
+  },
+  {
+   "code": "D035",
+   "firstName": "เทพภิชัย",
+   "lastName": "นารักษ์",
+   "nationalId": "3800600493561",
+   "licenseNo": "NSW.1/00030/2022",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "28/11/2570"
+  },
+  {
+   "code": "D039",
+   "firstName": "กุมพิพัฒน์",
+   "lastName": "เข็มแก้ว",
+   "nationalId": "1450900097994",
+   "licenseNo": "RYG.1/00059/2025",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "24/11/2571"
+  },
+  {
+   "code": "D042",
+   "firstName": "สโรชา",
+   "lastName": "ปาปะแพ",
+   "nationalId": "1160401275661",
+   "licenseNo": "KPP/00143/2023",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "02/05/2569"
+  },
+  {
+   "code": "D043",
+   "firstName": "ประหยัด",
+   "lastName": "อุ่นพะเนา",
+   "nationalId": "3300800743573",
+   "licenseNo": "RYG.1/00036/2025",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "09/03/2569"
+  },
+  {
+   "code": "D045",
+   "firstName": "มานะ",
+   "lastName": "มิ้มสงค์",
+   "nationalId": "5670500101031",
+   "licenseNo": "PBN.7/00075/2025",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "09/04/2571"
+  },
+  {
+   "code": "D046",
+   "firstName": "ปิยะ",
+   "lastName": "ศรีชมไพร",
+   "nationalId": "3600700928536",
+   "licenseNo": "RYG/00807/2025",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "30/07/2571"
+  },
+  {
+   "code": "D048",
+   "firstName": "นิพนธ์",
+   "lastName": "ปฐมสวัสดิ์",
+   "nationalId": "1321100042763",
+   "licenseNo": "SRB.1/00267/2023",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "14/12/2569"
+  },
+  {
+   "code": "D052",
+   "firstName": "สำเริง",
+   "lastName": "ศรียา",
+   "nationalId": "3250500598293",
+   "licenseNo": "CBl/00320/2023",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "11/05/2569"
+  },
+  {
+   "code": "D053",
+   "firstName": "เมืองมล",
+   "lastName": "ศรีสะพุง",
+   "nationalId": "3360500358038",
+   "licenseNo": "CYP.1/00016/2024",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "09/09/2570"
+  },
+  {
+   "code": "D054",
+   "firstName": "สมบัติ",
+   "lastName": "อุ่นพะเนา",
+   "nationalId": "3300800743565",
+   "licenseNo": "CTB/00171/2022",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "07/09/2571"
+  },
+  {
+   "code": "D055",
+   "firstName": "ไชยนาท",
+   "lastName": "เหมุทัย",
+   "nationalId": "3411900465991",
+   "licenseNo": "RYG/00001/2022",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 4",
+   "licenseExpiry": "29/01/2571"
+  },
+  {
+   "code": "D056",
+   "firstName": "ไกรสร",
+   "lastName": "ทองเหลือง",
+   "nationalId": "1341600068494",
+   "licenseNo": "CBL1/00938/2024",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "-"
+  },
+  {
+   "code": "D057",
+   "firstName": "สมชาติ",
+   "lastName": "ก่อแก้ว",
+   "nationalId": "1320600026308",
+   "licenseNo": "MSK.1/00109/2024",
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "20/03/2570"
+  },
+  {
+   "code": "D058",
+   "firstName": "รุ่ง",
+   "lastName": "เบ้าคำ",
+   "nationalId": "1234567890123",
+   "licenseNo": null,
+   "licenseType": "ใบอนุญาติขับรถประเภทที่ 3",
+   "licenseExpiry": "-"
+  }
+ ],
+ "pairings": [
+  {
+   "headPlate": "70-1779 ลบ.",
+   "trailerPlate": "70-5273 ลบ",
+   "driverCode": "D058",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1853 ลบ.",
+   "trailerPlate": "70-0811 ลบ.",
+   "driverCode": "D053",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1856 ลบ.",
+   "trailerPlate": "70-0899 ลบ.",
+   "driverCode": "D052",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1931 ลบ.",
+   "trailerPlate": "70-1222 ลบ.",
+   "driverCode": "D014",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1937 ลบ.",
+   "trailerPlate": "70-0946 ลบ.",
+   "driverCode": "D035",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1938 ลบ.",
+   "trailerPlate": "70-1263 ลบ.",
+   "driverCode": "D048",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1948 ลบ.",
+   "trailerPlate": "70-1261 ลบ.",
+   "driverCode": "D042",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1983 ลบ.",
+   "trailerPlate": "70-0843 ลบ.",
+   "driverCode": "D046",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-1984 ลบ.",
+   "trailerPlate": "70-1260 ลบ.",
+   "driverCode": null,
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2161 ลบ.",
+   "trailerPlate": "70-2084 ลบ.",
+   "driverCode": "D045",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2308 ลบ.",
+   "trailerPlate": "70-2259 ลบ.",
+   "driverCode": "D019",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2309 ลบ.",
+   "trailerPlate": "70-1262 ลบ.",
+   "driverCode": "D057",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2366 ลบ.",
+   "trailerPlate": "70-2258 ลบ.",
+   "driverCode": null,
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2367 ลบ.",
+   "trailerPlate": "70-4190 ลบ.",
+   "driverCode": "D020",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2472 ลบ.",
+   "trailerPlate": "70-2475 ลบ.",
+   "driverCode": null,
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2473 ลบ.",
+   "trailerPlate": "70-2476 ลบ.",
+   "driverCode": null,
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-2474 ลบ.",
+   "trailerPlate": "70-0813 ลบ.",
+   "driverCode": null,
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-3880 ลบ.",
+   "trailerPlate": "70-4191 ลบ.",
+   "driverCode": "D013",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-4009 ลบ.",
+   "trailerPlate": "70-4232 ลบ.",
+   "driverCode": "D010",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-4010 ลบ.",
+   "trailerPlate": "70-2085 ลบ.",
+   "driverCode": "D003",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-4323 ลบ.",
+   "trailerPlate": "70-0839 ลบ.",
+   "driverCode": null,
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-4324 ลบ.",
+   "trailerPlate": "70-1932 ลบ.",
+   "driverCode": "D002",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5272 ลบ.",
+   "trailerPlate": "70-2477 ลบ.",
+   "driverCode": "D023",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5599",
+   "trailerPlate": "70-5568",
+   "driverCode": "D025",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5600",
+   "trailerPlate": "70-5598",
+   "driverCode": "D043",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5615",
+   "trailerPlate": "-",
+   "driverCode": "D039",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5616",
+   "trailerPlate": "-",
+   "driverCode": "D054",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5617",
+   "trailerPlate": "70-5565",
+   "driverCode": "D026",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5618",
+   "trailerPlate": "70-5566",
+   "driverCode": "D055",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  },
+  {
+   "headPlate": "70-5551",
+   "trailerPlate": "70-4508",
+   "driverCode": "D056",
+   "effectiveDate": "2026-07-25",
+   "note": null
+  }
+ ],
+ "customers": [
+  {
+   "code": "BGC",
+   "name": "บริษัท บีจีซี กล๊าส อินดัสทรี จำกัด",
+   "address": "เลขที่ 55 หมู่ที่ 3 ตำบลสามบัณฑิต อำเภออุทัย จังหวัดพระนครศรีอยุธยา 13210",
+   "taxId": "0105554060705",
+   "branch": "00003",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 3",
+   "fuelPriceBasis": "เฉลี่ย 16-15 เดือนก่อนหน้า",
+   "weightBasis": "น้ำหนักต้นทาง"
+  },
+  {
+   "code": "PAM",
+   "name": "บริษัท แพ็ค แอนด์ มูฟวิ่ง จำกัด",
+   "address": "52/48 หมู่ที่ 9 ตำบลทุ่งสุขลา อำเภอศรีราชา จังหวัดชลบุรี",
+   "taxId": "0205560001196",
+   "branch": "00000",
+   "creditDays": 7,
+   "billingDay": "ทุกวันที่ 5 และ วันที่ 20",
+   "fuelPriceBasis": "ราคาวันที่ 1 และวันที่ 16",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "PTLK",
+   "name": "บริษัท ภัทรกานต์ โลจิสติกส์ จำกัด",
+   "address": "เลขที่ 99 อาคารซี.พี.ทาวเวอร์ นอร์ธปาร์ค ชั้น12เอ ซอยงามวงศ์วาน47 แยก42 แขวงทุ่งสองห้อง เขตหลักสี่ กรุงเทพมหานคร",
+   "taxId": "0125563023639",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท มิราเคิล แอกกริเกต จำกัด",
+   "address": "17/17 หมู่ที่ 7 ตำบลห้วยกะปิ อำเภอเมืองชลบุรี จังหวัดชลบุรี",
+   "taxId": "0205556021587",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 2",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "SCG",
+   "name": "บริษัท สยามคราฟท์อุตสาหกรรม จำกัด",
+   "address": "99 หมู่ที่ 6 ถนนแสงชูโต ตำบลวังศาลา อำเภอท่าม่วง จังหวัดกาญจนบุรี 71130",
+   "taxId": "0105556020301",
+   "branch": "00002",
+   "creditDays": 45,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันที่ 1",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "YUN",
+   "name": "บริษัท หยุ่นอาโกร กรุ๊ป จำกัด",
+   "address": "4/16 ม.3 ต.เชิงเนิน อ.เมืองระยอง จ.ระยอง",
+   "taxId": "0225544000342",
+   "branch": "00000",
+   "creditDays": 10,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "AGE",
+   "name": "บริษัท เอ.จี.อี. ทรานสปอร์ต จำกัด",
+   "address": "99/9 ถนนพระราม 2 แขวงแสมดำ เขตบางขุนเทียน กรุงเทพมหานคร",
+   "taxId": "0105551031071",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 2",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "DON",
+   "name": "ห้างหุ้นส่วน ดอนทองกรุ๊ปทรานสปอร์ต จำกัด",
+   "address": "177 ม.2 ต.ดอนทอง อ.เมือง จ.พิษณุโลก  65000",
+   "taxId": "0653568000673",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "PAT",
+   "name": "บริษัท ณภัทร แมททีเรียล แอนด์ ซัพพลาย จำกัด",
+   "address": "888/59 หมู่ที่4 ตำบลน้ำคอก อำเภอเมืองระยอง จ.ระยอง 21000",
+   "taxId": "0215568013967",
+   "branch": "00000",
+   "creditDays": 90,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "CHEM",
+   "name": "บริษัท เคมีแมน จำกัด (มหาชน)",
+   "address": "195/11-12 ชั้น 10-11 อาคารเลครัชดาออฟฟิสคอมเพล็กซ์2 ถนนรัชดาภิเษก แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร",
+   "taxId": "0107560000346",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "เฉลี่ย 1-31",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "AST",
+   "name": "บริษัท เอเชีย สตีล ทรานสปอร์ท (1999) จำกัด",
+   "address": "179 ถนนทางหลวงแผ่นดิน 36 ตำบลมาบข่า อำเภอนิคมพัฒนา จังหวัดระยอง",
+   "taxId": "0215542001295",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "TPP",
+   "name": "บริษัท ทีพีพี เวสต์ เมเนจเม้นท์ จำกัด",
+   "address": "142/12 หมู่7 ตำบลทับมา อำเภอเมืองระยอง ระยอง",
+   "taxId": "0215560008671",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5 และ วันที่ 20",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท ไทยไพบูลย์ อีควิปเม้นท์ จำกัด",
+   "address": "8/19 หมู่5 ตำบลนาดี อำเภอเมืองสมุทรสาคร สมุทรสาคร",
+   "taxId": "0105546002611",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5 และ วันที่ 20",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "CEN",
+   "name": "บริษัท ไทยเซ็นทรัลเคมี จำกัด (มหาชน)",
+   "address": "284, 284/1 หมู่ 1 ถนนสุขสวัสดิ์ ตำบลปากคลองบางปลากด \nอำเภอพระสมุทรเจดีย์ จังหวัดสมุทรปราการ 10290",
+   "taxId": "0107536000277",
+   "branch": "00001",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันที่ 25",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท บางกอกกล๊าส จำกัด (มหาชน)",
+   "address": "47/1. หมู่2 ถนนรังสิต-นครนายก ตำบลบึงยี่โถ อำเภอธัญบุรี ปทุมธานี",
+   "taxId": "0107556000566",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "เฉลี่ย 16-15",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "HYBRID",
+   "name": "บริษัท ไฮบริด เอ็นเนอร์จี จำกัด",
+   "address": "22/10 ซอยสุขสวัสดิ์ 78/14 หมู่7 ตำบลบางจาก อำเภอพระประแดง สมุทรปราการ 10130",
+   "taxId": "0115548011919",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 3",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "TNC",
+   "name": "บริษัท ไนเตรทไทย จำกัด",
+   "address": "26/56 ถนนจันทน์ตัดใหม่ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120",
+   "taxId": "0105533129471",
+   "branch": "00000",
+   "creditDays": 20,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "เฉลี่ย1-31",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "LIN",
+   "name": "บริษัท ลินรวัฒน์ จำกัด",
+   "address": "64/11 หมู่ 1 ตำบลน้ำคอก อำเภอเมือง จังหวัดระยอง 21000",
+   "taxId": "0215560000416",
+   "branch": "00000",
+   "creditDays": 20,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "BM",
+   "name": "บริษัท บุญมาขนส่ง จำกัด",
+   "address": "216/30 แอล.พี.เอ็น.ทาวเวอร์ ถนนนางลิ้นจี่ แขวงช่องนนทรี เขตยานนาวา กรุงเทพมหานคร 10120",
+   "taxId": "0105550093293",
+   "branch": "00000",
+   "creditDays": 15,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "HAW",
+   "name": "บริษัท ฮอว์คเวย์ ทรานสปอร์ท จำกัด",
+   "address": "เลขที่ 73 หมู่ 1 ต.แม่น้ำคู้ อ.ปลวกแดง จ.ระยอง 21140",
+   "taxId": "0215559005833",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "PSC",
+   "name": "บริษัท พี.เอส.ซี. สตาร์ช โปรดักส์ จำกัด (มหาชน)",
+   "address": "999 หมู่5 ตำบลหนองใหญ่ อำเภอหนองใหญ่ ชลบุรี",
+   "taxId": "0107548000102",
+   "branch": "00000",
+   "creditDays": 30,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "DUO",
+   "name": "บริษัท ดูโอ้ ซัคเซส จำกัด",
+   "address": "6/2 หมู่ที่ 5 ตำบลตาขัน อำเภอบ้านค่าย จังหวัดระยอง",
+   "taxId": "0215556007720",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท ทรัพย์ทวี อินเตอร์เนชั่นแนล จำกัด",
+   "address": "68 หมู่9 ตำบลกะเฉด อำเภอเมืองระยอง ระยอง",
+   "taxId": "0215567004972",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท ภูสินธารา จำกัด",
+   "address": "6/2 หมู่5 ตำบลตาขัน อำเภอบ้านค่าย ระยอง",
+   "taxId": "0215550001134",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท สิทธิพลัส โลจิสติกส์ แอนด์ ซัพพลายเชน จำกัด",
+   "address": "-",
+   "taxId": "-",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท โชคศิริชัย จำกัด",
+   "address": null,
+   "taxId": "0215564005617",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท สีสุพล โลจิสติกส์ (ไทยแลนด์) จำกัด",
+   "address": "197 หมู่11 ตำบลหนองขาม อำเภอศรีราชา ชลบุรี",
+   "taxId": "0205567029932",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท อัลฟ่า มารีน ทรานสปอร์ต จำกัด",
+   "address": "216/30 แอล.พี.เอ็น ทาวเวอร์  ถนนนางลิ้นจี่ แขวงช่องนนทรี เขตยานนาวา กรุงเทพ 10120",
+   "taxId": "0105557166377",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท เอเชีย กรีน เอนเนอจี จำกัด (มหาชน)",
+   "address": "เลขที่ 99/9 ถนนพระราม 2 แขวงแสมดำ เขตบางขุนเทียน กรุงเทพมหานคร",
+   "taxId": "0107551000011",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท เอ็นเนอร์จี เอ็กเปิร์ต จำกัด",
+   "address": "22/10 หมู่ที่7 ถ.สุขสวัสดิ์ ตำบลบางจาก อำเภอพระประแดง สมุทรปราการ",
+   "taxId": "0745553000860",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท บุญเสริมขนส่ง จำกัด",
+   "address": "216/30 แอล.พี.เอ็น.ทาวเวอร์ ถนนนางลิ้นจี่ แขวงช่องนนทรี เขตยานนาวา กรุงเทพมหานคร",
+   "taxId": "0105560211477",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท เอเอ เมทเทิลสแคร็ป จำกัด",
+   "address": "98 ถนนอนามัยงามเจริญ แขวงท่าข้าม เขตบางขุนเทียน กรุงเทพมหานคร",
+   "taxId": "0105561119281",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "BGC",
+   "name": "บริษัท บีจี คอนเทนเนอร์ กล๊าส จำกัด (มหาชน)",
+   "address": "47/1 หมู่2 ถนนรังสิต-นครนายก ตำบลบึงยี่โถ อำเภอธัญบุรี ปทุมธานี",
+   "taxId": "0107561000099",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "AGI",
+   "name": "บริษัท อยุธยากล๊าส อินดัสทรี จำกัด",
+   "address": "55 หมู่ที่ 3 ตำบลสมบัณฑิต อำเภออุทัย พระนครศรีอยุธย 13210",
+   "taxId": "0105551102504",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท ส ยั่งยืน ทรานสปอตร์ (2018) จำกัด",
+   "address": "111/42 ม.6 ต.เชิงเนิน อ.เมือง จ.ระยอง 21000",
+   "taxId": "0215561007902",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท เทียนกุง พรีซิชั่น ทูลส์ (ประเทศไทย) จำกัด",
+   "address": "501/3 หมู่ที่ 2 ตำบลมาบยางพร อำเภอปลวกแดง จังหวัดระยอง 21140",
+   "taxId": "0215562009691",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท สายลมทรานสปอร์ต จำกัด",
+   "address": "137 หมู่ 11 ตำบลห้วยงู อำเภอหันคา จังหวัดชัยนาท 17160",
+   "taxId": "0185553000067",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท อินเตอร์ แม็กซ์ เซอร์วิส โพรไวเดอร์ จำกัด",
+   "address": "1000/35 อาคารลิเบอร์ตี้ พลาซ่า ชั้น5 ซ.สุขุมวิท55 (ทองหล่อ) แขวงคลองตันเหนือ เขตวัฒนา กรุงเทพ 10110",
+   "taxId": "0105547114676",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท กลาสบริดจ์ จำกัด",
+   "address": "5 ซอยโชคชัย4 ซอย84 แยก2-1 ถนนโชคชัย 4 แขวงลาดพร้าว เขตลาดพร้าว กรุงเทพมหานคร",
+   "taxId": "0105556073111",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท แกรนด์ พาวเวอร์ (2019) จำกัด",
+   "address": "56/290,56/291,56/292 หมู่ที่ 7 ตำบลพันท้ายนรสิงห์ อำเภอเมืองสมุทรสาคร จังหวัดสมุทรสาคร",
+   "taxId": "0105557123902",
+   "branch": "00001",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท เจมอน จำกัด",
+   "address": "49 ถนนราชพฤกษ์ แขวงฉิมพลี เขตตลิ่งชัน กรุงเทพมหานคร",
+   "taxId": "0105536034072",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท บิลฟิงเกอร์ (ไทย) คอนสตรัคชั่น  จำกัด",
+   "address": "587 อาคารวิริยะถาวร ถนนสุทธิสาร แขวงรัชดาภิเษก เขตดินแดง กรุงเทพมหานคร",
+   "taxId": "0105531071972",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": "PACO",
+   "name": "บริษัท ปาโก้เทรดดิ้ง จำกัด",
+   "address": "99/19 หมู่4 ถนนกาญจนวิถี ตำบลบางกุ้ง อำเภอเมืองสุราษฎร์ธานี สุราษฎร์ธานี",
+   "taxId": "0845538001671",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  },
+  {
+   "code": null,
+   "name": "บริษัท พี.ซี.ปาล์ม(2550) จำกัด",
+   "address": "91/1 หมู่1 ถนนกาญจนวิถี ตำบลบางกุ้ง อำเภอเมืองสุราษฎร์ธานี สุราษฎร์ธานี",
+   "taxId": "0845535000771",
+   "branch": "00000",
+   "creditDays": 0,
+   "billingDay": "ทุกวันที่ 5",
+   "fuelPriceBasis": "ราคาวันขนส่ง",
+   "weightBasis": "น้ำหนักปลายทาง"
+  }
+ ],
+ "priceBands": [
+  "28.01-29.00",
+  "29.01-30.00",
+  "30.01-31.00",
+  "31.01-32.00",
+  "32.01-33.00",
+  "33.01-34.00",
+  "34.01-35.00",
+  "35.01-36.00",
+  "36.01-37.00",
+  "37.01-38.00",
+  "38.01-39.00",
+  "39.01-40.00",
+  "40.01-41.00",
+  "41.01-42.00",
+  "42.01-43.00",
+  "43.01-44.00",
+  "44.01-45.00",
+  "45.01-46.00",
+  "46.01-47.00",
+  "47.01-48.00",
+  "48.01-49.00",
+  "49.01-50.00"
+ ],
+ "routes": [
+  {
+   "origin": "โรงงานนครปฐม",
+   "destination": "ท่าเรือแหลมฉบัง",
+   "vehicleType": "รถพ่วง",
+   "priceUnit": "ต่อเที่ยว",
+   "distanceKm": 180,
+   "targetKmPerL": 3.2,
+   "allowance": 300,
+   "customerPrices": [
+    5150,
+    5300,
+    5450,
+    5600,
+    5750,
+    5900,
+    6050,
+    6200,
+    6350,
+    6500,
+    6650,
+    6800,
+    6950,
+    7100,
+    7250,
+    7400,
+    7550,
+    7700,
+    7850,
+    8000,
+    8150,
+    8300
+   ],
+   "outsourcePrices": [
+    4440,
+    4580,
+    4720,
+    4860,
+    5000,
+    5140,
+    5280,
+    5420,
+    5560,
+    5700,
+    5840,
+    5980,
+    6120,
+    6260,
+    6400,
+    6540,
+    6680,
+    6820,
+    6960,
+    7100,
+    7240,
+    7380
+   ]
+  },
+  {
+   "origin": "ท่าเรือแหลมฉบัง",
+   "destination": "โรงงานนครปฐม",
+   "vehicleType": "รถพ่วง",
+   "priceUnit": "ต่อเที่ยว",
+   "distanceKm": 180,
+   "targetKmPerL": 3.2,
+   "allowance": 300,
+   "customerPrices": [
+    4950,
+    5100,
+    5250,
+    5400,
+    5550,
+    5700,
+    5850,
+    6000,
+    6150,
+    6300,
+    6450,
+    6600,
+    6750,
+    6900,
+    7050,
+    7200,
+    7350,
+    7500,
+    7650,
+    7800,
+    7950,
+    8100
+   ],
+   "outsourcePrices": [
+    4240,
+    4380,
+    4520,
+    4660,
+    4800,
+    4940,
+    5080,
+    5220,
+    5360,
+    5500,
+    5640,
+    5780,
+    5920,
+    6060,
+    6200,
+    6340,
+    6480,
+    6620,
+    6760,
+    6900,
+    7040,
+    7180
+   ]
+  },
+  {
+   "origin": "โรงงานนครปฐม",
+   "destination": "คลังอยุธยา",
+   "vehicleType": "รถพ่วง",
+   "priceUnit": "ต่อเที่ยว",
+   "distanceKm": 120,
+   "targetKmPerL": 3.2,
+   "allowance": 250,
+   "customerPrices": [
+    3650,
+    3800,
+    3950,
+    4100,
+    4250,
+    4400,
+    4550,
+    4700,
+    4850,
+    5000,
+    5150,
+    5300,
+    5450,
+    5600,
+    5750,
+    5900,
+    6050,
+    6200,
+    6350,
+    6500,
+    6650,
+    6800
+   ],
+   "outsourcePrices": [
+    3140,
+    3280,
+    3420,
+    3560,
+    3700,
+    3840,
+    3980,
+    4120,
+    4260,
+    4400,
+    4540,
+    4680,
+    4820,
+    4960,
+    5100,
+    5240,
+    5380,
+    5520,
+    5660,
+    5800,
+    5940,
+    6080
+   ]
+  },
+  {
+   "origin": "คลังอยุธยา",
+   "destination": "โรงงานนครปฐม",
+   "vehicleType": "รถพ่วง",
+   "priceUnit": "ต่อเที่ยว",
+   "distanceKm": 120,
+   "targetKmPerL": 3.2,
+   "allowance": 250,
+   "customerPrices": [
+    3550,
+    3700,
+    3850,
+    4000,
+    4150,
+    4300,
+    4450,
+    4600,
+    4750,
+    4900,
+    5050,
+    5200,
+    5350,
+    5500,
+    5650,
+    5800,
+    5950,
+    6100,
+    6250,
+    6400,
+    6550,
+    6700
+   ],
+   "outsourcePrices": [
+    3040,
+    3180,
+    3320,
+    3460,
+    3600,
+    3740,
+    3880,
+    4020,
+    4160,
+    4300,
+    4440,
+    4580,
+    4720,
+    4860,
+    5000,
+    5140,
+    5280,
+    5420,
+    5560,
+    5700,
+    5840,
+    5980
+   ]
+  }
+ ],
+ "fuelPrices": [
+  {
+   "date": "2026-06-01",
+   "price": 34.5
+  },
+  {
+   "date": "2026-06-16",
+   "price": 35
+  },
+  {
+   "date": "2026-07-01",
+   "price": 35.2
+  },
+  {
+   "date": "2026-07-10",
+   "price": 34.94
+  }
+ ],
+ "inventoryItems": [
+  {
+   "code": "TIRE-11R225",
+   "name": "ยางเรเดียล 11R22.5 (รถพ่วง)",
+   "category": "ยาง",
+   "unit": "เส้น",
+   "trackingType": "รายชิ้น",
+   "reorderPoint": 4,
+   "note": "สั่งจองล่วงหน้าเมื่อคงเหลือถึงจุดนี้"
+  },
+  {
+   "code": "BAT-12V",
+   "name": "แบตเตอรี่ 12V 200Ah",
+   "category": "แบตเตอรี่",
+   "unit": "ลูก",
+   "trackingType": "รายชิ้น",
+   "reorderPoint": 2,
+   "note": null
+  },
+  {
+   "code": "OIL-15W40",
+   "name": "น้ำมันเครื่อง 15W-40",
+   "category": "น้ำมันเครื่อง",
+   "unit": "ลิตร",
+   "trackingType": "จำนวน",
+   "reorderPoint": 20,
+   "note": null
+  }
+ ]
+}

@@ -1,0 +1,437 @@
+// ระบบบริหารงานขนส่ง — บริษัท เทียมเทพ ขนส่ง จำกัด
+// ถ้าจะย้ายไป PostgreSQL: เปลี่ยน provider เป็น "postgresql" แล้วรัน `npx prisma db push`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ตั้งค่าระบบ
+// ─────────────────────────────────────────────────────────────
+
+/// ค่าคงที่ของระบบ เช่น อัตราซื้อคืนน้ำมัน, จำนวนวันแจ้งเตือนเอกสาร
+model Setting {
+  key   String @id
+  value String
+}
+
+/// รายการ dropdown ทั่วไป (ประเภทรถ / ประเภทค่าใช้จ่าย / สถานที่ / ผู้ให้บริการ / หน่วยนับ)
+model Lookup {
+  id    Int    @id @default(autoincrement())
+  kind  String // vehicleType | expenseCategory | location | supplier | unit | cargoType
+  value String
+  sort  Int    @default(0)
+
+  @@unique([kind, value])
+  @@index([kind])
+}
+
+/// รถร่วม (outsource) ที่บริษัทจ้างมาวิ่งงาน
+model Partner {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  taxId    String?
+  address  String?
+  phone    String?
+  note     String?
+  active   Boolean   @default(true)
+  vehicles Vehicle[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// ฐานข้อมูลหลัก
+// ─────────────────────────────────────────────────────────────
+
+/// ข้อมูลรถ (ทั้งหัวลาก หางพ่วง รถเดี่ยว — ทะเบียนละ 1 แถว)
+model Vehicle {
+  /// ทะเบียนรถ (normalize แล้ว: ตัดคำต่อท้ายอย่าง "ลบ." ออก)
+  plate       String  @id
+  vehicleType String
+  /// "รถบริษัท" | "รถร่วม"
+  ownerType   String  @default("รถบริษัท")
+  partnerId   Int?
+  partner     Partner? @relation(fields: [partnerId], references: [id])
+
+  /// วันที่เริ่มใช้รถ — ใช้คำนวณอายุรถ
+  startDate      DateTime?
+  taxDueDate     DateTime? // วันต่อภาษี
+  actDueDate     DateTime? // วันพรบ.หมดอายุ
+  insuranceDue   DateTime? // วันประกันภัยหมดอายุ
+  cargoInsDue    DateTime? // วันประกันสินค้าหมดอายุ
+  note           String?
+  active         Boolean   @default(true)
+
+  jobsAsHead    Job[]     @relation("HeadVehicle")
+  jobsAsTrailer Job[]     @relation("TrailerVehicle")
+
+  @@index([ownerType])
+}
+
+/// พนักงานขับรถ (พขร.)
+model Driver {
+  code          String    @id // รหัสพนักงาน ต้องตรงกับรหัสในระบบน้ำมัน เช่น D001
+  firstName     String
+  lastName      String
+  nationalId    String?
+  licenseNo     String?
+  licenseType   String?
+  licenseExpiry DateTime?
+  phone         String?
+  active        Boolean   @default(true)
+
+  pairings VehiclePairing[]
+
+  /// ชื่อเต็มพร้อมรหัส เอาไว้แสดงผล — คำนวณในโค้ด ไม่เก็บซ้ำ
+  @@index([active])
+}
+
+/// จับคู่ หัวลาก + หางพ่วง + พขร. มีผลตั้งแต่วันที่กำหนด
+/// ระบบใช้แถวล่าสุดที่ effectiveDate <= วันที่ทำงาน
+model VehiclePairing {
+  id            Int      @id @default(autoincrement())
+  headPlate     String
+  trailerPlate  String   @default("")
+  driverCode    String?
+  driver        Driver?  @relation(fields: [driverCode], references: [code])
+  effectiveDate DateTime
+  note          String?
+
+  @@index([headPlate, trailerPlate, effectiveDate])
+}
+
+/// ลูกค้า
+model Customer {
+  id         Int     @id @default(autoincrement())
+  code       String  @unique // รหัส/ชื่อย่อ
+  name       String
+  address    String?
+  taxId      String?
+  branch     String? // สาขาที่ออกใบวางบิล
+  creditDays Int     @default(30)
+  /// ข้อความอธิบายวันที่รับวางบิล/ออกเช็ค เช่น "ทุกวันที่ 5 และวันที่ 20"
+  billingDay String?
+
+  /// เกณฑ์ราคาน้ำมันที่ใช้คิดค่าบรรทุกให้ลูกค้ารายนี้
+  fuelBasisId Int?
+  fuelBasis   FuelPriceBasis? @relation(fields: [fuelBasisId], references: [id])
+
+  /// "น้ำหนักปลายทาง" | "น้ำหนักต้นทาง"
+  weightBasis String @default("น้ำหนักปลายทาง")
+  /// วันที่ที่ใช้เรียกเก็บเงิน: "วันที่ขึ้นสินค้า" | "วันที่ลงสินค้า"
+  billingDateBasis String @default("วันที่ขึ้นสินค้า")
+
+  active Boolean @default(true)
+  jobs   Job[]
+}
+
+/// สูตรคำนวณราคาน้ำมันอ้างอิงของลูกค้าแต่ละราย — ออกแบบให้เพิ่มสูตรใหม่ได้เอง
+/// kind:
+///   SHIP_DATE      = ราคา ณ วันที่ขนจริง
+///   DAY_OF_MONTH   = ราคาวันที่ N ของเดือนงาน (ใช้ dayOfMonth)
+///   SEMI_MONTHLY   = ราคาวันที่ 1 (ครึ่งเดือนแรก) และวันที่ 16 (ครึ่งเดือนหลัง)
+///   AVERAGE        = เฉลี่ยราคารายวันช่วง startDay ถึง endDay
+///                    monthOffset = ย้อนหลังกี่เดือนจากเดือนงาน (1 = ช่วงของเดือนก่อนหน้า)
+///                    ถ้า startDay > endDay หมายถึงคาบข้ามเดือน เช่น 16→15
+model FuelPriceBasis {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique // ชื่อที่แสดงให้ผู้ใช้เห็น เช่น "เฉลี่ย 16-15 ใช้เดือนถัดไป"
+  kind        String
+  dayOfMonth  Int? // ใช้กับ DAY_OF_MONTH
+  startDay    Int? // ใช้กับ AVERAGE
+  endDay      Int? // ใช้กับ AVERAGE
+  monthOffset Int     @default(0)
+  note        String?
+
+  customers Customer[]
+}
+
+/// ราคาน้ำมันอ้างอิงตามประกาศ — บันทึกทุกครั้งที่ราคาเปลี่ยน
+/// ราคาของวันใดๆ = ราคาประกาศล่าสุดที่ <= วันนั้น
+model FuelPrice {
+  date  DateTime @id
+  price Float
+  note  String?
+}
+
+// ─────────────────────────────────────────────────────────────
+// เส้นทาง ระยะทาง เบี้ยเลี้ยง และราคา
+// ─────────────────────────────────────────────────────────────
+
+/// ช่วงราคาน้ำมันที่ใช้แบ่งขั้นราคาค่าบรรทุก เช่น 30.01-31.00
+model PriceBand {
+  id    Int    @id @default(autoincrement())
+  /// ราคาน้ำมันมากกว่า minPrice และน้อยกว่าหรือเท่ากับ maxPrice
+  minPrice Float
+  maxPrice Float
+  label    String @unique
+  sort     Int    @default(0)
+
+  prices RoutePrice[]
+}
+
+/// 1 แถว = 1 เส้นทาง ต่อ 1 ประเภทรถ
+/// รวมข้อ 4 (เบี้ยเลี้ยง) ข้อ 5 (ระยะทาง+อัตราสิ้นเปลือง) ข้อ 6+7 (ราคา) ไว้ที่เดียว
+model Route {
+  id          Int    @id @default(autoincrement())
+  origin      String // สถานที่ต้นทาง
+  destination String // สถานที่ปลายทาง
+  vehicleType String
+  /// "ต่อเที่ยว" | "ต่อตัน"
+  priceUnit   String @default("ต่อเที่ยว")
+
+  /// ระยะทาง "ขาเดียว" (ไม่ใช่ไป-กลับ)
+  distanceKm    Float?
+  /// อัตราสิ้นเปลืองเป้าหมาย กม./ลิตร ใช้เป็น KPI ให้ พขร.
+  targetKmPerL  Float?
+  /// เบี้ยเลี้ยงต่อขา (บาท) จ่ายให้ พขร.
+  allowance     Float @default(0)
+  note          String?
+  active        Boolean @default(true)
+
+  prices RoutePrice[]
+  jobs   Job[]
+
+  @@unique([origin, destination, vehicleType])
+}
+
+/// ราคาค่าบรรทุกของเส้นทางหนึ่ง ณ ช่วงราคาน้ำมันหนึ่ง
+model RoutePrice {
+  id      Int   @id @default(autoincrement())
+  routeId Int
+  route   Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  bandId  Int
+  band    PriceBand @relation(fields: [bandId], references: [id], onDelete: Cascade)
+
+  /// ราคาที่เรียกเก็บลูกค้า (บาท ต่อหน่วยคิดราคา)
+  customerPrice  Float?
+  /// ราคาที่จ่ายรถร่วม (บาท ต่อหน่วยคิดราคา)
+  outsourcePrice Float?
+
+  @@unique([routeId, bandId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// บันทึกงานประจำวัน
+// ─────────────────────────────────────────────────────────────
+
+/// 1 แถว = 1 ขา (ขาไปกับขากลับของรอบเดียวกันใช้ tripCode เดียวกัน)
+model Job {
+  id       Int      @id @default(autoincrement())
+  /// วันที่ขึ้นสินค้า
+  loadDate   DateTime
+  /// วันที่ลงสินค้า (ถ้าไม่กรอก ถือว่าวันเดียวกับวันขึ้นสินค้า)
+  unloadDate DateTime?
+  /// รหัสรอบ — ใช้รวม KPI น้ำมันของทุกขาในรอบเดียวกัน
+  tripCode String
+
+  headPlate    String
+  headVehicle  Vehicle  @relation("HeadVehicle", fields: [headPlate], references: [plate])
+  trailerPlate String?
+  trailer      Vehicle? @relation("TrailerVehicle", fields: [trailerPlate], references: [plate])
+
+  /// พขร. ที่ระบบจับคู่ให้ ณ เวลาบันทึก (snapshot กันข้อมูลเพี้ยนย้อนหลัง)
+  driverCode String?
+
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  origin      String
+  destination String
+  /// น้ำหนักต้นทาง (ตัน)
+  weightOrigin Float?
+  /// น้ำหนักปลายทาง (ตัน)
+  weightDest   Float?
+  cargoType    String?
+
+  /// เส้นทางที่จับคู่ได้ (null = ยังไม่มีในตารางราคา)
+  routeId Int?
+  route   Route? @relation(fields: [routeId], references: [id])
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([loadDate])
+  @@index([headPlate, loadDate])
+  @@index([driverCode, loadDate])
+  @@index([tripCode])
+}
+
+/// เงินเดินทางที่จ่ายให้ พขร. ก่อนออกงาน + ค่าทางด่วนที่ พขร. สำรองจ่าย
+model TravelAdvance {
+  id         Int      @id @default(autoincrement())
+  date       DateTime
+  plate      String?
+  driverCode String
+  /// เงินเดินทางที่จ่ายให้ก่อนเริ่มงาน (หักออกจากเบี้ยเลี้ยง)
+  advance    Float    @default(0)
+  /// ค่าทางด่วนที่ พขร. จ่ายจริง (บวกคืนให้)
+  toll       Float    @default(0)
+  note       String?
+
+  @@index([date])
+  @@index([driverCode, date])
+}
+
+/// ค่าใช้จ่ายทั่วไป (ไม่รวมค่าน้ำมัน ซึ่งดึงจากตารางน้ำมันอัตโนมัติ)
+model Expense {
+  id         Int      @id @default(autoincrement())
+  date       DateTime
+  plate      String?
+  driverCode String?
+  supplier   String?
+  category   String
+  detail     String?
+  unitPrice  Float    @default(0)
+  qty        Float    @default(1)
+  unit       String?
+  amount     Float    @default(0)
+  note       String?
+
+  @@index([date])
+  @@index([plate, date])
+  @@index([category])
+}
+
+/// การเติมน้ำมัน — รวมทั้งปั๊มบริษัทและ Fleet Card ไว้ตารางเดียว
+model FuelEntry {
+  id     Int      @id @default(autoincrement())
+  date   DateTime
+  /// "ปั๊มบริษัท" | "FleetCard"
+  source String
+  plate  String
+  driverCode String?
+  litres    Float  @default(0)
+  pricePerL Float  @default(0)
+  amount    Float  @default(0)
+  mileage   Float?
+  station   String?
+  /// เลขอ้างอิงจากไฟล์ต้นทาง ใช้กันข้อมูลซ้ำตอน import
+  refNo     String?
+  note      String?
+
+  @@unique([source, refNo])
+  @@index([date])
+  @@index([plate, date])
+  @@index([driverCode, date])
+}
+
+// ─────────────────────────────────────────────────────────────
+// เงินพิเศษค่าน้ำมัน (ซื้อคืนน้ำมันที่ประหยัดได้)
+// ─────────────────────────────────────────────────────────────
+
+/// บันทึกการปรับแก้ลิตรจริงของรอบ กรณีเติมคนละวันกับวันจบรอบ
+model FuelBonusOverride {
+  tripCode     String @id
+  actualLitres Float
+  note         String?
+}
+
+// ─────────────────────────────────────────────────────────────
+// คลังอะไหล่ / ยาง / แบตเตอรี่
+// ─────────────────────────────────────────────────────────────
+
+model InventoryItem {
+  code         String  @id
+  name         String
+  category     String?
+  unit         String  @default("ชิ้น")
+  /// "รายชิ้น" (ติดตาม serial) | "จำนวน"
+  trackingType String  @default("จำนวน")
+  reorderPoint Float   @default(0)
+  note         String?
+
+  stockIns    StockIn[]
+  stockOuts   StockOut[]
+  serialUnits SerialUnit[]
+}
+
+/// อุปกรณ์รายชิ้นที่ติดตาม serial (ยาง/แบตเตอรี่)
+model SerialUnit {
+  code       String   @id // รหัสอุปกรณ์ เช่น TU00001
+  itemCode   String
+  item       InventoryItem @relation(fields: [itemCode], references: [code])
+  receivedAt DateTime
+  brand      String?
+  serial     String? // Serial / DOT
+  cost       Float   @default(0)
+  vendor     String?
+
+  installedOut StockOut? @relation("Installed")
+  removedOut   StockOut? @relation("Removed")
+  scrap        ScrapPart?
+}
+
+model StockIn {
+  id       Int      @id @default(autoincrement())
+  date     DateTime
+  itemCode String
+  item     InventoryItem @relation(fields: [itemCode], references: [code])
+  qty      Float
+  unitCost Float    @default(0)
+  vendor   String?
+  billNo   String?
+  note     String?
+
+  @@index([date])
+}
+
+model StockOut {
+  id       Int      @id @default(autoincrement())
+  date     DateTime
+  itemCode String
+  item     InventoryItem @relation(fields: [itemCode], references: [code])
+  qty      Float
+  plate    String?
+  position String? // ตำแหน่งล้อ
+  /// รหัสอุปกรณ์ใหม่ที่ติดตั้ง
+  newUnitCode String? @unique
+  newUnit     SerialUnit? @relation("Installed", fields: [newUnitCode], references: [code])
+  /// รหัสอุปกรณ์เก่าที่ถอดออก
+  oldUnitCode String? @unique
+  oldUnit     SerialUnit? @relation("Removed", fields: [oldUnitCode], references: [code])
+
+  vendor    String? // อู่/ผู้ขายที่ส่งซ่อม
+  workOrder String? // รหัสสั่งซ่อม
+  issuedBy  String?
+  /// มูลค่าที่เบิก คำนวณตอนบันทึก
+  cost      Float   @default(0)
+  note      String?
+
+  @@index([date])
+  @@index([plate, date])
+  @@index([workOrder, vendor])
+}
+
+/// ใบวางบิลอู่/ผู้ขาย เทียบกับที่เบิกจริง
+model VendorBill {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  workOrder String
+  vendor    String
+  /// จำนวนที่บิลเรียกเก็บ
+  billedQty Float    @default(0)
+  amount    Float    @default(0)
+  note      String?
+
+  @@unique([workOrder, vendor, date])
+  @@index([date])
+}
+
+/// ของเก่ารอขาย (ยาง/แบตเตอรี่ที่ถอดออก)
+model ScrapPart {
+  unitCode  String   @id
+  unit      SerialUnit @relation(fields: [unitCode], references: [code])
+  treadMm   Float? // ดอกยางตอนถอด
+  status    String   @default("รอขาย") // รอขาย | ขายแล้ว | ทิ้ง
+  buyer     String?
+  salePrice Float?
+  soldAt    DateTime?
+  note      String?
+}
