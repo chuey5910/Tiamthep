@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Sarabun", ui-sans-serif, system-ui, sans-serif;
+  /* ใช้ฟอนต์ที่มีอยู่ในเครื่องเท่านั้น ไม่ดึงจากอินเทอร์เน็ต
+     เพราะระบบนี้รันในวงแลนของบริษัท ซึ่งอาจไม่มีเน็ตออกนอก
+     ถ้าโหลดฟอนต์ภายนอกไม่ได้ หน้าเว็บจะค้างรอจนกว่าจะ timeout */
+  --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Sarabun", "Leelawadee UI",
+    "Thonburi", "Prompt", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   --color-brand-50: #eef6ff;
   --color-brand-100: #d9ebff;

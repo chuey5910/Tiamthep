@@ -8,10 +8,13 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && npm run db:seed",
-    "setup": "prisma generate && prisma db push && npm run db:seed"
+    "db:studio": "prisma studio",
+    "db:backup": "tsx scripts/backup.ts",
+    "setup": "prisma generate && prisma migrate deploy && npm run db:seed",
+    "verify": "tsx scripts/verify-consistency.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

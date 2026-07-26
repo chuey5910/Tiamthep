@@ -1,0 +1,77 @@
+# ฐานข้อมูล PostgreSQL สำหรับระบบบริหารงานขนส่ง — รันบน CHUEY-Server
+#
+#   cp .env.example .env      แล้วแก้ POSTGRES_PASSWORD ให้เป็นรหัสจริง
+#   docker compose up -d      เริ่มใช้งาน
+#   docker compose logs -f db  ดู log
+#
+# ข้อมูลทั้งหมดเก็บใน volume ชื่อ tiamthep-pgdata บนเครื่องนี้
+# ไม่ได้อยู่ใน container จึงลบ/สร้าง container ใหม่ได้โดยข้อมูลไม่หาย
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tiamthep-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tiamthep}
+      POSTGRES_USER: ${POSTGRES_USER:-tiamthep}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD ใน .env ก่อน}
+      # เรียงลำดับและเทียบข้อความภาษาไทยได้ถูกต้อง
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+      TZ: Asia/Bangkok
+    ports:
+      # เปิดเฉพาะในเครื่อง — แอปที่รันบนเครื่องเดียวกันต่อได้ แต่เครื่องอื่นในเน็ตเวิร์กต่อตรงไม่ได้
+      # ถ้าต้องการให้เครื่องอื่นต่อได้ ให้เปลี่ยนเป็น "5432:5432" แล้วตั้ง firewall ให้ดี
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - tiamthep-pgdata:/var/lib/postgresql/data
+      - ./backup:/backup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tiamthep} -d ${POSTGRES_DB:-tiamthep}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # สำรองข้อมูลอัตโนมัติทุกวันตี 2 เก็บย้อนหลัง 30 วัน ลงโฟลเดอร์ ./backup
+  backup:
+    image: postgres:16-alpine
+    container_name: tiamthep-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-tiamthep}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD ใน .env ก่อน}
+      PGDATABASE: ${POSTGRES_DB:-tiamthep}
+      TZ: Asia/Bangkok
+    volumes:
+      - ./backup:/backup
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "ตัวสำรองข้อมูลเริ่มทำงาน — สำรองทุกวันเวลา 02:00 เก็บย้อนหลัง 30 วัน"
+        while true; do
+          now=$$(date +%H%M)
+          if [ "$$now" = "0200" ]; then
+            base="/backup/tiamthep-$$(date +%Y%m%d-%H%M%S).sql"
+            # ไม่ pipe เข้า gzip ตรงๆ เพราะ busybox sh ไม่มี pipefail
+            # ถ้า pg_dump พังแต่ gzip สำเร็จ จะได้ไฟล์เปล่าที่ดูเหมือนสำเร็จ
+            if pg_dump --clean --if-exists --file "$$base" && [ -s "$$base" ]; then
+              gzip -f "$$base"
+              echo "สำรองข้อมูลแล้ว: $$base.gz ($$(du -h $$base.gz | cut -f1))"
+              find /backup -name 'tiamthep-*.sql.gz' -mtime +30 -delete
+            else
+              echo "สำรองข้อมูลไม่สำเร็จ — ไม่ได้เก็บไฟล์เปล่าไว้"
+              rm -f "$$base" "$$base.gz"
+            fi
+            sleep 3600
+          fi
+          sleep 50
+        done
+
+volumes:
+  tiamthep-pgdata:
+    name: tiamthep-pgdata

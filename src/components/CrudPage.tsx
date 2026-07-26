@@ -55,9 +55,11 @@ export async function CrudPage({
   const pageSize = resource.pageSize ?? 50;
   const page = Math.max(1, Number(searchParams.page) || 1);
 
+  // PostgreSQL เทียบตัวพิมพ์ใหญ่-เล็กเป็นคนละตัว จึงต้องสั่ง insensitive
+  // ไม่งั้นค้น "bgc" จะไม่เจอ "BGC"
   const where: Record<string, unknown> =
     q && resource.searchFields?.length
-      ? { OR: resource.searchFields.map((f) => ({ [f]: { contains: q } })) }
+      ? { OR: resource.searchFields.map((f) => ({ [f]: { contains: q, mode: "insensitive" } })) }
       : {};
 
   const model = (prisma as never as Record<string, {

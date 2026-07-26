@@ -10,3 +10,9 @@ prisma/*.db
 prisma/*.db-journal
 .DS_Store
 *.log
+
+# ข้อมูลสำรอง — ห้ามขึ้น git (มีข้อมูลธุรกิจจริง)
+backup/*
+!backup/README.txt
+*.sql
+*.sql.gz

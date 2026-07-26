@@ -1,12 +1,15 @@
 // ระบบบริหารงานขนส่ง — บริษัท เทียมเทพ ขนส่ง จำกัด
-// ถ้าจะย้ายไป PostgreSQL: เปลี่ยน provider เป็น "postgresql" แล้วรัน `npx prisma db push`
+//
+// ฐานข้อมูลอยู่บน PostgreSQL — ตั้งที่อยู่ผ่าน DATABASE_URL ใน .env
+// แก้โครงสร้างแล้วให้สร้าง migration เสมอ: npx prisma migrate dev --name <ชื่อ>
+// ห้ามใช้ `prisma db push` กับฐานข้อมูลจริง เพราะจะไม่มีประวัติการเปลี่ยนแปลง
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -434,4 +437,79 @@ model ScrapPart {
   salePrice Float?
   soldAt    DateTime?
   note      String?
+}
+
+// ─────────────────────────────────────────────────────────────
+// ผู้ใช้งาน สิทธิ์ และประวัติการเข้าระบบ
+// ─────────────────────────────────────────────────────────────
+
+/// ผู้ใช้งานระบบ
+/// สมัครแล้วสถานะเป็น PENDING ต้องรอผู้ดูแลอนุมัติก่อนจึงเข้าระบบได้
+model User {
+  id           String    @id @default(cuid())
+  /// ชื่อผู้ใช้สำหรับเข้าระบบ (เก็บเป็นตัวพิมพ์เล็กทั้งหมด กันสมัครซ้ำด้วยตัวพิมพ์ต่างกัน)
+  username     String    @unique
+  name         String
+  phone        String?
+  passwordHash String
+  /// ADMIN = จัดการผู้ใช้และตั้งค่าระบบได้ · STAFF = บันทึกข้อมูลและดูรายงาน · VIEWER = ดูอย่างเดียว
+  role         String    @default("STAFF")
+  /// PENDING = รออนุมัติ · ACTIVE = ใช้งานได้ · SUSPENDED = ถูกระงับ
+  status       String    @default("PENDING")
+
+  createdAt    DateTime  @default(now())
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("Approver", fields: [approvedById], references: [id])
+  approved     User[]    @relation("Approver")
+
+  lastLoginAt  DateTime?
+  /// นับครั้งที่ใส่รหัสผิดติดกัน — ถึงเกณฑ์แล้วล็อกชั่วคราว กัน brute force
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  note         String?
+
+  sessions  Session[]
+  loginLogs LoginLog[]
+
+  @@index([status])
+}
+
+/// เซสชันการเข้าระบบ — เก็บเฉพาะค่า hash ของ token
+/// ถ้าฐานข้อมูลรั่ว คนที่ได้ไปก็ปลอมเป็นผู้ใช้ไม่ได้ เพราะ token จริงอยู่ที่ cookie เท่านั้น
+model Session {
+  /// sha256 ของ token ที่อยู่ใน cookie
+  tokenHash String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  lastSeenAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// ประวัติการเข้าระบบทุกครั้ง ทั้งที่สำเร็จและไม่สำเร็จ
+/// เก็บชื่อผู้ใช้ที่พยายามเข้าไว้ด้วย เผื่อกรณีที่ไม่มีบัญชีนั้นจริง
+model LoginLog {
+  id        Int      @id @default(autoincrement())
+  at        DateTime @default(now())
+  /// LOGIN | LOGOUT | REGISTER | APPROVE | REJECT | SUSPEND | REACTIVATE | ROLE_CHANGE | PASSWORD_CHANGE
+  action    String   @default("LOGIN")
+  username  String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  success   Boolean  @default(true)
+  /// เหตุผลกรณีไม่สำเร็จ หรือรายละเอียดของการกระทำ
+  reason    String?
+  ip        String?
+  userAgent String?
+
+  @@index([at])
+  @@index([userId, at])
+  @@index([action, at])
 }

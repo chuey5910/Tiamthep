@@ -7,6 +7,8 @@
 
 import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
+import { randomBytes, scrypt } from "node:crypto";
+import { promisify } from "node:util";
 import { join } from "node:path";
 
 const prisma = new PrismaClient();
@@ -112,6 +114,43 @@ function mk(y: number, m: number, d: number): Date | null {
 
 const utc = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
 
+
+const scryptAsync = promisify(scrypt) as (p: string, s: string, k: number) => Promise<Buffer>;
+
+/** สร้างบัญชีผู้ดูแลคนแรก ถ้ายังไม่มีผู้ใช้ในระบบเลย */
+async function ensureFirstAdmin() {
+  if ((await prisma.user.count()) > 0) {
+    console.log("  ผู้ใช้: มีอยู่แล้ว ไม่แตะต้อง");
+    return;
+  }
+
+  const username = (process.env.ADMIN_USERNAME || "admin").toLowerCase();
+  // ไม่ตั้งรหัสตายตัวไว้ในโค้ด — สุ่มให้แล้วพิมพ์ออกมาครั้งเดียว
+  const password = process.env.ADMIN_PASSWORD_INIT || randomBytes(6).toString("base64url") + "7a";
+
+  const salt = randomBytes(16).toString("hex");
+  const key = await scryptAsync(password, salt, 64);
+
+  await prisma.user.create({
+    data: {
+      username,
+      name: "ผู้ดูแลระบบ",
+      passwordHash: `scrypt$${salt}$${key.toString("hex")}`,
+      role: "ADMIN",
+      status: "ACTIVE",
+      approvedAt: new Date(),
+      note: "บัญชีผู้ดูแลคนแรก สร้างตอนติดตั้งระบบ",
+    },
+  });
+
+  console.log("\n  ┌──────────────────────────────────────────────");
+  console.log("  │ บัญชีผู้ดูแลระบบคนแรก");
+  console.log(`  │   ชื่อผู้ใช้ : ${username}`);
+  console.log(`  │   รหัสผ่าน  : ${password}`);
+  console.log("  │ เข้าระบบแล้วเปลี่ยนรหัสผ่านทันที");
+  console.log("  └──────────────────────────────────────────────\n");
+}
+
 async function main() {
   console.log("ล้างข้อมูลเดิม…");
   // ลบจากตารางลูกไปหาตารางแม่ เพื่อไม่ให้ติด foreign key
@@ -138,6 +177,7 @@ async function main() {
   await prisma.partner.deleteMany();
   await prisma.lookup.deleteMany();
   await prisma.setting.deleteMany();
+  // ไม่ลบ User / Session / LoginLog — บัญชีผู้ใช้และประวัติการเข้าระบบต้องอยู่รอด seed
 
   // ── ตั้งค่าระบบ ──
   await prisma.setting.createMany({
@@ -426,6 +466,8 @@ async function main() {
   }));
   if (itemRows.length) await prisma.inventoryItem.createMany({ data: itemRows });
   console.log(`  สินค้าคงคลัง ${itemRows.length} รายการ`);
+
+  await ensureFirstAdmin();
 
   if (WITH_DEMO) await seedDemo();
 

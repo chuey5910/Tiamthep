@@ -1,5 +1,6 @@
 export type NavItem = { href: string; label: string };
-export type NavGroup = { title: string; icon: string; items: NavItem[] };
+/** adminOnly = แสดงเฉพาะผู้ที่มีสิทธิ์ผู้ดูแลระบบ */
+export type NavGroup = { title: string; icon: string; items: NavItem[]; adminOnly?: boolean };
 
 export const NAV: NavGroup[] = [
   {
@@ -67,6 +68,15 @@ export const NAV: NavGroup[] = [
       { href: "/settings/fuel-basis", label: "เกณฑ์ราคาน้ำมันลูกค้า" },
       { href: "/settings/bands", label: "ช่วงราคาน้ำมัน" },
       { href: "/settings/lookups", label: "รายการตัวเลือก" },
+    ],
+  },
+  {
+    title: "ผู้ดูแลระบบ",
+    icon: "🔐",
+    adminOnly: true,
+    items: [
+      { href: "/admin/users", label: "จัดการผู้ใช้งาน" },
+      { href: "/admin/login-log", label: "บันทึกการเข้าระบบ" },
     ],
   },
 ];

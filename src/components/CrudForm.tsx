@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createRecord, deleteRecord, updateRecord } from "@/app/crud/actions";
+import { createRecord, deleteRecord, updateRecord } from "@/app/(app)/crud/actions";
 import type { Field, Option } from "@/lib/crud";
 
 const SPAN: Record<number, string> = {
