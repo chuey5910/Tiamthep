@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { register } from "../actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { checkEmployeeName, register } from "../actions";
+import { EMPLOYEE_CHECK_ERROR, type EmployeeCheck } from "@/lib/roles";
 
-export function RegisterForm() {
+export function RegisterForm({ requireEmployeeCheck }: { requireEmployeeCheck: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -15,6 +16,33 @@ export function RegisterForm() {
     value: f[k],
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setF((v) => ({ ...v, [k]: e.target.value })),
   });
+
+  // ตรวจชื่อกับทะเบียนพนักงานระหว่างพิมพ์ (หน่วง 600ms กันยิงถี่)
+  // ปุ่มสมัครเปิดเฉพาะเมื่อพบชื่อ — ฝั่ง server ตรวจซ้ำอีกชั้นตอนกดส่งเสมอ
+  const [empStatus, setEmpStatus] = useState<EmployeeCheck | "idle" | "checking">("idle");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!requireEmployeeCheck) return;
+    if (timer.current) clearTimeout(timer.current);
+    const name = f.name.trim();
+    if (!name) {
+      setEmpStatus("idle");
+      return;
+    }
+    setEmpStatus("checking");
+    timer.current = setTimeout(async () => {
+      try {
+        setEmpStatus(await checkEmployeeName(name));
+      } catch {
+        setEmpStatus("idle");
+      }
+    }, 600);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [f.name, requireEmployeeCheck]);
+
+  const canSubmit = !requireEmployeeCheck || empStatus === "ok" || empStatus === "first";
 
   if (done) {
     return (
@@ -44,6 +72,24 @@ export function RegisterForm() {
       <div className="mb-3">
         <label className="lbl" htmlFor="name">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
         <input id="name" name="name" className="inp" autoComplete="name" required {...bind("name")} />
+        {requireEmployeeCheck && (
+          <p className="mt-0.5 text-[11px]" data-emp-status={empStatus}>
+            {empStatus === "idle" && (
+              <span className="text-slate-400">กรอกชื่อ-นามสกุลให้ตรงกับทะเบียนพนักงานของบริษัท</span>
+            )}
+            {empStatus === "checking" && <span className="text-slate-400">กำลังตรวจสอบรายชื่อพนักงาน…</span>}
+            {(empStatus === "ok" || empStatus === "first") && (
+              <span className="font-semibold text-emerald-700">✓ พบชื่อในทะเบียนพนักงาน สมัครได้</span>
+            )}
+            {empStatus === "notfound" && (
+              <span className="text-red-600">{EMPLOYEE_CHECK_ERROR.notfound}</span>
+            )}
+            {empStatus === "taken" && <span className="text-red-600">{EMPLOYEE_CHECK_ERROR.taken}</span>}
+            {empStatus === "inactive" && (
+              <span className="text-red-600">{EMPLOYEE_CHECK_ERROR.inactive}</span>
+            )}
+          </p>
+        )}
       </div>
 
       <div className="mb-3">
@@ -101,9 +147,14 @@ export function RegisterForm() {
         </p>
       )}
 
-      <button type="submit" className="btn btn-primary w-full" disabled={pending}>
+      <button type="submit" className="btn btn-primary w-full" disabled={pending || !canSubmit}>
         {pending ? "กำลังสมัคร…" : "สมัครใช้งาน"}
       </button>
+      {requireEmployeeCheck && !canSubmit && empStatus !== "idle" && empStatus !== "checking" && (
+        <p className="mt-2 text-center text-[11px] text-slate-400">
+          ปุ่มสมัครจะกดได้เมื่อชื่อตรงกับทะเบียนพนักงานของบริษัท
+        </p>
+      )}
     </form>
   );
 }

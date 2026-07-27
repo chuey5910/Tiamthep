@@ -58,6 +58,11 @@ export function normalizeUsername(input: string): string {
   return input.trim().toLowerCase();
 }
 
+/** ตัดช่องว่างซ้ำก่อนเทียบชื่อ — "สมชาย  ใจดี" กับ "สมชาย ใจดี" คือคนเดียวกัน */
+export function normalizeFullName(input: string): string {
+  return input.trim().replace(/\s+/g, " ");
+}
+
 export function checkUsername(username: string): string | null {
   if (username.length < 3) return "ชื่อผู้ใช้ต้องยาวอย่างน้อย 3 ตัวอักษร";
   if (username.length > 40) return "ชื่อผู้ใช้ยาวเกินไป (ไม่เกิน 40 ตัวอักษร)";

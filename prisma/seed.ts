@@ -294,6 +294,22 @@ async function main() {
   await prisma.driver.createMany({ data: driverRows });
   console.log(`  พนักงานขับรถ ${driverRows.length} คน`);
 
+  // เติมชื่อ พขร. เข้าทะเบียนพนักงาน (สิทธิ์สมัครใช้งานเว็บ) — เฉพาะชื่อที่ยังไม่มี
+  // ไม่ลบ/ไม่ทับของเดิม เพราะทะเบียนนี้ผูกกับบัญชีผู้ใช้อยู่ (1 ชื่อ = 1 บัญชี)
+  let empAdded = 0;
+  for (const d of driverRows) {
+    const empName = `${d.firstName} ${d.lastName}`.trim().replace(/\s+/g, " ");
+    if (!empName) continue;
+    const exists = await prisma.employee.findUnique({ where: { name: empName } });
+    if (!exists) {
+      await prisma.employee.create({
+        data: { name: empName, position: "พนักงานขับรถ (พขร.)" },
+      });
+      empAdded++;
+    }
+  }
+  if (empAdded > 0) console.log(`  ทะเบียนพนักงาน: เพิ่มชื่อ พขร. ${empAdded} คน`);
+
   // ── จับคู่รถ ──
   const pairRows = [];
   for (const p of raw.pairings) {

@@ -21,10 +21,10 @@ export default async function RegisterPage() {
       <p className="mb-5 text-[13px] leading-relaxed text-slate-500">
         {isFirstUser
           ? "ยังไม่มีผู้ใช้ในระบบ บัญชีที่สร้างตอนนี้จะเป็นผู้ดูแลระบบและเข้าใช้งานได้ทันที"
-          : "สมัครแล้วต้องรอผู้ดูแลอนุมัติก่อน จึงจะเข้าระบบได้"}
+          : "เฉพาะพนักงานบริษัทเท่านั้น — ระบบตรวจชื่อกับทะเบียนพนักงานก่อน และสมัครแล้วต้องรอผู้ดูแลอนุมัติจึงจะเข้าระบบได้"}
       </p>
 
-      <RegisterForm />
+      <RegisterForm requireEmployeeCheck={!isFirstUser} />
 
       <p className="mt-5 border-t border-[var(--border)] pt-4 text-center text-[13px] text-slate-500">
         มีบัญชีอยู่แล้ว?{" "}

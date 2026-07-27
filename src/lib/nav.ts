@@ -76,6 +76,7 @@ export const NAV: NavGroup[] = [
     adminOnly: true,
     items: [
       { href: "/admin/users", label: "จัดการผู้ใช้งาน" },
+      { href: "/admin/employees", label: "ทะเบียนพนักงาน (สิทธิ์สมัคร)" },
       { href: "/admin/login-log", label: "บันทึกการเข้าระบบ" },
     ],
   },

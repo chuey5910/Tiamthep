@@ -9,6 +9,7 @@ import {
   writeLog,
   type LogAction,
 } from "@/lib/auth";
+import { MAX_ADMINS } from "@/lib/roles";
 
 export type Result = { ok: boolean; error?: string; message?: string };
 
@@ -19,6 +20,20 @@ async function wouldRemoveLastAdmin(userId: string): Promise<boolean> {
   const activeAdmins = await prisma.user.count({ where: { role: "ADMIN", status: "ACTIVE" } });
   return activeAdmins <= 1;
 }
+
+/**
+ * นโยบายบริษัท: ผู้ดูแลระบบมีได้ไม่เกิน MAX_ADMINS คน
+ * นับเฉพาะที่ยังไม่ถูกระงับ — คนถูกระงับไม่กินโควตา
+ * excludeUserId = คนที่กำลังจะเปลี่ยน (เป็น ADMIN อยู่แล้วไม่นับซ้ำ)
+ */
+async function adminSlotsFull(excludeUserId?: string): Promise<boolean> {
+  const admins = await prisma.user.count({
+    where: { role: "ADMIN", status: { not: "SUSPENDED" }, id: { not: excludeUserId } },
+  });
+  return admins >= MAX_ADMINS;
+}
+
+const ADMIN_FULL_ERROR = `ผู้ดูแลระบบมีครบ ${MAX_ADMINS} คนแล้ว (นโยบายบริษัทกำหนดสูงสุด ${MAX_ADMINS} คน) — ต้องถอดสิทธิ์ผู้ดูแลคนใดคนหนึ่งก่อน`;
 
 async function act(
   userId: string,
@@ -46,6 +61,9 @@ async function act(
 export async function approveUser(userId: string, role: string): Promise<Result> {
   const admin = await requireAdmin();
   if (!["ADMIN", "STAFF", "VIEWER"].includes(role)) return { ok: false, error: "สิทธิ์ไม่ถูกต้อง" };
+  if (role === "ADMIN" && (await adminSlotsFull(userId))) {
+    return { ok: false, error: ADMIN_FULL_ERROR };
+  }
 
   return act(
     userId,
@@ -90,6 +108,11 @@ export async function suspendUser(userId: string): Promise<Result> {
 }
 
 export async function reactivateUser(userId: string): Promise<Result> {
+  // คนถูกระงับไม่กินโควตาผู้ดูแล — ตอนปลุกกลับมาต้องเช็คว่ายังมีที่ว่างไหม
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (target?.role === "ADMIN" && (await adminSlotsFull(userId))) {
+    return { ok: false, error: ADMIN_FULL_ERROR };
+  }
   return act(userId, "REACTIVATE", { status: "ACTIVE", failedLogins: 0, lockedUntil: null }, "เปิดใช้งานอีกครั้ง");
 }
 
@@ -97,6 +120,9 @@ export async function changeRole(userId: string, role: string): Promise<Result> 
   if (!["ADMIN", "STAFF", "VIEWER"].includes(role)) return { ok: false, error: "สิทธิ์ไม่ถูกต้อง" };
   if (role !== "ADMIN" && (await wouldRemoveLastAdmin(userId))) {
     return { ok: false, error: "เปลี่ยนสิทธิ์ไม่ได้ — นี่เป็นผู้ดูแลระบบคนสุดท้ายที่ใช้งานได้" };
+  }
+  if (role === "ADMIN" && (await adminSlotsFull(userId))) {
+    return { ok: false, error: ADMIN_FULL_ERROR };
   }
   return act(userId, "ROLE_CHANGE", { role }, `เปลี่ยนสิทธิ์เป็น ${role}`);
 }

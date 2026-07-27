@@ -49,8 +49,8 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
             }}
           />
           <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-          <Line type="monotone" dataKey="revenue" name="รายได้" stroke="#2a78d6" strokeWidth={2} dot={{ r: 3 }} />
-          <Line type="monotone" dataKey="cost" name="ต้นทุน" stroke="#eb6834" strokeWidth={2} dot={{ r: 3 }} />
+          <Line type="monotone" dataKey="revenue" name="รายได้" stroke="#232326" strokeWidth={2} dot={{ r: 3 }} />
+          <Line type="monotone" dataKey="cost" name="ต้นทุน" stroke="#e51c23" strokeWidth={2} dot={{ r: 3 }} />
           <Line type="monotone" dataKey="profit" name="กำไร" stroke="#1baf7a" strokeWidth={2} dot={{ r: 3 }} />
         </LineChart>
       </ResponsiveContainer>

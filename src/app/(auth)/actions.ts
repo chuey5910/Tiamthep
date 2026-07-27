@@ -10,16 +10,33 @@ import {
   destroySession,
   hashPassword,
   lockRemainingMinutes,
+  normalizeFullName,
   normalizeUsername,
   registerFailedLogin,
   verifyPassword,
   writeLog,
   AUTH_LIMITS,
 } from "@/lib/auth";
+import { EMPLOYEE_CHECK_ERROR, type EmployeeCheck } from "@/lib/roles";
 
 export type AuthResult = { ok: boolean; error?: string; message?: string };
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
+
+/**
+ * ตรวจชื่อผู้สมัครกับทะเบียนพนักงานบริษัท — ใช้ทั้งตอนพิมพ์ในหน้าสมัคร
+ * (เปิด/ปิดปุ่ม) และตรวจซ้ำจริงอีกครั้งใน register() ตอนกดส่ง
+ */
+export async function checkEmployeeName(rawName: string): Promise<EmployeeCheck> {
+  if ((await prisma.user.count()) === 0) return "first";
+  const name = normalizeFullName(rawName);
+  if (!name) return "notfound";
+  const emp = await prisma.employee.findUnique({ where: { name } });
+  if (!emp) return "notfound";
+  if (!emp.active) return "inactive";
+  if (emp.userId) return "taken";
+  return "ok";
+}
 
 /** หน่วงเวลาเล็กน้อยตอนล็อกอินล้มเหลว ทำให้ยิงเดารหัสรัวๆ ได้ช้าลง */
 function delay(ms: number) {
@@ -143,17 +160,66 @@ export async function register(form: FormData): Promise<AuthResult> {
   // บัญชีแรกของระบบเป็นผู้ดูแลและใช้งานได้ทันที ไม่งั้นจะไม่มีใครอนุมัติใครได้เลย
   const isFirstUser = (await prisma.user.count()) === 0;
 
-  const user = await prisma.user.create({
-    data: {
-      username,
-      name,
-      phone: phone || null,
-      passwordHash: await hashPassword(password),
-      role: isFirstUser ? "ADMIN" : "STAFF",
-      status: isFirstUser ? "ACTIVE" : "PENDING",
-      approvedAt: isFirstUser ? new Date() : null,
-    },
+  // นโยบายบริษัท: ต้องมีชื่อในทะเบียนพนักงานจึงสมัครได้ และ 1 ชื่อ = 1 บัญชี
+  // (ยกเว้นบัญชีแรกตอนตั้งค่าระบบ ซึ่งทะเบียนพนักงานยังว่างอยู่)
+  const empName = normalizeFullName(name);
+  if (!isFirstUser) {
+    const check: EmployeeCheck = await checkEmployeeName(empName);
+    if (check !== "ok") {
+      const reasonMap: Record<string, string> = {
+        notfound: "ไม่พบชื่อในทะเบียนพนักงาน",
+        taken: "ชื่อพนักงานนี้มีบัญชีแล้ว",
+        inactive: "ชื่อพนักงานถูกปิดใช้งาน",
+      };
+      await writeLog({
+        action: "REGISTER",
+        username,
+        success: false,
+        reason: `${reasonMap[check] ?? check}: ${empName}`,
+      });
+      return { ok: false, error: EMPLOYEE_CHECK_ERROR[check as keyof typeof EMPLOYEE_CHECK_ERROR] };
+    }
+  }
+
+  const passwordHash = await hashPassword(password);
+  // สร้างบัญชีและจองรายชื่อพนักงานใน transaction เดียว — สมัครพร้อมกัน
+  // สองเครื่องด้วยชื่อเดียวกัน จะสำเร็จได้แค่รายเดียว (updateMany เช็ค userId ว่าง)
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        username,
+        name: empName,
+        phone: phone || null,
+        passwordHash,
+        role: isFirstUser ? "ADMIN" : "STAFF",
+        status: isFirstUser ? "ACTIVE" : "PENDING",
+        approvedAt: isFirstUser ? new Date() : null,
+      },
+    });
+    if (!isFirstUser) {
+      const claimed = await tx.employee.updateMany({
+        where: { name: empName, userId: null, active: true },
+        data: { userId: created.id },
+      });
+      if (claimed.count !== 1) {
+        throw new Error("EMPLOYEE_TAKEN");
+      }
+    }
+    return created;
+  }).catch(async (e) => {
+    if (e instanceof Error && e.message === "EMPLOYEE_TAKEN") return null;
+    throw e;
   });
+
+  if (!user) {
+    await writeLog({
+      action: "REGISTER",
+      username,
+      success: false,
+      reason: `ชื่อพนักงานถูกจองตัดหน้า: ${empName}`,
+    });
+    return { ok: false, error: EMPLOYEE_CHECK_ERROR.taken };
+  }
 
   await writeLog({
     action: "REGISTER",

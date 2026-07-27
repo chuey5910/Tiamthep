@@ -47,7 +47,7 @@ export function Breakdown({
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
                 <div
                   className="h-full rounded-full"
-                  style={{ width: `${w}%`, background: negative ? "#e34948" : "#2a78d6" }}
+                  style={{ width: `${w}%`, background: negative ? "#e51c23" : "#3a3a40" }}
                 />
               </div>
             </li>

@@ -471,8 +471,24 @@ model User {
 
   sessions  Session[]
   loginLogs LoginLog[]
+  employee  Employee?
 
   @@index([status])
+}
+
+/// ทะเบียนรายชื่อพนักงานบริษัท — ผู้ที่จะสมัครใช้งานเว็บได้ต้องมีชื่อในตารางนี้
+/// และ 1 รายชื่อสร้างบัญชีได้เพียง 1 บัญชีเท่านั้น (userId เป็น unique)
+model Employee {
+  id        Int      @id @default(autoincrement())
+  /// ชื่อ-นามสกุลตามทะเบียนพนักงาน — เทียบกับชื่อที่กรอกตอนสมัคร (ตัดช่องว่างซ้ำก่อนเทียบ)
+  name      String   @unique
+  position  String?
+  /// ปิด = ลาออก/พ้นสภาพ — สมัครใหม่ไม่ได้ แต่บัญชีเดิม (ถ้ามี) ต้องไประงับที่หน้าจัดการผู้ใช้
+  active    Boolean  @default(true)
+  note      String?
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
 }
 
 /// เซสชันการเข้าระบบ — เก็บเฉพาะค่า hash ของ token
