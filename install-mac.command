@@ -46,7 +46,28 @@ else
   echo "✓ มีไฟล์ .env อยู่แล้ว — ใช้ค่าเดิม"
 fi
 
-# ── 3) เปิดฐานข้อมูล PostgreSQL ─────────────────────────────
+# ── 3) เลี่ยงพอร์ตชน — บาง Mac มี PostgreSQL ตัวอื่นใช้ 5432 อยู่แล้ว ──
+port_in_use() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+db_running() { docker inspect --format '{{.State.Running}}' tiamthep-db 2>/dev/null | grep -q true; }
+
+CUR_PORT=$(grep -E '^DB_PORT=' .env | head -1 | cut -d= -f2)
+CUR_PORT=${CUR_PORT:-5432}
+if ! db_running && port_in_use "$CUR_PORT"; then
+  NEW_PORT=""
+  for p in 5433 5434 5435 5436 5437; do
+    port_in_use "$p" || { NEW_PORT=$p; break; }
+  done
+  [ -n "$NEW_PORT" ] || fail "พอร์ต 5432-5437 ถูกใช้หมด — ปิดโปรแกรมฐานข้อมูลอื่นในเครื่องก่อนแล้วลองใหม่"
+  if grep -q '^DB_PORT=' .env; then
+    sed -i '' "s/^DB_PORT=.*/DB_PORT=$NEW_PORT/" .env
+  else
+    printf '\nDB_PORT=%s\n' "$NEW_PORT" >> .env
+  fi
+  sed -i '' "s|@127.0.0.1:$CUR_PORT/|@127.0.0.1:$NEW_PORT/|" .env
+  echo "✓ พอร์ต $CUR_PORT มีโปรแกรมอื่นใช้อยู่ — ย้ายฐานข้อมูลของเราไปพอร์ต $NEW_PORT ให้แล้ว"
+fi
+
+# ── 4) เปิดฐานข้อมูล PostgreSQL ─────────────────────────────
 echo
 echo "▶ กำลังเปิดฐานข้อมูล..."
 docker compose up -d
@@ -61,7 +82,7 @@ done
    ลองปิดแล้วเปิด Docker Desktop ใหม่ จากนั้นดับเบิลคลิกไฟล์นี้อีกครั้ง"
 echo "✓ ฐานข้อมูลพร้อมแล้ว"
 
-# ── 4) ติดตั้งระบบ + สร้างตาราง + นำเข้าข้อมูล ─────────────────
+# ── 5) ติดตั้งระบบ + สร้างตาราง + นำเข้าข้อมูล ─────────────────
 echo
 echo "▶ กำลังติดตั้ง (ครั้งแรกใช้เวลา 3-5 นาที)..."
 npm install
@@ -76,7 +97,7 @@ echo
 echo "▶ กำลังเตรียมหน้าเว็บ..."
 npm run build
 
-# ── 5) ตั้งให้เปิดเองอัตโนมัติ + เริ่มทำงานทันที ─────────────────
+# ── 6) ตั้งให้เปิดเองอัตโนมัติ + เริ่มทำงานทันที ─────────────────
 PLIST="$HOME/Library/LaunchAgents/com.tiamthep.server.plist"
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<EOF
