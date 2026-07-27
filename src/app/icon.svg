@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- favicon ตาม CI: พื้นขาว ตัว T ดำเอียงหนา จุดแดง และ swoosh แดง -->
+  <rect width="64" height="64" rx="12" fill="#ffffff"/>
+  <path fill="#e51c23" d="M22 14 C 36 8, 52 11, 60 22 L 62 26 C 56 36, 44 41, 32 39 C 44 39, 52 33, 55 26 C 48 17, 34 12, 22 14 Z"/>
+  <text x="8" y="52" fill="#0a0a0a" style="font:italic 800 42px 'Helvetica Neue',Helvetica,Arial,sans-serif">T</text>
+  <circle cx="44" cy="49" r="4.5" fill="#e51c23"/>
+</svg>

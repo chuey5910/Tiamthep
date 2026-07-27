@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
 import { NAV } from "@/lib/nav";
 import { logout } from "@/app/(auth)/actions";
+import { Logo } from "@/components/Logo";
 import { ROLE_LABEL, type SessionUser } from "@/lib/roles";
 
 export function Shell({
@@ -30,7 +31,9 @@ export function Shell({
         <button className="btn btn-ghost px-2 py-1" onClick={() => setOpen((v) => !v)} aria-label="เมนู">
           ☰
         </button>
-        <span className="flex-1 truncate font-bold text-slate-800">{companyName}</span>
+        <div className="min-w-0 flex-1">
+          <Logo withThai={false} className="h-7 w-auto" title={companyName} />
+        </div>
         <span className="truncate text-[12px] text-slate-500">{user.name}</span>
       </header>
 
@@ -40,8 +43,8 @@ export function Shell({
         }`}
       >
         <div className="hidden border-b border-[var(--border)] px-4 py-4 lg:block">
-          <div className="text-[13px] font-bold leading-tight text-slate-800">{companyName}</div>
-          <div className="mt-0.5 text-[11px] text-slate-500">ระบบบริหารงานขนส่ง</div>
+          <Logo className="w-44" title={companyName} />
+          <div className="mt-1.5 text-[11px] text-slate-500">ระบบบริหารงานขนส่ง</div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3">
@@ -84,7 +87,17 @@ export function Shell({
         <UserBar user={user} />
       </nav>
 
-      <main className="min-w-0 flex-1 p-4 lg:p-6">{children}</main>
+      <main className="min-w-0 flex-1 p-4 lg:p-6">
+        {/* หัวกระดาษ — โผล่เฉพาะตอนสั่งพิมพ์รายงาน */}
+        <div className="print-head">
+          <Logo className="w-52" title={companyName} />
+          <div className="text-right text-[11px] leading-relaxed text-slate-600">
+            <div className="font-semibold text-slate-900">{companyName}</div>
+            <div>ระบบบริหารงานขนส่ง</div>
+          </div>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

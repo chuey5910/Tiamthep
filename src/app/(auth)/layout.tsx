@@ -1,3 +1,4 @@
+import { Logo } from "@/components/Logo";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +20,8 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl text-white">
-            🚛
-          </div>
-          <h1 className="text-lg font-bold text-slate-900">{companyName}</h1>
+          <Logo className="mx-auto mb-2 w-64" title={companyName} />
+          <h1 className="sr-only">{companyName}</h1>
           <p className="text-[13px] text-slate-500">ระบบบริหารงานขนส่ง</p>
         </div>
         {children}

@@ -4,28 +4,33 @@
   /* ใช้ฟอนต์ที่มีอยู่ในเครื่องเท่านั้น ไม่ดึงจากอินเทอร์เน็ต
      เพราะระบบนี้รันในวงแลนของบริษัท ซึ่งอาจไม่มีเน็ตออกนอก
      ถ้าโหลดฟอนต์ภายนอกไม่ได้ หน้าเว็บจะค้างรอจนกว่าจะ timeout */
-  --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Sarabun", "Leelawadee UI",
-    "Thonburi", "Prompt", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* ฟอนต์ไทยตาม CI คือ Sukhumvit (มีในเครื่อง Mac/iPhone เป็น "Sukhumvit Set")
+     เครื่องอื่นถอยไปใช้ฟอนต์ไทยที่ใกล้เคียงตามลำดับ */
+  --font-sans: "Sukhumvit Set", "IBM Plex Sans Thai", "Noto Sans Thai", "Sarabun",
+    "Leelawadee UI", "Thonburi", "Prompt", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
 
-  --color-brand-50: #eef6ff;
-  --color-brand-100: #d9ebff;
-  --color-brand-200: #bcdcff;
-  --color-brand-300: #8ec7ff;
-  --color-brand-400: #59a8ff;
-  --color-brand-500: #3286fb;
-  --color-brand-600: #1c67f0;
-  --color-brand-700: #1552dd;
-  --color-brand-800: #1844b3;
-  --color-brand-900: #1a3d8d;
+  /* สีหลักตาม CI: แดง #e51c23 (ใช้เป็นสีเน้น ~10% ของพื้นที่ตามสัดส่วน CI) */
+  --color-brand-50: #fdf2f2;
+  --color-brand-100: #fde3e3;
+  --color-brand-200: #fccbcb;
+  --color-brand-300: #f9a6a6;
+  --color-brand-400: #f37272;
+  --color-brand-500: #ec4046;
+  --color-brand-600: #e51c23;
+  --color-brand-700: #c11318;
+  --color-brand-800: #9f1317;
+  --color-brand-900: #83161a;
 }
 
+/* โทนพื้นตาม CI: ขาว/เทา #e0e0e0 เป็นพื้นหลัก ดำเป็นตัวอักษร */
 :root {
-  --bg: #f6f7f9;
+  --bg: #f3f3f4;
   --surface: #ffffff;
-  --border: #e3e6ea;
-  --text: #14181f;
-  --muted: #667085;
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.05);
+  --border: #e0e0e2;
+  --text: #111114;
+  --muted: #68686e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
 html {
@@ -50,8 +55,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f2f4f7;
-  color: #475467;
+  background: #f2f2f3;
+  color: #4a4a50;
   font-weight: 600;
   text-align: left;
   padding: 0.5rem 0.75rem;
@@ -60,16 +65,16 @@ body {
 }
 .tbl tbody td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #f0f1f3;
+  border-bottom: 1px solid #f0f0f1;
   vertical-align: middle;
 }
 .tbl tbody tr:hover td {
-  background: #fafbfc;
+  background: #fafafa;
 }
 .tbl tfoot td {
   padding: 0.55rem 0.75rem;
   font-weight: 700;
-  background: #f9fafb;
+  background: #f8f8f9;
   border-top: 2px solid var(--border);
 }
 .num {
@@ -91,17 +96,17 @@ body {
 }
 .inp:focus {
   border-color: var(--color-brand-500);
-  box-shadow: 0 0 0 3px rgb(50 134 251 / 0.15);
+  box-shadow: 0 0 0 3px rgb(229 28 35 / 0.12);
 }
 .inp:disabled {
-  background: #f4f5f7;
+  background: #f4f4f5;
   color: var(--muted);
 }
 .lbl {
   display: block;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #475467;
+  color: #4a4a50;
   margin-bottom: 0.25rem;
 }
 
@@ -129,10 +134,10 @@ body {
 .btn-ghost {
   background: #fff;
   border-color: var(--border);
-  color: #344054;
+  color: #3a3a40;
 }
 .btn-ghost:hover {
-  background: #f8f9fb;
+  background: #f7f7f8;
 }
 .btn-danger {
   background: #fff;
@@ -167,12 +172,24 @@ body {
 .badge-warn  { background: #fffaeb; color: #b54708; }
 .badge-error { background: #fef3f2; color: #b42318; }
 .badge-info  { background: #eff8ff; color: #175cd3; }
-.badge-muted { background: #f2f4f7; color: #475467; }
+.badge-muted { background: #f2f2f3; color: #4a4a50; }
 
-/* พิมพ์รายงาน — ซ่อนเมนูและปุ่ม */
+/* หัวกระดาษ — แสดงเฉพาะตอนสั่งพิมพ์ */
+.print-head { display: none; }
+
+/* พิมพ์รายงาน — ซ่อนเมนูและปุ่ม แสดงหัวกระดาษพร้อมโลโก้ */
 @media print {
   .no-print { display: none !important; }
   body { background: #fff; }
   .card { border: none; box-shadow: none; }
   main { padding: 0 !important; }
+  .print-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #111114;
+  }
 }
