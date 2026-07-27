@@ -18,3 +18,4 @@ backup/*
 *.sql.gz
 # ยกเว้นไฟล์สร้างตารางของ Prisma — จำเป็นต่อการติดตั้ง ไม่มีข้อมูลจริง
 !prisma/migrations/**/*.sql
+.artifact/
