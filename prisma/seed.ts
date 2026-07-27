@@ -124,6 +124,14 @@ async function ensureFirstAdmin() {
     return;
   }
 
+  // ปกติไม่สร้างบัญชีจากตรงนี้ — เปิดเว็บครั้งแรกแล้วหน้าสมัครจะตั้ง
+  // บัญชีแรกเป็นผู้ดูแลให้เอง จะสร้างจาก command line ก็ต่อเมื่อ
+  // ตั้ง ADMIN_USERNAME หรือ ADMIN_PASSWORD_INIT ไว้ชัดเจนเท่านั้น
+  if (!process.env.ADMIN_USERNAME && !process.env.ADMIN_PASSWORD_INIT) {
+    console.log("  ผู้ใช้: ยังไม่มี — เปิดเว็บครั้งแรกจะให้ตั้งบัญชีผู้ดูแลเอง");
+    return;
+  }
+
   const username = (process.env.ADMIN_USERNAME || "admin").toLowerCase();
   // ไม่ตั้งรหัสตายตัวไว้ในโค้ด — สุ่มให้แล้วพิมพ์ออกมาครั้งเดียว
   const password = process.env.ADMIN_PASSWORD_INIT || randomBytes(6).toString("base64url") + "7a";

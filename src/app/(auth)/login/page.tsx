@@ -16,8 +16,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const next = typeof sp.next === "string" ? sp.next : "";
   const registered = sp.registered === "1";
 
-  // ยังไม่มีใครในระบบเลย — บอกให้รู้ว่าคนแรกที่สมัครจะเป็นผู้ดูแล
+  // ยังไม่มีใครในระบบเลย — พาไปหน้าตั้งบัญชีผู้ดูแลคนแรกทันที
   const isEmpty = (await prisma.user.count().catch(() => 1)) === 0;
+  if (isEmpty) redirect("/register");
 
   return (
     <div className="card p-6">

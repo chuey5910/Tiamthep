@@ -15,10 +15,12 @@ export default async function RegisterPage() {
 
   return (
     <div className="card p-6">
-      <h2 className="mb-1 text-base font-bold text-slate-900">สมัครใช้งาน</h2>
+      <h2 className="mb-1 text-base font-bold text-slate-900">
+        {isFirstUser ? "ตั้งค่าครั้งแรก — สร้างบัญชีผู้ดูแลระบบ" : "สมัครใช้งาน"}
+      </h2>
       <p className="mb-5 text-[13px] leading-relaxed text-slate-500">
         {isFirstUser
-          ? "คุณเป็นคนแรกของระบบ จะได้สิทธิ์ผู้ดูแลระบบและเข้าใช้งานได้ทันที"
+          ? "ยังไม่มีผู้ใช้ในระบบ บัญชีที่สร้างตอนนี้จะเป็นผู้ดูแลระบบและเข้าใช้งานได้ทันที"
           : "สมัครแล้วต้องรอผู้ดูแลอนุมัติก่อน จึงจะเข้าระบบได้"}
       </p>
 
