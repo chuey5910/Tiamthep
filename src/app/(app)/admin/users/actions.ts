@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   checkPasswordStrength,
+  checkUsername,
   hashPassword,
+  normalizeFullName,
+  normalizeUsername,
   requireAdmin,
   writeLog,
   type LogAction,
@@ -125,6 +128,67 @@ export async function changeRole(userId: string, role: string): Promise<Result> 
     return { ok: false, error: ADMIN_FULL_ERROR };
   }
   return act(userId, "ROLE_CHANGE", { role }, `เปลี่ยนสิทธิ์เป็น ${role}`);
+}
+
+/**
+ * ผู้ดูแลสร้างบัญชีให้คนอื่นโดยตรง — ใช้กับผู้บริหารหรือคนที่ไม่มีชื่อ
+ * ในทะเบียนพนักงาน (การสมัครเองหน้าเว็บยังต้องผ่านทะเบียนตามปกติ)
+ * บัญชีที่สร้างทางนี้ใช้งานได้ทันที ไม่ต้องรออนุมัติ
+ */
+export async function createUser(form: FormData): Promise<Result> {
+  const admin = await requireAdmin();
+
+  const name = normalizeFullName(String(form.get("name") ?? ""));
+  const username = normalizeUsername(String(form.get("username") ?? ""));
+  const phone = String(form.get("phone") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  const role = String(form.get("role") ?? "STAFF");
+
+  if (!name) return { ok: false, error: "กรุณากรอกชื่อ-นามสกุล" };
+  if (!["ADMIN", "STAFF", "VIEWER"].includes(role)) return { ok: false, error: "สิทธิ์ไม่ถูกต้อง" };
+
+  const usernameError = checkUsername(username);
+  if (usernameError) return { ok: false, error: usernameError };
+  const passwordError = checkPasswordStrength(password);
+  if (passwordError) return { ok: false, error: passwordError };
+
+  if (await prisma.user.findUnique({ where: { username } })) {
+    return { ok: false, error: "ชื่อผู้ใช้นี้มีคนใช้แล้ว กรุณาเลือกชื่ออื่น" };
+  }
+  if (role === "ADMIN" && (await adminSlotsFull())) {
+    return { ok: false, error: ADMIN_FULL_ERROR };
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      username,
+      name,
+      phone: phone || null,
+      passwordHash: await hashPassword(password),
+      role,
+      status: "ACTIVE",
+      approvedAt: new Date(),
+      approvedById: admin.id,
+      note: `สร้างโดยผู้ดูแล ${admin.username}`,
+    },
+  });
+
+  // ถ้าชื่อตรงกับทะเบียนพนักงานที่ยังว่างอยู่ ก็จองให้ด้วย (กันสมัครซ้ำ)
+  await prisma.employee.updateMany({
+    where: { name, userId: null, active: true },
+    data: { userId: user.id },
+  });
+
+  await writeLog({
+    action: "REGISTER",
+    username,
+    userId: user.id,
+    success: true,
+    reason: `ผู้ดูแล ${admin.username} สร้างบัญชีให้ "${name}" สิทธิ์ ${role}`,
+  });
+
+  revalidatePath("/", "layout");
+  return { ok: true, message: `สร้างบัญชี ${username} แล้ว — แจ้งรหัสผ่านให้เจ้าตัวและให้เปลี่ยนเองทันที` };
 }
 
 /** ปลดล็อกบัญชีที่ถูกล็อกเพราะใส่รหัสผิดหลายครั้ง */

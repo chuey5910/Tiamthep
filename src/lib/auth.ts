@@ -114,7 +114,11 @@ export async function createSession(userId: string): Promise<void> {
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // ระบบนี้ใช้ในวงแลน/Tailscale ผ่าน http — ถ้าตั้ง secure เบราว์เซอร์จะทิ้ง
+    // cookie ทันทีเมื่อเข้าจากเครื่องอื่น (อาการ: ล็อกอินได้แต่คลิกหน้าไหนก็เด้งกลับ
+    // หน้า login) เข้าได้เฉพาะ localhost บนตัวเครื่อง · วันไหนติดตั้ง HTTPS แล้ว
+    // ค่อยตั้ง COOKIE_SECURE=1 ใน .env
+    secure: process.env.COOKIE_SECURE === "1",
     path: "/",
     expires: expiresAt,
   });

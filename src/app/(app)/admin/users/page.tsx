@@ -3,6 +3,7 @@ import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
 import { formatThaiDate } from "@/lib/date";
 import { ROLE_LABEL, STATUS_LABEL, lockRemainingMinutes, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { AddUserForm } from "./AddUserForm";
 import { ApproveControls, ManageControls } from "./UserActions";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,11 @@ export default async function UsersPage() {
         <Stat label="ถูกระงับ" value={suspended.length} hint="คน" />
         <Stat label="ผู้ดูแลระบบ" value={active.filter((u) => u.role === "ADMIN").length} hint="คน" />
       </div>
+
+      {/* ผู้บริหารหรือคนนอกทะเบียนพนักงาน สมัครหน้าเว็บเองไม่ได้ — ผู้ดูแลสร้างให้ตรงนี้ */}
+      <Card title="สร้างบัญชีโดยผู้ดูแล" className="mb-4" bodyClass="p-4">
+        <AddUserForm />
+      </Card>
 
       <Card
         title={`คำขอที่รออนุมัติ (${pending.length})`}

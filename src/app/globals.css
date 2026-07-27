@@ -45,6 +45,11 @@ body {
 }
 
 /* ── ตาราง ── */
+/* กรอบที่มีตารางเป็นลูกโดยตรง ให้เลื่อนซ้าย-ขวาในตัวเอง
+   ตารางกว้างจะไม่ดันทั้งหน้าให้ล้นจอ (สำคัญมากบนมือถือ) */
+:where(div, section):has(> .tbl) {
+  overflow-x: auto;
+}
 .tbl {
   width: 100%;
   border-collapse: separate;
@@ -157,6 +162,9 @@ body {
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   box-shadow: var(--shadow);
+  /* การ์ดมักเป็นลูกของ grid/flex ซึ่งค่าปริยาย min-width:auto ทำให้การ์ด
+     ไม่ยอมหดตามจอเมื่อข้างในมีตารางกว้าง — ต้องปลดให้หดได้ จอมือถือจึงไม่ล้น */
+  min-width: 0;
 }
 
 .badge {
