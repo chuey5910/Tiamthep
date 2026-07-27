@@ -7,6 +7,35 @@
 
 ต้องมี **Node.js 20 ขึ้นไป** และ **Docker** (สำหรับฐานข้อมูล)
 
+### วิธีง่าย (Mac) — ดับเบิลคลิกไฟล์เดียว
+
+1. ติดตั้ง [Docker Desktop](https://www.docker.com/products/docker-desktop/) แล้วเปิดโปรแกรมทิ้งไว้
+2. ติดตั้ง [Node.js LTS](https://nodejs.org)
+3. ดับเบิลคลิก **`install-mac.command`** ในโฟลเดอร์นี้
+
+สคริปต์จะตั้งรหัสผ่านฐานข้อมูลแบบสุ่ม เปิดฐานข้อมูล สร้างตาราง นำเข้าข้อมูล
+ตั้งให้ระบบเปิดเองอัตโนมัติตอนเข้าเครื่อง แล้วเปิดเว็บให้เลย —
+ระหว่างทางจะแสดง**ชื่อผู้ใช้และรหัสผ่านผู้ดูแลคนแรก** จดไว้แล้วเข้าไปเปลี่ยนทันที
+
+ให้เปิดเองได้แม้เครื่องรีสตาร์ท ต้องตั้งเพิ่ม 2 อย่าง:
+
+- Docker Desktop → Settings → General → เปิด **Start Docker Desktop when you sign in**
+- System Settings → Users & Groups → ตั้ง **Automatically log in as** เป็นบัญชีที่ติดตั้ง
+  (launchd แบบผู้ใช้จะเริ่มงานหลังล็อกอินเข้าเครื่อง)
+
+คำสั่งที่ใช้บ่อย:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.tiamthep.server.plist   # ปิดระบบ
+launchctl load   ~/Library/LaunchAgents/com.tiamthep.server.plist   # เปิดระบบ
+tail -f server.log                                                  # ดูบันทึกการทำงาน
+```
+
+ถ้าดับเบิลคลิกแล้วขึ้นว่าเปิดไม่ได้ ให้คลิกขวาที่ไฟล์ → Open ครั้งแรกครั้งเดียว
+หรือรัน `chmod +x install-mac.command` ใน Terminal ก่อน
+
+### วิธีติดตั้งเอง (ทุกระบบ)
+
 ```bash
 # 1. ตั้งค่า
 cp .env.example .env
@@ -39,6 +68,12 @@ npm run db:seed -- --no-demo
 เปิดหน้า **คู่มือการใช้งาน** ในเมนูซ้ายก่อนเริ่มใช้จริง
 
 ### ให้ระบบเปิดเองทุกครั้งที่เครื่องบูต
+
+**Mac** — `install-mac.command` ตั้งให้แล้วอัตโนมัติ (LaunchAgent
+`com.tiamthep.server` เรียก `scripts/mac/run-server.sh` ซึ่งรอ Docker →
+เปิดฐานข้อมูล → เปิดเว็บ) ดูหัวข้อ "วิธีง่าย (Mac)" ด้านบน
+
+**Linux** — ใช้ systemd:
 
 ```ini
 # /etc/systemd/system/tiamthep.service
