@@ -236,7 +236,8 @@ function sendMorningJobs() {
       if (String(v[JC.STATUS - 1]) !== ST.NEW) return;
       var ds = dateStr_(v[JC.DATE - 1]);
       if (ds !== tomorrow && ds !== today) return;
-      var code = String(v[JC.DRIVER - 1]).trim();
+      // แปลงเป็นตัวใหญ่เสมอ — ทะเบียนคนขับเก็บแบบตัวใหญ่ พิมพ์ d001/D001/admin ก็ต้องเจอ
+      var code = String(v[JC.DRIVER - 1]).trim().toUpperCase();
       if (!code) return;
       (byDriver[code] = byDriver[code] || []).push({ row: i + 2, v: v });
     });
