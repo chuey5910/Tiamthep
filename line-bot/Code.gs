@@ -647,24 +647,31 @@ function lineGetContent_(messageId) {
   return res.getBlob();
 }
 
+/** รายชื่อผู้ดูแล — ใส่ได้หลายคน คั่นด้วยจุลภาค เช่น "Uaaa...,Ubbb...,Uccc..." */
+function adminIds_() {
+  return prop_("ADMIN_USER_ID").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
 function notifyAdmin_(text) {
-  var admin = prop_("ADMIN_USER_ID");
-  if (!admin) return;
-  try {
-    linePush_(admin, text);
-  } catch (err) {
-    log_("ERROR", "แจ้งผู้ดูแลไม่สำเร็จ: " + err);
-  }
+  adminIds_().forEach(function (admin) {
+    try {
+      linePush_(admin, text);
+    } catch (err) {
+      log_("ERROR", "แจ้งผู้ดูแล " + admin.slice(0, 8) + "… ไม่สำเร็จ: " + err);
+    }
+  });
 }
 
 function testNotifyAdmin() {
-  var admin = prop_("ADMIN_USER_ID");
-  if (!admin) {
+  var admins = adminIds_();
+  if (!admins.length) {
     SpreadsheetApp.getUi().alert("ยังไม่ได้ตั้ง ADMIN_USER_ID ใน Script Properties");
     return;
   }
-  linePush_(admin, "✅ ทดสอบจากระบบสั่งงานคนขับ — การเชื่อมต่อ LINE ใช้งานได้");
-  SpreadsheetApp.getUi().alert("ส่งข้อความทดสอบแล้ว — ตรวจดูในไลน์ของผู้ดูแล");
+  admins.forEach(function (admin) {
+    linePush_(admin, "✅ ทดสอบจากระบบสั่งงานคนขับ — การเชื่อมต่อ LINE ใช้งานได้");
+  });
+  SpreadsheetApp.getUi().alert("ส่งข้อความทดสอบไปยังผู้ดูแล " + admins.length + " คนแล้ว — ตรวจดูในไลน์");
 }
 
 // ─────────────────────────────────────────────────────────────

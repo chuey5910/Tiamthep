@@ -58,7 +58,7 @@
    | `LINE_CHANNEL_ACCESS_TOKEN` | token จากส่วนที่ 2 |
    | `WEBHOOK_TOKEN` | รหัสลับตั้งเอง ยาว ๆ เดายาก เช่นผลของ `openssl rand -hex 24` |
    | `DRIVE_FOLDER_ID` | id โฟลเดอร์รูปตั๋วจากส่วนที่ 1 |
-   | `ADMIN_USER_ID` | (เว้นก่อนได้) LINE userId ของผู้ดูแล ไว้รับแจ้งเตือนปัญหา |
+   | `ADMIN_USER_ID` | (เว้นก่อนได้) LINE userId ของผู้ดูแล ไว้รับแจ้งเตือนปัญหา — ใส่ได้หลายคน คั่นด้วยจุลภาค เช่น `Uaaa...,Ubbb...` |
 
 2. **Deploy → New deployment → ประเภท Web app**
    - Execute as: **Me**
