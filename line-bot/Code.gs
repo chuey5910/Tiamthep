@@ -123,8 +123,12 @@ function setupSheet() {
   ensureSheet_(ss, SHEET.LOG, ["เวลา", "ระดับ", "ข้อความ"]);
 
   // แท็บฐานข้อมูล — เว็บ TMS ส่งข้อมูลจริงมาเติมให้ทุกครั้งที่กด «ดึงงานเข้าเว็บ»
-  // คอลัมน์: A ทะเบียนรถ · B ทะเบียนหาง · C รหัสลูกค้า · D สถานที่ · E ประเภทสินค้า
-  ensureSheet_(ss, SHEET.MASTER, ["ทะเบียนรถ", "ทะเบียนหาง", "รหัสลูกค้า", "สถานที่", "ประเภทสินค้า"]);
+  // A ทะเบียนรถ · B ทะเบียนหาง · C รหัสลูกค้า · D สถานที่ · E ประเภทสินค้า
+  // F รหัสคนขับ · G รถประจำ · H หางประจำ (จากหน้า จับคู่รถ+พขร. ในเว็บ — ใช้เติมทะเบียนอัตโนมัติ)
+  ensureSheet_(ss, SHEET.MASTER, [
+    "ทะเบียนรถ", "ทะเบียนหาง", "รหัสลูกค้า", "สถานที่", "ประเภทสินค้า",
+    "รหัสคนขับ", "รถประจำ", "หางประจำ",
+  ]);
 
   // dropdown ของแท็บงาน อ้างช่วงจากแท็บอื่น — ข้อมูลเปลี่ยนแล้ว dropdown เปลี่ยนตามเอง
   var maxRow = 2000;
@@ -692,15 +696,36 @@ function onEdit(e) {
       sh.getRange(row, JC.ID).setValue(nextJobId_(sh, dateVal));
       if (!sh.getRange(row, JC.STATUS).getValue()) sh.getRange(row, JC.STATUS).setValue(ST.NEW);
     }
-    // เติมชื่อคนขับจากรหัส
+    // เติมชื่อคนขับ + ทะเบียนรถประจำตัวเขา จากรหัสที่เลือก
     if (e.range.getColumn() === JC.DRIVER) {
       var code = String(e.range.getValue()).trim().toUpperCase();
       var d = code ? driverLineIds_()[code] : null;
       sh.getRange(row, JC.DRIVER_NAME).setValue(d ? d.name : "");
+
+      // รถประจำจากแท็บฐานข้อมูล (เว็บส่งมาจากหน้า จับคู่รถ+พขร.)
+      // เติมเฉพาะช่องที่ยังว่าง — วันไหนสลับรถ ออฟฟิศเลือกทะเบียนเองทับได้
+      var pair = code ? vehicleOfDriver_(code) : null;
+      if (pair) {
+        fillIfEmpty_(sh, row, JC.HEAD, pair.head);
+        fillIfEmpty_(sh, row, JC.TRAILER, pair.trailer);
+      }
     }
   } catch (err) {
     // simple trigger ห้าม throw — แค่ไม่เติมค่าอัตโนมัติ พนักงานกรอกเองได้
   }
+}
+
+/** รถประจำของคนขับ จากแท็บฐานข้อมูล คอลัมน์ F-H — คืน {head, trailer} หรือ null */
+function vehicleOfDriver_(code) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.MASTER);
+  if (!sh || sh.getLastRow() < 2) return null;
+  var rows = sh.getRange(2, 6, sh.getLastRow() - 1, 3).getValues(); // F:H
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toUpperCase() === code) {
+      return { head: String(rows[i][1]).trim(), trailer: String(rows[i][2]).trim() };
+    }
+  }
+  return null;
 }
 
 /** รหัสงานรูปแบบ TTยymmdd-ลำดับ เช่น TT260728-03 */

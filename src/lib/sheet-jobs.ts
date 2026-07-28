@@ -203,7 +203,9 @@ async function importRow(
 
 /**
  * ส่งข้อมูลหลักจากเว็บไปเติมชีต
- *  • แท็บ «ฐานข้อมูล»: ทะเบียนรถ / ทะเบียนหาง / รหัสลูกค้า / สถานที่ / ประเภทสินค้า (ใช้ทำ dropdown)
+ *  • แท็บ «ฐานข้อมูล» A-E: ทะเบียนรถ / ทะเบียนหาง / รหัสลูกค้า / สถานที่ / ประเภทสินค้า (ใช้ทำ dropdown)
+ *  • แท็บ «ฐานข้อมูล» F-H: รหัสคนขับ / รถประจำ / หางประจำ (จากหน้า จับคู่รถ+พขร. —
+ *    ชีตใช้เติมทะเบียนรถอัตโนมัติเมื่อเลือกรหัสคนขับ)
  *  • แท็บ «คนขับ»: เพิ่มรหัสคนขับที่ยังไม่มีในชีต — "ไม่แตะ" คอลัมน์ LINE User ID ที่ผูกไว้แล้ว
  */
 async function pushMasterData(
@@ -229,13 +231,35 @@ async function pushMasterData(
     if (!locations.includes(r.destination)) locations.push(r.destination);
   }
 
-  const cols = [heads, trailers, customers, locations, cargoTypes];
+  // รถประจำของคนขับแต่ละคน = แถวจับคู่ล่าสุดที่มีผลแล้ว (effectiveDate ไม่เกินวันนี้)
+  const now = new Date();
+  const pairingByDriver = new Map<string, { head: string; trailer: string }>();
+  for (const p of ctx.pairings) {
+    // ctx.pairings เรียงตาม effectiveDate จากเก่าไปใหม่ — แถวหลังจึงทับแถวก่อนได้เลย
+    if (!p.driverCode || p.effectiveDate.getTime() > now.getTime()) continue;
+    pairingByDriver.set(p.driverCode.toUpperCase(), {
+      head: p.headPlate.trim(),
+      trailer: p.trailerPlate.trim(),
+    });
+  }
+  const pairDrivers: string[] = [];
+  const pairHeads: string[] = [];
+  const pairTrailers: string[] = [];
+  for (const d of drivers) {
+    const pair = pairingByDriver.get(d.code.toUpperCase());
+    if (!d.active || !pair) continue;
+    pairDrivers.push(d.code);
+    pairHeads.push(pair.head);
+    pairTrailers.push(pair.trailer);
+  }
+
+  const cols = [heads, trailers, customers, locations, cargoTypes, pairDrivers, pairHeads, pairTrailers];
   const maxLen = Math.max(...cols.map((c) => c.length), 1);
   const grid: string[][] = [];
   for (let i = 0; i < maxLen; i++) grid.push(cols.map((col) => col[i] ?? ""));
 
-  await clearValues(keyFile, sheetId, `${MASTER_TAB}!A2:E`);
-  await writeValues(keyFile, sheetId, `${MASTER_TAB}!A2:E${maxLen + 1}`, grid);
+  await clearValues(keyFile, sheetId, `${MASTER_TAB}!A2:H`);
+  await writeValues(keyFile, sheetId, `${MASTER_TAB}!A2:H${maxLen + 1}`, grid);
 
   // เพิ่มคนขับที่ยังไม่มีในแท็บคนขับ (คอลัมน์ A รหัส, B ชื่อ) — ค่าเดิมไม่ถูกแตะ
   const existing = await readValues(keyFile, sheetId, `${DRIVERS_TAB}!A2:A`);
