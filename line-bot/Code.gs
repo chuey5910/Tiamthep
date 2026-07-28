@@ -749,7 +749,12 @@ function nextJobId_(sheet, dateVal) {
 
 /** แปลงค่าวันที่ในเซลล์ (Date หรือข้อความ) เป็น "yyyy-MM-dd" เพื่อเทียบวัน */
 function dateStr_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, TZ, "yyyy-MM-dd");
+  if (v instanceof Date) {
+    var yy = Number(Utilities.formatDate(v, TZ, "yyyy"));
+    // พนักงานพิมพ์ปี พ.ศ. (เช่น 29/07/2569) Sheets จะเก็บเป็นปีค.ศ. 2569 จริงๆ — แปลงกลับให้
+    if (yy > 2400) yy -= 543;
+    return yy + "-" + Utilities.formatDate(v, TZ, "MM-dd");
+  }
   var s = String(v || "").trim();
   var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (m) {
