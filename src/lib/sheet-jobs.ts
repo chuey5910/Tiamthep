@@ -231,16 +231,31 @@ async function pushMasterData(
     if (!locations.includes(r.destination)) locations.push(r.destination);
   }
 
-  // รถประจำของคนขับแต่ละคน = แถวจับคู่ล่าสุดที่มีผลแล้ว (effectiveDate ไม่เกินวันนี้)
+  // รถประจำของคนขับ — ต้องคิดสองชั้นให้ตรงกับตรรกะหน้า «จับคู่รถ+พขร.»:
+  //  ชั้นที่ 1: รถแต่ละคัน (หัว+หาง) คนขับปัจจุบันคือ "แถวล่าสุดที่มีผลแล้ว" ของคันนั้น
+  //  ชั้นที่ 2: จับคู่กลับ คนขับ → รถ เฉพาะจากรายการปัจจุบันเท่านั้น
+  // (ถ้าดูแค่ประวัติรายคน คนที่เคยขับรถคันหนึ่งในอดีตจะได้ทะเบียนติดมาด้วย ทั้งที่รถถูกโอนให้คนอื่นแล้ว)
   const now = new Date();
-  const pairingByDriver = new Map<string, { head: string; trailer: string }>();
+  type Pairing = (typeof ctx.pairings)[number];
+  const currentByVehicle = new Map<string, Pairing>();
   for (const p of ctx.pairings) {
     // ctx.pairings เรียงตาม effectiveDate จากเก่าไปใหม่ — แถวหลังจึงทับแถวก่อนได้เลย
-    if (!p.driverCode || p.effectiveDate.getTime() > now.getTime()) continue;
-    pairingByDriver.set(p.driverCode.toUpperCase(), {
-      head: p.headPlate.trim(),
-      trailer: p.trailerPlate.trim(),
-    });
+    if (p.effectiveDate.getTime() > now.getTime()) continue;
+    currentByVehicle.set(`${p.headPlate.trim()}|${p.trailerPlate.trim()}`, p);
+  }
+  const pairingByDriver = new Map<string, { head: string; trailer: string; since: number }>();
+  for (const p of currentByVehicle.values()) {
+    if (!p.driverCode) continue;
+    const key = p.driverCode.toUpperCase();
+    const prev = pairingByDriver.get(key);
+    // คนเดียวเป็นคนขับปัจจุบันของหลายคัน (เช่น เพิ่งย้ายคัน) — ใช้คันที่จับคู่ล่าสุด
+    if (!prev || p.effectiveDate.getTime() >= prev.since) {
+      pairingByDriver.set(key, {
+        head: p.headPlate.trim(),
+        trailer: p.trailerPlate.trim(),
+        since: p.effectiveDate.getTime(),
+      });
+    }
   }
   const pairDrivers: string[] = [];
   const pairHeads: string[] = [];
