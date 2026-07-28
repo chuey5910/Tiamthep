@@ -13,6 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup.ts",
+    "sheet:import": "tsx scripts/import-line-jobs.ts",
     "reset:users": "tsx scripts/reset-users.ts",
     "setup": "prisma generate && prisma migrate deploy && npm run db:seed",
     "verify": "tsx scripts/verify-consistency.ts"

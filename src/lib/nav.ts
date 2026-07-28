@@ -16,6 +16,7 @@ export const NAV: NavGroup[] = [
     icon: "✎",
     items: [
       { href: "/entry/jobs", label: "บันทึกงานขนส่ง" },
+      { href: "/entry/line-jobs", label: "งานจากไลน์ (ชีตสั่งงาน)" },
       { href: "/entry/advances", label: "เงินเดินทาง / ค่าทางด่วน" },
       { href: "/entry/expenses", label: "ค่าใช้จ่าย" },
       { href: "/entry/fuel", label: "การเติมน้ำมัน" },

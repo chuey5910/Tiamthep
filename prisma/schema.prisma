@@ -257,6 +257,9 @@ model Job {
 
   note String?
 
+  /// รหัสงานจากชีตสั่งงานไลน์ (เช่น TT260728-01) — unique กันดึงงานเดิมเข้าซ้ำ
+  sheetRef String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
