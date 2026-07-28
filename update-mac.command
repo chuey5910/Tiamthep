@@ -55,7 +55,13 @@ if [ -f "$PLIST" ]; then
   sleep 1
   launchctl load "$PLIST"
 else
-  echo "▶ ไม่พบตัวเปิดอัตโนมัติ — เปิดระบบด้วย start-mac.command เองหลังจบ"
+  # ไม่มีตัวเปิดอัตโนมัติ — ปิดตัวเก่าที่ยึดพอร์ต 3000 แล้วเปิดใหม่เอง
+  # (สำคัญ: ถ้าปล่อยตัวเก่ารันต่อหลังอัปเดตไฟล์ จะเจอบางหน้าขึ้น 404)
+  echo "▶ รีสตาร์ทระบบ..."
+  PIDS=$(lsof -ti tcp:3000 2>/dev/null || true)
+  [ -n "$PIDS" ] && kill $PIDS 2>/dev/null || true
+  sleep 2
+  nohup npm start >> server.log 2>&1 &
 fi
 
 WEB_UP=no
