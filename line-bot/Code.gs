@@ -7,7 +7,8 @@
  *
  * หน้าที่ของสคริปต์นี้
  *  1. สร้างโครงชีตสั่งงาน พร้อม dropdown กันกรอกผิด        → setupSheet()
- *  2. แจ้งงานให้คนขับทาง LINE รายบุคคล ทุกวัน 06:00 น.     → sendMorningJobs()
+ *  2. แจ้งงานให้คนขับทาง LINE รายบุคคล ทุกวัน 17:00 น.
+ *     และรอบเก็บตก 20:00 น. (ไม่ส่งซ้ำคนที่แจ้งไปแล้ว)      → sendMorningJobs()
  *  3. รับรูปตั๋วจากคนขับ → OCR อ่านข้อความ → กรอกลงชีต     → doPost()
  *
  * หลักความปลอดภัยของข้อมูล (สำคัญ — อย่าแก้ให้ข้ามขั้น)
@@ -104,9 +105,9 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("🚚 ไลน์บอท")
     .addItem("① สร้างโครงชีต (ครั้งแรกครั้งเดียว)", "setupSheet")
-    .addItem("② ติดตั้งตัวตั้งเวลา 06:00", "installTriggers")
+    .addItem("② ติดตั้งตัวตั้งเวลาแจ้งงาน 17:00 / 20:00", "installTriggers")
     .addSeparator()
-    .addItem("ส่งแจ้งงานของวันนี้เดี๋ยวนี้", "sendMorningJobs")
+    .addItem("ส่งแจ้งงานที่ค้างเดี๋ยวนี้ (วันนี้+พรุ่งนี้)", "sendMorningJobs")
     .addItem("ทดสอบส่งข้อความหาผู้ดูแล", "testNotifyAdmin")
     .addToUi();
 }
@@ -144,17 +145,22 @@ function setupSheet() {
 
   jobs.setFrozenRows(1);
   SpreadsheetApp.getUi().alert(
-    "สร้างโครงชีตเรียบร้อย\n\nขั้นต่อไป: กดเมนู «② ติดตั้งตัวตั้งเวลา 06:00»\n" +
+    "สร้างโครงชีตเรียบร้อย\n\nขั้นต่อไป: กดเมนู «② ติดตั้งตัวตั้งเวลาแจ้งงาน 17:00 / 20:00»\n" +
     "แล้วไปที่เว็บ TMS หน้า «งานจากไลน์» กดปุ่มดึงข้อมูล 1 ครั้ง เพื่อส่งรายชื่อรถ/ลูกค้า/คนขับมาเติม dropdown"
   );
 }
 
+// เวลาส่งแจ้งงาน — รอบหลักและรอบเก็บตก (นาฬิกา 24 ชม. เวลาไทย)
+// รอบเก็บตกส่งเฉพาะแถวที่ยังเป็น «สั่งงาน» จึงไม่มีทางส่งซ้ำคนที่ได้รับรอบแรกไปแล้ว
+var SEND_TIMES = ["17:00", "20:00"];
+var ARM_HOUR = 15; // ชั่วโมงที่ตัวตั้งนัดทำงาน — ต้องมาก่อนรอบแรกอย่างน้อย 1 ชั่วโมง
+
 /**
  * ติดตั้งตัวตั้งเวลา — ใช้ 2 ชั้นเพื่อความเสถียร
- *  ชั้นที่ 1: ทริกเกอร์รายวันช่วง 04:00-05:00 ทำหน้าที่ "ตั้งนาฬิกาปลุก" เวลา 06:00 ตรงของวันนั้น
+ *  ชั้นที่ 1: ทริกเกอร์รายวันช่วง 15:00-16:00 ทำหน้าที่ "ตั้งนาฬิกาปลุก" เวลา 17:00 และ 20:00 ตรงของวันนั้น
  *            (ทริกเกอร์รายวันของ Google เองบอกได้แค่ช่วงชั่วโมง จึงต้องตั้งนัดแบบเจาะเวลาอีกที)
- *  ชั้นที่ 2: ทริกเกอร์รายวันช่วง 06:00-07:00 เรียกส่งซ้ำ — ถ้าชั้นแรกส่งไปแล้วจะไม่มีอะไรให้ส่ง
- *            (การส่งทำเครื่องหมาย «แจ้งแล้ว» รายแถว จึงเรียกซ้ำกี่ครั้งก็ไม่ส่งซ้ำ)
+ *  ชั้นที่ 2: ทริกเกอร์รายวันช่วง 17:00-18:00 และ 20:00-21:00 เรียกส่งซ้ำ — ถ้าชั้นแรกส่งไปแล้วจะไม่มีอะไรให้ส่ง
+ *            (การส่งทำเครื่องหมาย «แจ้งแล้ว» รายแถว จึงเรียกซ้ำกี่ครั้งก็ไม่ส่งซ้ำคนเดิม)
  */
 function installTriggers() {
   // ลบของเก่าก่อน กันติดตั้งซ้ำซ้อน
@@ -163,21 +169,33 @@ function installTriggers() {
     if (fn === "armMorningSend" || fn === "sendMorningJobs") ScriptApp.deleteTrigger(t);
   });
 
-  ScriptApp.newTrigger("armMorningSend").timeBased().atHour(4).everyDays(1).inTimezone(TZ).create();
-  ScriptApp.newTrigger("sendMorningJobs").timeBased().atHour(6).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger("armMorningSend").timeBased().atHour(ARM_HOUR).everyDays(1).inTimezone(TZ).create();
+  SEND_TIMES.forEach(function (t) {
+    var hour = Number(t.split(":")[0]);
+    ScriptApp.newTrigger("sendMorningJobs").timeBased().atHour(hour).everyDays(1).inTimezone(TZ).create();
+  });
 
-  SpreadsheetApp.getUi().alert("ติดตั้งตัวตั้งเวลาเรียบร้อย — ระบบจะแจ้งงานคนขับทุกวันเวลา 06:00 น.");
+  SpreadsheetApp.getUi().alert(
+    "ติดตั้งตัวตั้งเวลาเรียบร้อย — ระบบจะแจ้งงานคนขับทุกวัน\n" +
+    "รอบหลัก 17:00 น. และรอบเก็บตก 20:00 น. (ไม่ส่งซ้ำคนที่แจ้งแล้ว)"
+  );
 }
 
-/** ตั้งนัดยิง sendMorningJobs เวลา 06:00 ตรงของวันนี้ (ทำงานโดยทริกเกอร์ช่วงตี 4) */
+/** ตั้งนัดยิง sendMorningJobs ตรงเวลาของทุกรอบในวันนี้ (ทำงานโดยทริกเกอร์ช่วง 15:00) */
 function armMorningSend() {
-  cleanupOneShotTriggers_(); // ลบนัดของเมื่อวานที่ยิงไปแล้ว กันทริกเกอร์สะสมจนชนโควตา
+  cleanupOneShotTriggers_(); // ลบนัดเก่าที่ยิงไปแล้ว กันทริกเกอร์สะสมจนชนโควตา
   var now = new Date();
-  var sixAm = new Date(Utilities.formatDate(now, TZ, "yyyy/MM/dd") + " 06:00:00 GMT+07:00");
-  if (sixAm.getTime() <= now.getTime()) return; // เลย 6 โมงแล้ว — ปล่อยให้ทริกเกอร์ชั้นที่ 2 จัดการ
-  var trigger = ScriptApp.newTrigger("sendMorningJobs").timeBased().at(sixAm).create();
-  // จำรหัสทริกเกอร์นัดนี้ไว้ เพื่อลบทิ้งหลังยิงเสร็จ (แยกจากทริกเกอร์รายวันได้ด้วยรหัสนี้)
-  PropertiesService.getScriptProperties().setProperty("ONESHOT_TRIGGER_ID", trigger.getUniqueId());
+  var entries = [];
+  SEND_TIMES.forEach(function (t) {
+    var at = new Date(Utilities.formatDate(now, TZ, "yyyy/MM/dd") + " " + t + ":00 GMT+07:00");
+    if (at.getTime() <= now.getTime()) return; // เลยเวลารอบนี้แล้ว — ปล่อยให้ทริกเกอร์ชั้นที่ 2 จัดการ
+    var trigger = ScriptApp.newTrigger("sendMorningJobs").timeBased().at(at).create();
+    entries.push({ id: trigger.getUniqueId(), at: at.getTime() });
+  });
+  // จำรหัส+เวลาของนัดไว้ เพื่อลบทิ้งหลังยิงเสร็จ (แยกจากทริกเกอร์รายวันได้ด้วยรหัส)
+  if (entries.length) {
+    PropertiesService.getScriptProperties().setProperty("ONESHOT_TRIGGERS", JSON.stringify(entries));
+  }
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -185,8 +203,11 @@ function armMorningSend() {
 // ═════════════════════════════════════════════════════════════
 
 /**
- * ส่งงานของ "วันนี้" ให้คนขับแต่ละคนทาง LINE
+ * แจ้งงานล่วงหน้า: ส่งงานของ "วันพรุ่งนี้" ให้คนขับแต่ละคนทาง LINE เพื่อเตรียมตัว
+ * (และพ่วงงานของ "วันนี้" ที่ยังไม่เคยถูกแจ้ง เผื่อมีสั่งงานด่วนเพิ่มระหว่างวัน)
+ *
  * เรียกซ้ำได้เสมอ: ส่งเฉพาะแถวสถานะ «สั่งงาน» แล้วเปลี่ยนเป็น «แจ้งแล้ว» ทันทีที่ส่งสำเร็จ
+ * รอบเก็บตก 20:00 จึงส่งเฉพาะแถวที่รอบ 17:00 ยังไม่ได้ส่ง — ไม่ซ้ำคนเดิมแน่นอน
  * แถวที่ส่งไม่สำเร็จ (เช่น คนขับยังไม่ลงทะเบียนไลน์) จะคงสถานะเดิมและแจ้งผู้ดูแล
  */
 function sendMorningJobs() {
@@ -201,14 +222,16 @@ function sendMorningJobs() {
     if (!jobs || jobs.getLastRow() < 2) return;
 
     var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+    var tomorrow = Utilities.formatDate(new Date(Date.now() + 86400000), TZ, "yyyy-MM-dd");
     var data = jobs.getRange(2, 1, jobs.getLastRow() - 1, JOBS_HEADER.length).getValues();
     var driverMap = driverLineIds_(); // รหัสคนขับ → {userId, name}
 
-    // จัดกลุ่มงานวันนี้สถานะ «สั่งงาน» แยกรายคนขับ
+    // จัดกลุ่มงานพรุ่งนี้ (และงานวันนี้ที่ตกค้าง) สถานะ «สั่งงาน» แยกรายคนขับ
     var byDriver = {}; // code → [{row, values}]
     data.forEach(function (v, i) {
       if (String(v[JC.STATUS - 1]) !== ST.NEW) return;
-      if (dateStr_(v[JC.DATE - 1]) !== today) return;
+      var ds = dateStr_(v[JC.DATE - 1]);
+      if (ds !== tomorrow && ds !== today) return;
       var code = String(v[JC.DRIVER - 1]).trim();
       if (!code) return;
       (byDriver[code] = byDriver[code] || []).push({ row: i + 2, v: v });
@@ -223,7 +246,7 @@ function sendMorningJobs() {
         return;
       }
       try {
-        linePush_(d.userId, morningMessage_(d.name || code, code, items));
+        linePush_(d.userId, jobsMessage_("🚚 แจ้งงานล่วงหน้า", d.name || code, code, items));
         var now = Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm");
         items.forEach(function (it) {
           jobs.getRange(it.row, JC.STATUS).setValue(ST.NOTIFIED);
@@ -236,25 +259,25 @@ function sendMorningJobs() {
     });
 
     if (problems.length) {
-      notifyAdmin_("⚠ แจ้งงานเช้านี้มีปัญหา:\n" + problems.join("\n") + "\n\nแก้แล้วกดเมนู «ส่งแจ้งงานของวันนี้เดี๋ยวนี้» เพื่อส่งซ้ำได้");
+      notifyAdmin_("⚠ แจ้งงานรอบนี้มีปัญหา:\n" + problems.join("\n") + "\n\nแก้แล้วกดเมนู «ส่งแจ้งงานที่ค้างเดี๋ยวนี้» เพื่อส่งซ้ำได้ (ไม่ส่งซ้ำคนที่ได้รับแล้ว)");
     }
-    log_("INFO", "แจ้งงานเช้า: คนขับ " + Object.keys(byDriver).length + " คน ปัญหา " + problems.length + " รายการ");
+    log_("INFO", "แจ้งงานล่วงหน้า: คนขับ " + Object.keys(byDriver).length + " คน ปัญหา " + problems.length + " รายการ");
   } finally {
     lock.releaseLock();
   }
 }
 
-/** ข้อความแจ้งงานตอนเช้าของคนขับหนึ่งคน */
-function morningMessage_(name, code, items) {
-  var d = new Date();
+/** ข้อความแจ้งงานของคนขับหนึ่งคน — ระบุวันที่กำกับทุกงาน กันสับสนวันนี้/พรุ่งนี้ */
+function jobsMessage_(title, name, code, items) {
   var lines = [
-    "🚚 งานวันนี้ " + thaiDate_(d),
+    title,
     "คุณ" + name + " (" + code + ")",
     "",
   ];
   items.forEach(function (it, idx) {
     var v = it.v;
     lines.push("งานที่ " + (idx + 1) + "  [" + v[JC.ID - 1] + "]");
+    lines.push("• วันที่งาน: " + thaiDateOfYmd_(dateStr_(v[JC.DATE - 1])));
     lines.push("• รถ: " + v[JC.HEAD - 1] + (v[JC.TRAILER - 1] ? " / หาง " + v[JC.TRAILER - 1] : ""));
     lines.push("• ลูกค้า: " + v[JC.CUSTOMER - 1]);
     lines.push("• เส้นทาง: " + v[JC.ORIGIN - 1] + " → " + v[JC.DEST - 1]);
@@ -332,12 +355,17 @@ function handleText_(ev, userId, text) {
     return;
   }
   if (text === "งานวันนี้") {
-    resendToday_(ev.replyToken, userId);
+    resendJobs_(ev.replyToken, userId, 0);
+    return;
+  }
+  if (text === "งานพรุ่งนี้") {
+    resendJobs_(ev.replyToken, userId, 1);
     return;
   }
   lineReply_(ev.replyToken,
     "คำสั่งที่ใช้ได้\n" +
-    "• พิมพ์ «งานวันนี้» — ดูงานของท่านวันนี้อีกครั้ง\n" +
+    "• พิมพ์ «งานวันนี้» — ดูงานของท่านวันนี้\n" +
+    "• พิมพ์ «งานพรุ่งนี้» — ดูงานล่วงหน้าของพรุ่งนี้\n" +
     "• ส่งรูปตั๋ว — ระบบจะบันทึกให้อัตโนมัติ\n" +
     "• «ลงทะเบียน <รหัสพนักงาน>» — ผูกไลน์กับรหัสของท่าน");
 }
@@ -373,7 +401,7 @@ function registerDriver_(replyToken, userId, code) {
       sh.getRange(j + 2, DC.LINE_ID).setValue(userId);
       sh.getRange(j + 2, DC.REGISTERED_AT).setValue(Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm"));
       var name = String(rows[j][DC.NAME - 1]).trim();
-      lineReply_(replyToken, "✅ ลงทะเบียนสำเร็จ\nคุณ" + (name || code) + " (" + code + ")\n\nระบบจะแจ้งงานให้ทุกวันเวลา 06:00 น.");
+      lineReply_(replyToken, "✅ ลงทะเบียนสำเร็จ\nคุณ" + (name || code) + " (" + code + ")\n\nระบบจะแจ้งงานล่วงหน้าให้ทุกเย็น เวลา 17:00 น. (รอบเก็บตก 20:00 น.)");
       log_("INFO", "ลงทะเบียนคนขับ " + code);
       return;
     }
@@ -383,20 +411,22 @@ function registerDriver_(replyToken, userId, code) {
   }
 }
 
-/** คนขับพิมพ์ «งานวันนี้» — ส่งรายการงานวันนี้ของเขาซ้ำอีกรอบ */
-function resendToday_(replyToken, userId) {
+/** คนขับพิมพ์ «งานวันนี้» หรือ «งานพรุ่งนี้» — ส่งรายการงานของวันนั้นซ้ำอีกรอบ */
+function resendJobs_(replyToken, userId, dayOffset) {
   var code = driverCodeOf_(userId);
   if (!code) {
     lineReply_(replyToken, "ยังไม่ได้ลงทะเบียน — พิมพ์ «ลงทะเบียน <รหัสพนักงาน>» ก่อนครับ");
     return;
   }
-  var items = todayJobsOf_(code, null);
+  var label = dayOffset === 0 ? "วันนี้" : "พรุ่งนี้";
+  var ymd = Utilities.formatDate(new Date(Date.now() + dayOffset * 86400000), TZ, "yyyy-MM-dd");
+  var items = jobsOnDateOf_(code, ymd, null);
   if (!items.length) {
-    lineReply_(replyToken, "วันนี้ยังไม่มีงานของท่านในระบบครับ");
+    lineReply_(replyToken, label + "ยังไม่มีงานของท่านในระบบครับ");
     return;
   }
   var d = driverLineIds_()[code];
-  lineReply_(replyToken, morningMessage_((d && d.name) || code, code, items));
+  lineReply_(replyToken, jobsMessage_("🚚 งาน" + label, (d && d.name) || code, code, items));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -431,7 +461,8 @@ function handleImage_(ev, userId) {
   lock.waitLock(30000);
   try {
     // จับคู่กับงานของคนขับคนนี้ "วันนี้" ที่ยังไม่มีตั๋ว (เรียงตามลำดับแถวในชีต)
-    var target = todayJobsOf_(code, ST.NOTIFIED)[0] || todayJobsOf_(code, ST.NEW)[0] || null;
+    var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+    var target = jobsOnDateOf_(code, today, ST.NOTIFIED)[0] || jobsOnDateOf_(code, today, ST.NEW)[0] || null;
     var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
     var jobId = "";
 
@@ -549,18 +580,17 @@ function driverCodeOf_(userId) {
 }
 
 /**
- * งาน "วันนี้" ของคนขับคนหนึ่ง คืน [{row, v}]
+ * งานของคนขับคนหนึ่ง ณ วันที่กำหนด (ymd = "yyyy-MM-dd") คืน [{row, v}]
  * statusFilter = null คือเอาทุกสถานะที่ยังไม่จบ (ไม่รวม ยกเลิก/นำเข้าแล้ว)
  */
-function todayJobsOf_(code, statusFilter) {
+function jobsOnDateOf_(code, ymd, statusFilter) {
   var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
   if (!jobs || jobs.getLastRow() < 2) return [];
-  var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
   var data = jobs.getRange(2, 1, jobs.getLastRow() - 1, JOBS_HEADER.length).getValues();
   var out = [];
   data.forEach(function (v, i) {
     if (String(v[JC.DRIVER - 1]).trim().toUpperCase() !== code) return;
-    if (dateStr_(v[JC.DATE - 1]) !== today) return;
+    if (dateStr_(v[JC.DATE - 1]) !== ymd) return;
     var st = String(v[JC.STATUS - 1]);
     if (statusFilter ? st !== statusFilter : (st === ST.CANCELLED || st === ST.IMPORTED)) return;
     out.push({ row: i + 2, v: v });
@@ -706,22 +736,44 @@ function pad2_(n) {
 }
 
 var TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-function thaiDate_(d) {
-  var day = Number(Utilities.formatDate(d, TZ, "d"));
-  var mon = Number(Utilities.formatDate(d, TZ, "M")) - 1;
-  var year = Number(Utilities.formatDate(d, TZ, "yyyy")) + 543;
-  return day + " " + TH_MONTHS[mon] + " " + year;
+
+/** "2026-07-29" → "29 ก.ค. 2569" */
+function thaiDateOfYmd_(ymd) {
+  var m = String(ymd).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(ymd);
+  return Number(m[3]) + " " + TH_MONTHS[Number(m[2]) - 1] + " " + (Number(m[1]) + 543);
 }
 
-/** ลบทริกเกอร์แบบเจาะเวลา (one-shot) ตัวล่าสุดที่ armMorningSend สร้างไว้ */
+/**
+ * ลบทริกเกอร์แบบเจาะเวลา (one-shot) ที่ armMorningSend สร้างไว้ เฉพาะนัดที่ "ผ่านเวลาไปแล้ว"
+ * นัดที่ยังมาไม่ถึง (เช่น ตอน 17:00 นัดของ 20:00) จะถูกเก็บไว้ตามเดิม
+ */
 function cleanupOneShotTriggers_() {
   var props = PropertiesService.getScriptProperties();
-  var id = props.getProperty("ONESHOT_TRIGGER_ID");
-  if (!id) return;
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getUniqueId() === id) ScriptApp.deleteTrigger(t);
+  var raw = props.getProperty("ONESHOT_TRIGGERS") || "";
+  props.deleteProperty("ONESHOT_TRIGGER_ID"); // ค่าเก่าจากเวอร์ชันก่อน — เลิกใช้แล้ว
+  if (!raw) return;
+
+  var entries; // [{id: "...", at: epochMs}]
+  try {
+    entries = JSON.parse(raw);
+  } catch (e) {
+    entries = [];
+  }
+  var now = Date.now();
+  var passedIds = {};
+  var remain = [];
+  entries.forEach(function (en) {
+    if (en.at <= now + 60000) passedIds[en.id] = true;
+    else remain.push(en);
   });
-  props.deleteProperty("ONESHOT_TRIGGER_ID");
+
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (passedIds[t.getUniqueId()]) ScriptApp.deleteTrigger(t);
+  });
+
+  if (remain.length) props.setProperty("ONESHOT_TRIGGERS", JSON.stringify(remain));
+  else props.deleteProperty("ONESHOT_TRIGGERS");
 }
 
 function ensureSheet_(ss, name, header) {
