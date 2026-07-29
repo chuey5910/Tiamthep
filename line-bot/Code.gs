@@ -990,7 +990,8 @@ function textMessage_(text, quickItems) {
       body: {
         type: "box",
         layout: "vertical",
-        contents: [{ type: "text", text: text.slice(0, 4900), wrap: true, size: "md" }],
+        // ตัวใหญ่ + หนา อ่านง่ายสำหรับคนขับ · lineSpacing เว้นบรรทัดให้โปร่งตา
+        contents: [{ type: "text", text: text.slice(0, 4900), wrap: true, size: "lg", weight: "bold", lineSpacing: "6px" }],
       },
       footer: { type: "box", layout: "vertical", spacing: "sm", contents: buttons },
     },
