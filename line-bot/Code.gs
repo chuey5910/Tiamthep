@@ -30,6 +30,7 @@ var SHEET = {
   JOBS: "งาน",
   DRIVERS: "คนขับ",
   TICKETS: "ตั๋ว",
+  ALCOHOL: "แอลกอฮอล์",
   MASTER: "ฐานข้อมูล",
   LOG: "LOG",
 };
@@ -54,12 +55,14 @@ var JC = {
   W_DEST: 16,     // น้ำหนักปลายทาง (ตัน)
   TICKET_IMG: 17, // ลิงก์รูปตั๋วใน Drive
   IMPORT_RESULT: 18, // ผลนำเข้าเว็บ — ฝั่งเว็บเขียนกลับ
+  ACK_AT: 19,     // เวลาคนขับกดปุ่มรับทราบงาน
+  ALC_IMG: 20,    // ลิงก์รูปเป่าแอลกอฮอล์ก่อนเริ่มงาน
 };
 var JOBS_HEADER = [
   "รหัสงาน", "วันที่", "รหัสคนขับ", "ชื่อคนขับ", "ทะเบียนรถ", "ทะเบียนหาง",
   "รหัสลูกค้า", "ต้นทาง", "ปลายทาง", "ประเภทสินค้า", "คำสั่ง/หมายเหตุ",
   "สถานะ", "เวลาแจ้งไลน์", "เลขที่ตั๋ว", "นน.ต้นทาง (ตัน)", "นน.ปลายทาง (ตัน)",
-  "รูปตั๋ว", "ผลนำเข้าเว็บ",
+  "รูปตั๋ว", "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์",
 ];
 
 // คอลัมน์ของแท็บ «คนขับ»
@@ -120,6 +123,7 @@ function setupSheet() {
   var jobs = ensureSheet_(ss, SHEET.JOBS, JOBS_HEADER);
   ensureSheet_(ss, SHEET.DRIVERS, DRIVERS_HEADER);
   ensureSheet_(ss, SHEET.TICKETS, TICKETS_HEADER);
+  ensureSheet_(ss, SHEET.ALCOHOL, ["เวลา", "รหัสคนขับ", "ชื่อคนขับ", "รูปเป่าแอลกอฮอล์"]);
   ensureSheet_(ss, SHEET.LOG, ["เวลา", "ระดับ", "ข้อความ"]);
 
   // แท็บฐานข้อมูล — เว็บ TMS ส่งข้อมูลจริงมาเติมให้ทุกครั้งที่กด «ดึงงานเข้าเว็บ»
@@ -251,7 +255,8 @@ function sendMorningJobs() {
         return;
       }
       try {
-        linePush_(d.userId, jobsMessage_("🚚 แจ้งงานล่วงหน้า", d.name || code, code, items));
+        var jobIds = items.map(function (it) { return String(it.v[JC.ID - 1]); });
+        linePush_(d.userId, jobsMessage_("🚚 แจ้งงานล่วงหน้า", d.name || code, code, items), jobQuickReply_(jobIds));
         var now = Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm");
         items.forEach(function (it) {
           jobs.getRange(it.row, JC.STATUS).setValue(ST.NOTIFIED);
@@ -290,6 +295,8 @@ function jobsMessage_(title, name, code, items) {
     if (v[JC.NOTE - 1]) lines.push("• หมายเหตุ: " + v[JC.NOTE - 1]);
     lines.push("");
   });
+  lines.push("👇 กดปุ่ม «✅ รับทราบงาน» ด้านล่างเพื่อตอบรับงาน");
+  lines.push("🍺 ก่อนเริ่มงาน กดปุ่ม «ส่งรูปเป่าแอลกอฮอล์» แล้วส่งรูปผลเป่า");
   lines.push("📸 เมื่อรับงานได้ตั๋วแล้ว ถ่ายรูปตั๋วส่งกลับมาในแชทนี้ได้เลย");
   return lines.join("\n");
 }
@@ -342,12 +349,70 @@ function handleEvent_(ev) {
       "ขั้นแรก พิมพ์ลงทะเบียนด้วยรหัสพนักงานของท่าน เช่น\n\nลงทะเบียน D001");
     return;
   }
+  if (ev.type === "postback") {
+    handlePostback_(ev, userId, String(ev.postback && ev.postback.data || ""));
+    return;
+  }
   if (ev.type !== "message") return;
 
   if (ev.message.type === "text") {
     handleText_(ev, userId, String(ev.message.text || "").trim());
   } else if (ev.message.type === "image") {
     handleImage_(ev, userId);
+  }
+}
+
+/** คนขับกดปุ่มใต้ข้อความ: รับทราบงาน หรือ ขอส่งรูปเป่าแอลกอฮอล์ */
+function handlePostback_(ev, userId, data) {
+  var code = driverCodeOf_(userId);
+  if (!code) {
+    lineReply_(ev.replyToken, "ยังไม่ได้ลงทะเบียน — พิมพ์ «ลงทะเบียน <รหัสพนักงาน>» ก่อนครับ");
+    return;
+  }
+
+  // «รับทราบงาน» — ประทับเวลาลงทุกแถวงานที่อยู่ในข้อความนั้น
+  if (data.indexOf("ack|") === 0) {
+    var ids = data.slice(4).split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+    var count = ackJobs_(code, ids);
+    if (count > 0) {
+      lineReply_(ev.replyToken,
+        "✅ รับทราบงานเรียบร้อย (" + count + " งาน) ขอบคุณครับ\n\n" +
+        "🍺 ก่อนเริ่มงาน อย่าลืมกดปุ่มด้านล่างแล้วส่งรูปผลเป่าแอลกอฮอล์",
+        jobQuickReply_(null));
+    } else {
+      lineReply_(ev.replyToken, "งานชุดนี้ถูกบันทึกรับทราบไว้แล้วครับ ✅");
+    }
+    return;
+  }
+
+  // «ขอส่งรูปเป่าแอลกอฮอล์» — เปิดโหมดรอรูป 15 นาที รูปถัดไปจะบันทึกเป็นรูปเป่า ไม่ใช่ตั๋ว
+  if (data === "alc") {
+    CacheService.getScriptCache().put("mode_" + userId, "alcohol", 900);
+    lineReply_(ev.replyToken, "🍺 ส่งรูปผลเป่าแอลกอฮอล์เข้ามาได้เลยครับ (ภายใน 15 นาที)\nรูปที่ส่งหลังจากนี้ 1 รูปจะถูกบันทึกเป็นผลเป่าแอลกอฮอล์ของวันนี้");
+    return;
+  }
+}
+
+/** ประทับเวลารับทราบงานลงแถวตามรหัสงาน — เฉพาะแถวของคนขับคนนั้นและยังไม่เคยรับทราบ */
+function ackJobs_(code, ids) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
+    if (!jobs || jobs.getLastRow() < 2) return 0;
+    var data = jobs.getRange(2, 1, jobs.getLastRow() - 1, JOBS_HEADER.length).getValues();
+    var now = Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm");
+    var count = 0;
+    data.forEach(function (v, i) {
+      if (ids.indexOf(String(v[JC.ID - 1]).trim()) < 0) return;
+      if (String(v[JC.DRIVER - 1]).trim().toUpperCase() !== code) return;
+      if (String(v[JC.ACK_AT - 1]).trim() !== "") return; // รับทราบไปแล้ว — กดซ้ำไม่ทับเวลาเดิม
+      jobs.getRange(i + 2, JC.ACK_AT).setValue(now);
+      count++;
+    });
+    return count;
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -367,10 +432,15 @@ function handleText_(ev, userId, text) {
     resendJobs_(ev.replyToken, userId, 1);
     return;
   }
+  if (text === "เป่า" || text === "แอลกอฮอล์" || text === "เป่าแอลกอฮอล์") {
+    handlePostback_(ev, userId, "alc"); // พิมพ์คำสั่งได้ผลเดียวกับกดปุ่ม
+    return;
+  }
   lineReply_(ev.replyToken,
     "คำสั่งที่ใช้ได้\n" +
     "• พิมพ์ «งานวันนี้» — ดูงานของท่านวันนี้\n" +
     "• พิมพ์ «งานพรุ่งนี้» — ดูงานล่วงหน้าของพรุ่งนี้\n" +
+    "• พิมพ์ «เป่า» แล้วส่งรูป — บันทึกผลเป่าแอลกอฮอล์\n" +
     "• ส่งรูปตั๋ว — ระบบจะบันทึกให้อัตโนมัติ\n" +
     "• «ลงทะเบียน <รหัสพนักงาน>» — ผูกไลน์กับรหัสของท่าน");
 }
@@ -431,7 +501,8 @@ function resendJobs_(replyToken, userId, dayOffset) {
     return;
   }
   var d = driverLineIds_()[code];
-  lineReply_(replyToken, jobsMessage_("🚚 งาน" + label, (d && d.name) || code, code, items));
+  var jobIds = items.map(function (it) { return String(it.v[JC.ID - 1]); });
+  lineReply_(replyToken, jobsMessage_("🚚 งาน" + label, (d && d.name) || code, code, items), jobQuickReply_(jobIds));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -442,6 +513,14 @@ function handleImage_(ev, userId) {
   var code = driverCodeOf_(userId);
   if (!code) {
     lineReply_(ev.replyToken, "ยังไม่ได้ลงทะเบียน — พิมพ์ «ลงทะเบียน <รหัสพนักงาน>» ก่อน แล้วส่งรูปใหม่อีกครั้งครับ");
+    return;
+  }
+
+  // คนขับกดปุ่ม «ส่งรูปเป่าแอลกอฮอล์» ไว้ — รูปนี้คือผลเป่า ไม่ใช่ตั๋ว
+  var cache = CacheService.getScriptCache();
+  if (cache.get("mode_" + userId) === "alcohol") {
+    cache.remove("mode_" + userId); // ใช้ครั้งเดียว — รูปถัดไปกลับเป็นตั๋วตามปกติ
+    handleAlcoholImage_(ev, code);
     return;
   }
 
@@ -503,6 +582,46 @@ function handleImage_(ev, userId) {
       lineReply_(ev.replyToken, "รับรูปไว้แล้ว แต่ไม่พบงานของท่านในวันนี้ ออฟฟิศจะตรวจสอบให้ครับ");
       notifyAdmin_("⚠ คนขับ " + code + " ส่งรูปตั๋วมา แต่ไม่พบงานของเขาวันนี้ — ดูที่แท็บ «ตั๋ว»");
     }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * บันทึกรูปเป่าแอลกอฮอล์: เก็บเข้า Drive (ชื่อไฟล์ขึ้นต้น ALC) + ลงแท็บ «แอลกอฮอล์»
+ * + เติมลิงก์ลงคอลัมน์ รูปเป่าแอลกอฮอล์ ของทุกงาน "วันนี้" ของคนขับคนนั้น
+ * (เป่าครั้งเดียวต่อวัน ครอบคลุมทุกงานในวันนั้น)
+ */
+function handleAlcoholImage_(ev, code) {
+  var blob = lineGetContent_(ev.message.id);
+  var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
+  blob.setName("ALC_" + stamp + "_" + code + "_" + ev.message.id + ".jpg");
+  var folder = DriveApp.getFolderById(prop_("DRIVE_FOLDER_ID"));
+  var imgUrl = folder.createFile(blob).getUrl();
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var driverMap = driverLineIds_();
+    var name = (driverMap[code] && driverMap[code].name) || "";
+
+    // ลงบันทึกกลางไว้ตรวจย้อนหลังเสมอ
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.ALCOHOL).appendRow([
+      Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"), code, name, imgUrl,
+    ]);
+
+    // เติมลิงก์ลงทุกงานวันนี้ของคนขับ (เฉพาะช่องที่ยังว่าง)
+    var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+    var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
+    var items = jobsOnDateOf_(code, today, null);
+    items.forEach(function (it) {
+      fillIfEmpty_(jobs, it.row, JC.ALC_IMG, imgUrl);
+    });
+
+    lineReply_(ev.replyToken,
+      "🍺✅ บันทึกรูปเป่าแอลกอฮอล์เรียบร้อย\n" +
+      (items.length ? "ผูกกับงานวันนี้ " + items.length + " งานแล้ว " : "") +
+      "ขับขี่ปลอดภัยนะครับ 🙏");
   } finally {
     lock.releaseLock();
   }
@@ -619,27 +738,60 @@ function lineHeaders_() {
   return { Authorization: "Bearer " + token };
 }
 
-function linePush_(userId, text) {
+/** สร้างก้อนข้อความ (แนบปุ่ม quick reply ได้) */
+function textMessage_(text, quickItems) {
+  var msg = { type: "text", text: text.slice(0, 4900) };
+  if (quickItems && quickItems.length) msg.quickReply = { items: quickItems };
+  return msg;
+}
+
+function linePush_(userId, text, quickItems) {
   var res = UrlFetchApp.fetch("https://api.line.me/v2/bot/message/push", {
     method: "post",
     contentType: "application/json",
     headers: lineHeaders_(),
-    payload: JSON.stringify({ to: userId, messages: [{ type: "text", text: text.slice(0, 4900) }] }),
+    payload: JSON.stringify({ to: userId, messages: [textMessage_(text, quickItems)] }),
     muteHttpExceptions: true,
   });
   if (res.getResponseCode() >= 300) throw new Error("LINE push " + res.getResponseCode() + ": " + res.getContentText());
 }
 
-function lineReply_(replyToken, text) {
+function lineReply_(replyToken, text, quickItems) {
   var res = UrlFetchApp.fetch("https://api.line.me/v2/bot/message/reply", {
     method: "post",
     contentType: "application/json",
     headers: lineHeaders_(),
-    payload: JSON.stringify({ replyToken: replyToken, messages: [{ type: "text", text: text.slice(0, 4900) }] }),
+    payload: JSON.stringify({ replyToken: replyToken, messages: [textMessage_(text, quickItems)] }),
     muteHttpExceptions: true,
   });
   // replyToken หมดอายุ (ตอบช้าเกิน 1 นาที) — ไม่ throw เพราะงานหลักสำเร็จแล้ว
   if (res.getResponseCode() >= 300) log_("WARN", "LINE reply " + res.getResponseCode() + ": " + res.getContentText());
+}
+
+/** ปุ่มใต้ข้อความแจ้งงาน: รับทราบงาน + ส่งรูปเป่าแอลกอฮอล์ */
+function jobQuickReply_(jobIds) {
+  var items = [];
+  if (jobIds && jobIds.length) {
+    items.push({
+      type: "action",
+      action: {
+        type: "postback",
+        label: "✅ รับทราบงาน",
+        data: "ack|" + jobIds.join(",").slice(0, 290),
+        displayText: "รับทราบงาน",
+      },
+    });
+  }
+  items.push({
+    type: "action",
+    action: {
+      type: "postback",
+      label: "🍺 ส่งรูปเป่าแอลกอฮอล์",
+      data: "alc",
+      displayText: "ขอส่งรูปเป่าแอลกอฮอล์",
+    },
+  });
+  return items;
 }
 
 /** ดาวน์โหลดไฟล์แนบ (รูป) ของข้อความจาก LINE */
