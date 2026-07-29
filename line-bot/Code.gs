@@ -602,6 +602,9 @@ function handleImage_(ev, userId) {
 
     if (target) {
       jobId = String(target.v[JC.ID - 1]);
+      // ย้ายรูปเข้าโฟลเดอร์ตามใบที่จับคู่ได้ (ลิงก์เดิมใช้ได้ต่อ ไม่เปลี่ยน)
+      file.moveTo(imageFolder_(leg === "ต้นทาง" ? "รูปตั๋วต้นทาง" : "รูปตั๋วปลายทาง"));
+
       // เติมเฉพาะช่องที่ยังว่าง — ไม่ทับข้อมูลที่ออฟฟิศกรอกไว้แล้ว
       if (leg === "ต้นทาง") {
         fillIfEmpty_(jobs, target.row, JC.TICKET_NO_O, parsed.ticketNo);
@@ -712,7 +715,8 @@ function handleRedoImage_(ev, code, jobId, leg) {
   var blob = lineGetContent_(ev.message.id);
   var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
   blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
-  var imgUrl = imageFolder_("รูปตั๋ว").createFile(blob).getUrl();
+  // รู้อยู่แล้วว่าเป็นใบไหน — เก็บเข้าโฟลเดอร์ของใบนั้นได้เลย
+  var imgUrl = imageFolder_(leg === "ต้นทาง" ? "รูปตั๋วต้นทาง" : "รูปตั๋วปลายทาง").createFile(blob).getUrl();
 
   var ocrText = "";
   try {
