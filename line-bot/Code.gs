@@ -60,7 +60,7 @@ var JC = {
   IMPORT_RESULT: 20, // ผลนำเข้าเว็บ — ฝั่งเว็บเขียนกลับ
   ACK_AT: 21,      // เวลาคนขับกดปุ่มรับทราบงาน
   ALC_IMG: 22,     // ลิงก์รูปเป่าแอลกอฮอล์ก่อนเริ่มงาน
-  POD_IMG: 23,     // รูปสินค้าที่ส่งเสร็จ (ไว้ส่งงานให้ลูกค้า) — มีได้หลายรูป ต่อบรรทัดกัน
+  POD_IMG: 23,     // รูปสินค้าขึ้นรถ (ถ่ายหลังขึ้นของเสร็จ ไว้ส่งให้ลูกค้า) — มีได้หลายรูป ต่อบรรทัดกัน
 };
 var JOBS_HEADER = [
   "รหัสงาน", "วันที่", "รหัสคนขับ", "ชื่อคนขับ", "ทะเบียนรถ", "ทะเบียนหาง",
@@ -68,7 +68,7 @@ var JOBS_HEADER = [
   "สถานะ", "เวลาแจ้งไลน์",
   "เลขตั๋วต้นทาง", "นน.ต้นทาง (ตัน)", "รูปตั๋วต้นทาง",
   "เลขตั๋วปลายทาง", "นน.ปลายทาง (ตัน)", "รูปตั๋วปลายทาง",
-  "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์", "รูปงานเสร็จ (ส่งลูกค้า)",
+  "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์", "รูปสินค้าขึ้นรถ (ส่งลูกค้า)",
 ];
 
 // คอลัมน์ของแท็บ «คนขับ»
@@ -411,10 +411,10 @@ function handlePostback_(ev, userId, data) {
     return;
   }
 
-  // «ส่งรูปงานเสร็จ» — รูปถัดไปบันทึกเป็นรูปสินค้าที่ส่งเสร็จ ไว้ส่งงานให้ลูกค้า
+  // «ส่งรูปสินค้าขึ้นรถ» — รูปถัดไปบันทึกเป็นรูปสินค้าบนรถ ออฟฟิศใช้ส่งให้ลูกค้า
   if (data.indexOf("pod|") === 0 || data === "pod") {
     CacheService.getScriptCache().put("mode_" + userId, data === "pod" ? "pod|" : data, 900);
-    lineReply_(ev.replyToken, "📷 ส่งรูปสินค้า/งานที่ส่งเสร็จเข้ามาได้เลยครับ (ภายใน 15 นาที)\nส่งได้หลายรูป — ส่งเสร็จแต่ละรูปกดปุ่มเดิมเพื่อส่งรูปถัดไป");
+    lineReply_(ev.replyToken, "📷 ส่งรูปสินค้าที่ขึ้นรถเสร็จแล้วเข้ามาได้เลยครับ (ภายใน 15 นาที)\nส่งได้หลายรูป — ส่งเสร็จแต่ละรูปกดปุ่มเดิมเพื่อส่งรูปถัดไป");
     return;
   }
 }
@@ -631,7 +631,8 @@ function handleImage_(ev, userId) {
         if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
         if (parsed.netTons) summary.push("นน.ต้นทาง: " + parsed.netTons + " ตัน");
         summary.push("สถานะ: รับของแล้ว ✅");
-        summary.push("\nเมื่อลงของเสร็จ ถ่ายรูปตั๋วปลายทางส่งมาอีกครั้งนะครับ");
+        summary.push("\n📷 กดปุ่มด้านล่างเพื่อส่งรูปสินค้าบนรถ (ออฟฟิศส่งให้ลูกค้า)");
+        summary.push("เมื่อลงของเสร็จ ถ่ายรูปตั๋วปลายทางส่งมาอีกครั้งนะครับ");
       } else {
         summary.push("🏁 บันทึกตั๋วปลายทางแล้ว [" + jobId + "]");
         if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
@@ -642,8 +643,8 @@ function handleImage_(ev, userId) {
       if (!parsed.ticketNo && !parsed.netTons) {
         summary.push("(ระบบอ่านตัวเลขจากรูปไม่ได้ ออฟฟิศจะอ่านจากรูปแทน)");
       }
-      // ปุ่มใต้ข้อความ: ส่งใบนี้ใหม่ถ้ารูปไม่ชัด · หลังตั๋วปลายทางเพิ่มปุ่มส่งรูปงานเสร็จ
-      lineReply_(ev.replyToken, summary.join("\n"), ticketQuickReply_(jobId, leg, leg === "ปลายทาง"));
+      // ปุ่มใต้ข้อความ: ส่งใบนี้ใหม่ถ้ารูปไม่ชัด · หลังตั๋วต้นทาง (ขึ้นของเสร็จ) เพิ่มปุ่มส่งรูปสินค้าขึ้นรถ
+      lineReply_(ev.replyToken, summary.join("\n"), ticketQuickReply_(jobId, leg, leg === "ต้นทาง"));
     } else {
       lineReply_(ev.replyToken, "รับรูปไว้แล้ว แต่ไม่พบงานของท่านที่ยังรอตั๋วในวันนี้ ออฟฟิศจะตรวจสอบให้ครับ");
       notifyAdmin_("⚠ คนขับ " + code + " ส่งรูปตั๋วมา แต่ไม่พบงานที่ยังรอตั๋วของเขาวันนี้ — ดูที่แท็บ «ตั๋ว»");
@@ -742,31 +743,31 @@ function handleRedoImage_(ev, code, jobId, leg) {
     if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
     if (parsed.netTons) summary.push("นน." + leg + ": " + parsed.netTons + " ตัน");
     if (!parsed.ticketNo && !parsed.netTons) summary.push("(ยังอ่านตัวเลขไม่ได้ ออฟฟิศจะอ่านจากรูปแทน)");
-    lineReply_(ev.replyToken, summary.join("\n"), ticketQuickReply_(jobId, leg, leg === "ปลายทาง"));
+    lineReply_(ev.replyToken, summary.join("\n"), ticketQuickReply_(jobId, leg, leg === "ต้นทาง"));
   } finally {
     lock.releaseLock();
   }
 }
 
 /**
- * รูปงานเสร็จ (สินค้าที่ส่งเรียบร้อย) — เก็บเข้าโฟลเดอร์ «รูปส่งงาน» แล้วต่อท้ายในคอลัมน์
- * รูปงานเสร็จของแถวงาน ส่งได้หลายรูปต่อหนึ่งงาน ออฟฟิศใช้ส่งต่อให้ลูกค้าเพื่อปิดงาน
+ * รูปสินค้าขึ้นรถ (ถ่ายหลังขึ้นของเสร็จ ก่อนตั๋วปลายทาง) — เก็บเข้าโฟลเดอร์ «รูปสินค้าขึ้นรถ»
+ * แล้วต่อท้ายในคอลัมน์รูปสินค้าขึ้นรถของแถวงาน ส่งได้หลายรูป ออฟฟิศใช้ส่งต่อให้ลูกค้า
  */
 function handlePodImage_(ev, code, jobId) {
   var blob = lineGetContent_(ev.message.id);
   var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
   blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
-  var imgUrl = imageFolder_("รูปส่งงาน").createFile(blob).getUrl();
+  var imgUrl = imageFolder_("รูปสินค้าขึ้นรถ").createFile(blob).getUrl();
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    // หาแถวงาน: ใช้รหัสงานจากปุ่มถ้ามี ไม่มีก็ใช้งานวันนี้ที่ส่งของเสร็จแล้วแถวแรก
+    // หาแถวงาน: ใช้รหัสงานจากปุ่มถ้ามี ไม่มีก็ใช้งานวันนี้ที่ «รับของแล้ว» แถวแรก
+    // (ยังไม่ได้ตั๋วปลายทาง = สินค้าเพิ่งขึ้นรถ ตรงกับจังหวะถ่ายรูปนี้พอดี)
     var target = jobId ? findRowByJobId_(code, jobId) : null;
     if (!target) {
       var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
-      var delivered = jobsOnDateOf_(code, today, ST.DELIVERED);
-      target = delivered[0] || null;
+      target = jobsOnDateOf_(code, today, ST.LOADED)[0] || jobsOnDateOf_(code, today, ST.DELIVERED)[0] || null;
       if (target) jobId = String(target.v[JC.ID - 1]);
     }
 
@@ -779,14 +780,15 @@ function handlePodImage_(ev, code, jobId) {
 
     SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.TICKETS).appendRow([
       Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
-      code, jobId || "(จับคู่ไม่ได้)", "รูปงานเสร็จ", ev.message.id, imgUrl, "", "",
+      code, jobId || "(จับคู่ไม่ได้)", "รูปสินค้าขึ้นรถ", ev.message.id, imgUrl, "", "",
     ]);
 
     lineReply_(ev.replyToken,
-      "📷✅ บันทึกรูปงานเสร็จแล้ว" + (jobId ? " [" + jobId + "]" : "") + "\nขอบคุณครับ 🙏",
+      "📷✅ บันทึกรูปสินค้าขึ้นรถแล้ว" + (jobId ? " [" + jobId + "]" : "") +
+      "\nออฟฟิศจะส่งให้ลูกค้าต่อไป — เดินทางปลอดภัยครับ 🙏\nเมื่อลงของเสร็จ ถ่ายรูปตั๋วปลายทางส่งมาได้เลย",
       [{
         type: "action",
-        action: { type: "postback", label: "📷 ส่งรูปงานเสร็จเพิ่ม", data: "pod|" + (jobId || ""), displayText: "ขอส่งรูปงานเสร็จเพิ่ม" },
+        action: { type: "postback", label: "📷 ส่งรูปสินค้าเพิ่ม", data: "pod|" + (jobId || ""), displayText: "ขอส่งรูปสินค้าเพิ่ม" },
       }]);
   } finally {
     lock.releaseLock();
@@ -972,7 +974,10 @@ function jobQuickReply_(jobIds) {
   return items;
 }
 
-/** ปุ่มใต้ข้อความยืนยันตั๋ว: ส่งรูปใบเดิมใหม่ (กรณีไม่ชัด) และส่งรูปงานเสร็จ (หลังตั๋วปลายทาง) */
+/**
+ * ปุ่มใต้ข้อความยืนยันตั๋ว: ส่งรูปใบเดิมใหม่ (กรณีไม่ชัด)
+ * และหลัง "ตั๋วต้นทาง" (ขึ้นของเสร็จ) เพิ่มปุ่มส่งรูปสินค้าขึ้นรถ — ออฟฟิศใช้ส่งให้ลูกค้า
+ */
 function ticketQuickReply_(jobId, leg, withPod) {
   var items = [{
     type: "action",
@@ -988,9 +993,9 @@ function ticketQuickReply_(jobId, leg, withPod) {
       type: "action",
       action: {
         type: "postback",
-        label: "📷 ส่งรูปงานเสร็จ",
+        label: "📷 ส่งรูปสินค้าขึ้นรถ",
         data: "pod|" + jobId,
-        displayText: "ขอส่งรูปงานเสร็จ",
+        displayText: "ขอส่งรูปสินค้าขึ้นรถ",
       },
     });
   }
