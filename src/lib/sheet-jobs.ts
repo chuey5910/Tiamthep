@@ -36,7 +36,7 @@ const RESULT_COL = "T"; // = index 19
 
 const ST = {
   CONFIRMED: "ยืนยัน",
-  IMPORTED: "นำเข้าแล้ว",
+  IMPORTED: "ปิดงาน", // ดึงเข้าเว็บสำเร็จ = งานจบสมบูรณ์ ชีตจะล็อกแถวนี้ไม่ให้แก้
   FAILED: "นำเข้าไม่ผ่าน",
 } as const;
 

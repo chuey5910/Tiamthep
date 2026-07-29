@@ -60,6 +60,7 @@ var JC = {
   IMPORT_RESULT: 20, // ผลนำเข้าเว็บ — ฝั่งเว็บเขียนกลับ
   ACK_AT: 21,      // เวลาคนขับกดปุ่มรับทราบงาน
   ALC_IMG: 22,     // ลิงก์รูปเป่าแอลกอฮอล์ก่อนเริ่มงาน
+  POD_IMG: 23,     // รูปสินค้าที่ส่งเสร็จ (ไว้ส่งงานให้ลูกค้า) — มีได้หลายรูป ต่อบรรทัดกัน
 };
 var JOBS_HEADER = [
   "รหัสงาน", "วันที่", "รหัสคนขับ", "ชื่อคนขับ", "ทะเบียนรถ", "ทะเบียนหาง",
@@ -67,7 +68,7 @@ var JOBS_HEADER = [
   "สถานะ", "เวลาแจ้งไลน์",
   "เลขตั๋วต้นทาง", "นน.ต้นทาง (ตัน)", "รูปตั๋วต้นทาง",
   "เลขตั๋วปลายทาง", "นน.ปลายทาง (ตัน)", "รูปตั๋วปลายทาง",
-  "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์",
+  "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์", "รูปงานเสร็จ (ส่งลูกค้า)",
 ];
 
 // คอลัมน์ของแท็บ «คนขับ»
@@ -86,7 +87,7 @@ var ST = {
   LOADED: "รับของแล้ว",        // ได้ตั๋วต้นทาง (นน.ต้นทาง) แล้ว
   DELIVERED: "ส่งของเสร็จสิ้น",  // ได้ตั๋วปลายทาง (นน.ปลายทาง) แล้ว — รอออฟฟิศตรวจ
   CONFIRMED: "ยืนยัน",       // พนักงานตรวจแล้ว — รอเว็บดึงไปบันทึก
-  IMPORTED: "นำเข้าแล้ว",     // ฝั่งเว็บเขียนกลับ
+  IMPORTED: "ปิดงาน",         // เว็บดึงเข้าฐานข้อมูลสำเร็จ — งานจบสมบูรณ์ ห้ามแก้ไขในชีตอีก
   IMPORT_FAILED: "นำเข้าไม่ผ่าน", // ฝั่งเว็บเขียนกลับ พร้อมเหตุผลในคอลัมน์ผลนำเข้า
   CANCELLED: "ยกเลิก",
 };
@@ -115,7 +116,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("🚚 ไลน์บอท")
     .addItem("① สร้างโครงชีต (ครั้งแรกครั้งเดียว)", "setupSheet")
-    .addItem("② ติดตั้งตัวตั้งเวลาแจ้งงาน 17:00 / 20:00", "installTriggers")
+    .addItem("② ติดตั้งตัวตั้งเวลาแจ้งงาน 17:00 / 18:00", "installTriggers")
     .addSeparator()
     .addItem("ส่งแจ้งงานที่ค้างเดี๋ยวนี้ (วันนี้+พรุ่งนี้)", "sendMorningJobs")
     .addItem("ทดสอบส่งข้อความหาผู้ดูแล", "testNotifyAdmin")
@@ -157,6 +158,9 @@ function setupSheet() {
 
   // วันที่บังคับรูปแบบวันที่
   jobs.getRange(2, JC.DATE, maxRow, 1).setNumberFormat("dd/mm/yyyy");
+  // น้ำหนักหน่วยตัน แสดงทศนิยม 3 หลักเสมอ เช่น 30.540
+  jobs.getRange(2, JC.W_ORIGIN, maxRow, 1).setNumberFormat("0.000");
+  jobs.getRange(2, JC.W_DEST, maxRow, 1).setNumberFormat("0.000");
 
   jobs.setFrozenRows(1);
   SpreadsheetApp.getUi().alert(
@@ -167,14 +171,14 @@ function setupSheet() {
 
 // เวลาส่งแจ้งงาน — รอบหลักและรอบเก็บตก (นาฬิกา 24 ชม. เวลาไทย)
 // รอบเก็บตกส่งเฉพาะแถวที่ยังเป็น «สั่งงาน» จึงไม่มีทางส่งซ้ำคนที่ได้รับรอบแรกไปแล้ว
-var SEND_TIMES = ["17:00", "20:00"];
+var SEND_TIMES = ["17:00", "18:00"];
 var ARM_HOUR = 15; // ชั่วโมงที่ตัวตั้งนัดทำงาน — ต้องมาก่อนรอบแรกอย่างน้อย 1 ชั่วโมง
 
 /**
  * ติดตั้งตัวตั้งเวลา — ใช้ 2 ชั้นเพื่อความเสถียร
- *  ชั้นที่ 1: ทริกเกอร์รายวันช่วง 15:00-16:00 ทำหน้าที่ "ตั้งนาฬิกาปลุก" เวลา 17:00 และ 20:00 ตรงของวันนั้น
+ *  ชั้นที่ 1: ทริกเกอร์รายวันช่วง 15:00-16:00 ทำหน้าที่ "ตั้งนาฬิกาปลุก" เวลา 17:00 และ 18:00 ตรงของวันนั้น
  *            (ทริกเกอร์รายวันของ Google เองบอกได้แค่ช่วงชั่วโมง จึงต้องตั้งนัดแบบเจาะเวลาอีกที)
- *  ชั้นที่ 2: ทริกเกอร์รายวันช่วง 17:00-18:00 และ 20:00-21:00 เรียกส่งซ้ำ — ถ้าชั้นแรกส่งไปแล้วจะไม่มีอะไรให้ส่ง
+ *  ชั้นที่ 2: ทริกเกอร์รายวันช่วง 17:00-18:00 และ 18:00-19:00 เรียกส่งซ้ำ — ถ้าชั้นแรกส่งไปแล้วจะไม่มีอะไรให้ส่ง
  *            (การส่งทำเครื่องหมาย «แจ้งแล้ว» รายแถว จึงเรียกซ้ำกี่ครั้งก็ไม่ส่งซ้ำคนเดิม)
  */
 function installTriggers() {
@@ -192,7 +196,7 @@ function installTriggers() {
 
   SpreadsheetApp.getUi().alert(
     "ติดตั้งตัวตั้งเวลาเรียบร้อย — ระบบจะแจ้งงานคนขับทุกวัน\n" +
-    "รอบหลัก 17:00 น. และรอบเก็บตก 20:00 น. (ไม่ส่งซ้ำคนที่แจ้งแล้ว)"
+    "รอบหลัก 17:00 น. และรอบเก็บตก 18:00 น. (ไม่ส่งซ้ำคนที่แจ้งแล้ว)"
   );
 }
 
@@ -398,6 +402,21 @@ function handlePostback_(ev, userId, data) {
     lineReply_(ev.replyToken, "🍺 ส่งรูปผลเป่าแอลกอฮอล์เข้ามาได้เลยครับ (ภายใน 15 นาที)\nรูปที่ส่งหลังจากนี้ 1 รูปจะถูกบันทึกเป็นผลเป่าแอลกอฮอล์ของวันนี้");
     return;
   }
+
+  // «รูปไม่ชัด ส่งใบนี้ใหม่» — รูปถัดไปจะ "แทนที่" ตั๋วใบเดิมของงานเดิม ไม่ถูกนับเป็นใบถัดไป
+  if (data.indexOf("redo|") === 0) {
+    CacheService.getScriptCache().put("mode_" + userId, data, 900);
+    var legName = data.split("|")[2] || "";
+    lineReply_(ev.replyToken, "🔄 ส่งรูปตั๋ว" + legName + "ใบใหม่เข้ามาได้เลยครับ (ภายใน 15 นาที)\nรูปใหม่จะแทนที่ใบเดิม เคล็ดลับ: ถ่ายในที่สว่าง ให้ตัวหนังสือเต็มเฟรม ไม่เอียง");
+    return;
+  }
+
+  // «ส่งรูปงานเสร็จ» — รูปถัดไปบันทึกเป็นรูปสินค้าที่ส่งเสร็จ ไว้ส่งงานให้ลูกค้า
+  if (data.indexOf("pod|") === 0 || data === "pod") {
+    CacheService.getScriptCache().put("mode_" + userId, data === "pod" ? "pod|" : data, 900);
+    lineReply_(ev.replyToken, "📷 ส่งรูปสินค้า/งานที่ส่งเสร็จเข้ามาได้เลยครับ (ภายใน 15 นาที)\nส่งได้หลายรูป — ส่งเสร็จแต่ละรูปกดปุ่มเดิมเพื่อส่งรูปถัดไป");
+    return;
+  }
 }
 
 /** ประทับเวลารับทราบงานลงแถวตามรหัสงาน — เฉพาะแถวของคนขับคนนั้นและยังไม่เคยรับทราบ */
@@ -523,11 +542,20 @@ function handleImage_(ev, userId) {
     return;
   }
 
-  // คนขับกดปุ่ม «ส่งรูปเป่าแอลกอฮอล์» ไว้ — รูปนี้คือผลเป่า ไม่ใช่ตั๋ว
+  // คนขับกดปุ่มเลือกโหมดไว้ก่อนส่งรูป — รูปนี้อาจไม่ใช่ตั๋วใบถัดไป
   var cache = CacheService.getScriptCache();
-  if (cache.get("mode_" + userId) === "alcohol") {
-    cache.remove("mode_" + userId); // ใช้ครั้งเดียว — รูปถัดไปกลับเป็นตั๋วตามปกติ
+  var mode = cache.get("mode_" + userId) || "";
+  if (mode) cache.remove("mode_" + userId); // ใช้ครั้งเดียว — รูปถัดไปกลับเป็นตั๋วตามปกติ
+  if (mode === "alcohol") {
     handleAlcoholImage_(ev, code);
+    return;
+  }
+  if (mode.indexOf("redo|") === 0) {
+    handleRedoImage_(ev, code, mode.split("|")[1] || "", mode.split("|")[2] || "");
+    return;
+  }
+  if (mode.indexOf("pod|") === 0) {
+    handlePodImage_(ev, code, mode.split("|")[1] || "");
     return;
   }
 
@@ -614,7 +642,8 @@ function handleImage_(ev, userId) {
       if (!parsed.ticketNo && !parsed.netTons) {
         summary.push("(ระบบอ่านตัวเลขจากรูปไม่ได้ ออฟฟิศจะอ่านจากรูปแทน)");
       }
-      lineReply_(ev.replyToken, summary.join("\n"));
+      // ปุ่มใต้ข้อความ: ส่งใบนี้ใหม่ถ้ารูปไม่ชัด · หลังตั๋วปลายทางเพิ่มปุ่มส่งรูปงานเสร็จ
+      lineReply_(ev.replyToken, summary.join("\n"), ticketQuickReply_(jobId, leg, leg === "ปลายทาง"));
     } else {
       lineReply_(ev.replyToken, "รับรูปไว้แล้ว แต่ไม่พบงานของท่านที่ยังรอตั๋วในวันนี้ ออฟฟิศจะตรวจสอบให้ครับ");
       notifyAdmin_("⚠ คนขับ " + code + " ส่งรูปตั๋วมา แต่ไม่พบงานที่ยังรอตั๋วของเขาวันนี้ — ดูที่แท็บ «ตั๋ว»");
@@ -664,6 +693,120 @@ function handleAlcoholImage_(ev, code) {
 }
 
 /**
+ * รูปตั๋วส่งใหม่ (ใบเดิมไม่ชัด) — แทนที่รูป/ค่าของ "ตั๋วใบเดิม งานเดิม" เท่านั้น
+ * จึงไม่มีทางถูกนับเป็นตั๋วใบถัดไปโดยพลาด
+ */
+function handleRedoImage_(ev, code, jobId, leg) {
+  var target = findRowByJobId_(code, jobId);
+  if (!target) {
+    lineReply_(ev.replyToken, "ไม่พบงาน [" + jobId + "] ของท่านครับ กรุณาติดต่อออฟฟิศ");
+    return;
+  }
+  var status = String(target.v[JC.STATUS - 1]);
+  if (status === ST.CONFIRMED || status === ST.IMPORTED || status === ST.CANCELLED) {
+    lineReply_(ev.replyToken, "งาน [" + jobId + "] ถูกตรวจ/ปิดงานไปแล้ว แก้ไขไม่ได้ กรุณาติดต่อออฟฟิศครับ");
+    return;
+  }
+
+  var blob = lineGetContent_(ev.message.id);
+  var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
+  blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
+  var imgUrl = imageFolder_("รูปตั๋ว").createFile(blob).getUrl();
+
+  var ocrText = "";
+  try {
+    ocrText = ocrImage_(blob);
+  } catch (err) {
+    log_("ERROR", "OCR (ส่งใหม่) ไม่สำเร็จ: " + err);
+  }
+  var parsed = parseTicket_(ocrText);
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
+    var isOrigin = leg === "ต้นทาง";
+    // รูปใหม่แทนที่รูปเดิมเสมอ · เลข/น้ำหนักทับเฉพาะเมื่ออ่านค่าใหม่ได้ (อ่านไม่ได้ = คงของเดิมให้ออฟฟิศตรวจ)
+    jobs.getRange(target.row, isOrigin ? JC.IMG_ORIGIN : JC.IMG_DEST).setValue(imgUrl);
+    if (parsed.ticketNo) jobs.getRange(target.row, isOrigin ? JC.TICKET_NO_O : JC.TICKET_NO_D).setValue(parsed.ticketNo);
+    if (parsed.netTons) jobs.getRange(target.row, isOrigin ? JC.W_ORIGIN : JC.W_DEST).setValue(parsed.netTons);
+    jobs.getRange(target.row, JC.STATUS).setValue(isOrigin && String(target.v[JC.IMG_DEST - 1]).trim() === "" ? ST.LOADED : (isOrigin ? status : ST.DELIVERED));
+
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.TICKETS).appendRow([
+      Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
+      code, jobId, leg + " (ส่งใหม่)", ev.message.id, imgUrl,
+      ocrText.slice(0, 5000), JSON.stringify(parsed),
+    ]);
+
+    var summary = ["🔄 แทนที่ตั๋ว" + leg + "แล้ว [" + jobId + "]"];
+    if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
+    if (parsed.netTons) summary.push("นน." + leg + ": " + parsed.netTons + " ตัน");
+    if (!parsed.ticketNo && !parsed.netTons) summary.push("(ยังอ่านตัวเลขไม่ได้ ออฟฟิศจะอ่านจากรูปแทน)");
+    lineReply_(ev.replyToken, summary.join("\n"), ticketQuickReply_(jobId, leg, leg === "ปลายทาง"));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * รูปงานเสร็จ (สินค้าที่ส่งเรียบร้อย) — เก็บเข้าโฟลเดอร์ «รูปส่งงาน» แล้วต่อท้ายในคอลัมน์
+ * รูปงานเสร็จของแถวงาน ส่งได้หลายรูปต่อหนึ่งงาน ออฟฟิศใช้ส่งต่อให้ลูกค้าเพื่อปิดงาน
+ */
+function handlePodImage_(ev, code, jobId) {
+  var blob = lineGetContent_(ev.message.id);
+  var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
+  blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
+  var imgUrl = imageFolder_("รูปส่งงาน").createFile(blob).getUrl();
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // หาแถวงาน: ใช้รหัสงานจากปุ่มถ้ามี ไม่มีก็ใช้งานวันนี้ที่ส่งของเสร็จแล้วแถวแรก
+    var target = jobId ? findRowByJobId_(code, jobId) : null;
+    if (!target) {
+      var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+      var delivered = jobsOnDateOf_(code, today, ST.DELIVERED);
+      target = delivered[0] || null;
+      if (target) jobId = String(target.v[JC.ID - 1]);
+    }
+
+    if (target) {
+      var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
+      var cell = jobs.getRange(target.row, JC.POD_IMG);
+      var existing = String(cell.getValue()).trim();
+      cell.setValue(existing ? existing + "\n" + imgUrl : imgUrl);
+    }
+
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.TICKETS).appendRow([
+      Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
+      code, jobId || "(จับคู่ไม่ได้)", "รูปงานเสร็จ", ev.message.id, imgUrl, "", "",
+    ]);
+
+    lineReply_(ev.replyToken,
+      "📷✅ บันทึกรูปงานเสร็จแล้ว" + (jobId ? " [" + jobId + "]" : "") + "\nขอบคุณครับ 🙏",
+      [{
+        type: "action",
+        action: { type: "postback", label: "📷 ส่งรูปงานเสร็จเพิ่ม", data: "pod|" + (jobId || ""), displayText: "ขอส่งรูปงานเสร็จเพิ่ม" },
+      }]);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** หาแถวงานจากรหัสงาน — ต้องเป็นงานของคนขับคนนั้นเท่านั้น */
+function findRowByJobId_(code, jobId) {
+  var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
+  if (!jobs || jobs.getLastRow() < 2 || !jobId) return null;
+  var data = jobs.getRange(2, 1, jobs.getLastRow() - 1, JOBS_HEADER.length).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][JC.ID - 1]).trim() !== jobId) continue;
+    if (String(data[i][JC.DRIVER - 1]).trim().toUpperCase() !== code) return null;
+    return { row: i + 2, v: data[i] };
+  }
+  return null;
+}
+
+/**
  * OCR ด้วย Google Drive: อัปโหลดภาพเป็น Google Doc พร้อมสั่งแปลงข้อความ (ภาษาไทย)
  * ต้องเปิด Advanced Drive Service (v2) ในหน้า Apps Script ก่อน — ดู README
  */
@@ -704,8 +847,8 @@ function parseTicket_(text) {
   if (m) {
     var num = Number(m[1].replace(/,/g, ""));
     if (num > 0) {
-      // ผลลัพธ์เป็น "ตัน" เสมอ: เลขเกิน 500 ถือว่าตั๋วบอกเป็นกิโลกรัม หาร 1,000 ให้
-      out.netTons = num > 500 ? Math.round(num) / 1000 : num;
+      // ผลลัพธ์เป็น "ตัน" ทศนิยม 3 หลักเสมอ: เลขเกิน 500 ถือว่าตั๋วบอกเป็นกิโลกรัม หาร 1,000 ให้
+      out.netTons = num > 500 ? Math.round(num) / 1000 : Math.round(num * 1000) / 1000;
     }
   }
   return out;
@@ -829,6 +972,31 @@ function jobQuickReply_(jobIds) {
   return items;
 }
 
+/** ปุ่มใต้ข้อความยืนยันตั๋ว: ส่งรูปใบเดิมใหม่ (กรณีไม่ชัด) และส่งรูปงานเสร็จ (หลังตั๋วปลายทาง) */
+function ticketQuickReply_(jobId, leg, withPod) {
+  var items = [{
+    type: "action",
+    action: {
+      type: "postback",
+      label: "🔄 รูปไม่ชัด ส่งใบนี้ใหม่",
+      data: "redo|" + jobId + "|" + leg,
+      displayText: "ขอส่งรูปตั๋ว" + leg + "ใหม่",
+    },
+  }];
+  if (withPod) {
+    items.push({
+      type: "action",
+      action: {
+        type: "postback",
+        label: "📷 ส่งรูปงานเสร็จ",
+        data: "pod|" + jobId,
+        displayText: "ขอส่งรูปงานเสร็จ",
+      },
+    });
+  }
+  return items;
+}
+
 /**
  * โฟลเดอร์ปลายทางของรูป — แยกตามประเภทแล้วแยกรายเดือน สร้างให้เองถ้ายังไม่มี
  * เช่น <โฟลเดอร์หลัก>/รูปตั๋ว/2026-07/
@@ -899,6 +1067,22 @@ function onEdit(e) {
     if (sh.getName() !== SHEET.JOBS) return;
     var row = e.range.getRow();
     if (row < 2) return;
+
+    // ── กันแก้ไขแถวที่ «ปิดงาน» แล้ว — ดีดค่ากลับทันที ─────────────
+    // (ข้อมูลจริงถูกดึงเข้าเว็บไปแล้ว ต้องไปแก้ในเว็บซึ่งมีระบบสิทธิ์คุมเท่านั้น)
+    if (e.range.getNumRows() === 1 && e.range.getNumColumns() === 1) {
+      var wasClosed = e.range.getColumn() === JC.STATUS
+        ? String(e.oldValue || "") === ST.IMPORTED
+        : String(sh.getRange(row, JC.STATUS).getValue()) === ST.IMPORTED;
+      if (wasClosed) {
+        if (e.oldValue !== undefined) e.range.setValue(e.oldValue);
+        else e.range.clearContent();
+        SpreadsheetApp.getActiveSpreadsheet().toast(
+          "แถวนี้ «ปิดงาน» แล้ว แก้ไขในชีตไม่ได้ — ต้องแก้ในเว็บ (หน้า บันทึกงานขนส่ง) เท่านั้น",
+          "🔒 ป้องกันข้อมูล", 6);
+        return;
+      }
+    }
 
     // เติมรหัสงาน + สถานะเริ่มต้น เมื่อแถวเริ่มมีข้อมูลวันที่
     var dateVal = sh.getRange(row, JC.DATE).getValue();
