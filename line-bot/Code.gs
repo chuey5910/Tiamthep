@@ -600,6 +600,17 @@ function handleImage_(ev, userId) {
     var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
     var jobId = "";
 
+    // กติกา: ต้องส่งรูปเป่าแอลกอฮอล์ก่อนตั๋วต้นทางเสมอ
+    if (target && leg === "ต้นทาง" && String(target.v[JC.ALC_IMG - 1]).trim() === "") {
+      file.setTrashed(true); // รูปที่ตีกลับ ไม่เก็บ — เดี๋ยวคนขับส่งใหม่ตามลำดับที่ถูก
+      log_("INFO", code + " ส่งตั๋วต้นทางก่อนเป่าแอลกอฮอล์ — ตีกลับ [" + String(target.v[JC.ID - 1]) + "]");
+      lineReply_(ev.replyToken,
+        "⛔ ยังไม่ได้ส่งรูปเป่าแอลกอฮอล์ของวันนี้\n\n" +
+        "ลำดับที่ถูกต้อง:\n1. กดปุ่ม 🍺 ด้านล่าง แล้วส่งรูปผลเป่า\n2. จากนั้นถ่ายรูปตั๋วต้นทางส่งมาใหม่อีกครั้ง",
+        jobQuickReply_(null));
+      return;
+    }
+
     if (target) {
       jobId = String(target.v[JC.ID - 1]);
       // ย้ายรูปเข้าโฟลเดอร์ตามใบที่จับคู่ได้ (ลิงก์เดิมใช้ได้ต่อ ไม่เปลี่ยน)
@@ -663,6 +674,19 @@ function handleImage_(ev, userId) {
  * (เป่าครั้งเดียวต่อวัน ครอบคลุมทุกงานในวันนั้น)
  */
 function handleAlcoholImage_(ev, code) {
+  // กติกา: รูปเป่าแอลกอฮอล์ส่งได้เฉพาะ "วันทำงาน" เท่านั้น
+  // รับแจ้งงานเย็นนี้ (งานของพรุ่งนี้) แล้วส่งรูปเป่าคืนนี้เลยไม่ได้ — ต้องเป่าเช้าวันงานก่อนเริ่มงานจริง
+  var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+  var items = jobsOnDateOf_(code, today, null);
+  if (!items.length) {
+    var tomorrow = Utilities.formatDate(new Date(Date.now() + 86400000), TZ, "yyyy-MM-dd");
+    var hasTomorrow = jobsOnDateOf_(code, tomorrow, null).length > 0;
+    lineReply_(ev.replyToken, hasTomorrow
+      ? "🗓 งานของท่านเป็นของวันพรุ่งนี้\nรูปเป่าแอลกอฮอล์ต้องส่ง «เช้าวันทำงาน ก่อนเริ่มงาน» — พรุ่งนี้เช้ากดปุ่ม 🍺 แล้วส่งรูปใหม่อีกครั้งนะครับ"
+      : "วันนี้ยังไม่มีงานของท่านในระบบ — รูปเป่าแอลกอฮอล์ส่งได้เฉพาะวันที่มีงานครับ");
+    return;
+  }
+
   var blob = lineGetContent_(ev.message.id);
   var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
   blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
@@ -680,17 +704,15 @@ function handleAlcoholImage_(ev, code) {
     ]);
 
     // เติมลิงก์ลงทุกงานวันนี้ของคนขับ (เฉพาะช่องที่ยังว่าง)
-    var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
     var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
-    var items = jobsOnDateOf_(code, today, null);
     items.forEach(function (it) {
       fillIfEmpty_(jobs, it.row, JC.ALC_IMG, imgUrl);
     });
 
     lineReply_(ev.replyToken,
       "🍺✅ บันทึกรูปเป่าแอลกอฮอล์เรียบร้อย\n" +
-      (items.length ? "ผูกกับงานวันนี้ " + items.length + " งานแล้ว " : "") +
-      "ขับขี่ปลอดภัยนะครับ 🙏");
+      "ผูกกับงานวันนี้ " + items.length + " งานแล้ว ขับขี่ปลอดภัยนะครับ 🙏\n\n" +
+      "เมื่อรับของได้ตั๋วแล้ว ถ่ายรูปตั๋วต้นทางส่งมาได้เลย");
   } finally {
     lock.releaseLock();
   }
