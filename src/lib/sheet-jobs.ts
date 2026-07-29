@@ -22,16 +22,17 @@ import { batchWriteValues, clearValues, readValues, sheetConfig, writeValues } f
 const JOBS_TAB = "งาน";
 const DRIVERS_TAB = "คนขับ";
 const MASTER_TAB = "ฐานข้อมูล";
-const JOBS_LAST_COL = "R"; // คอลัมน์สุดท้ายของแท็บงาน
+const JOBS_LAST_COL = "V"; // คอลัมน์สุดท้ายของแท็บงาน
 
 // ตำแหน่งคอลัมน์ในแถวข้อมูล (index เริ่ม 0 = คอลัมน์ A)
+// ตั๋วมี 2 ใบต่อ 1 งาน: ต้นทาง (ตอนรับของ) และปลายทาง (ตอนลงของ)
 const C = {
   id: 0, date: 1, driver: 2, head: 4, trailer: 5, customer: 6,
   origin: 7, dest: 8, cargo: 9, note: 10, status: 11,
-  ticketNo: 13, wOrigin: 14, wDest: 15,
+  ticketNoOrigin: 13, wOrigin: 14, ticketNoDest: 16, wDest: 17,
 } as const;
 const STATUS_COL = "L"; // = index 11
-const RESULT_COL = "R"; // = index 17
+const RESULT_COL = "T"; // = index 19
 
 const ST = {
   CONFIRMED: "ยืนยัน",
@@ -44,7 +45,7 @@ export type SheetImportResult = {
   error?: string;
   imported: number;
   failed: number;
-  pendingReview: number; // แถว «ได้ตั๋วแล้ว» ที่รอพนักงานตรวจ
+  pendingReview: number; // แถวที่ «ส่งของเสร็จสิ้น» แล้ว แต่ออฟฟิศยังไม่กด «ยืนยัน»
   rows: { jobId: string; ok: boolean; message: string }[];
 };
 
@@ -82,7 +83,7 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       const row = values[i];
       const rowNo = i + 2; // แถวจริงในชีต (ข้อมูลเริ่มแถว 2)
       const status = (row[C.status] ?? "").trim();
-      if (status === "ได้ตั๋วแล้ว") pendingReview++;
+      if (status === "ส่งของเสร็จสิ้น") pendingReview++;
       if (status !== ST.CONFIRMED) continue;
 
       const jobId = (row[C.id] ?? "").trim();
@@ -166,8 +167,13 @@ async function importRow(
   const route = ctx.routeByKey.get(routeKey(origin, destination, vehicle.vehicleType)) ?? null;
   const tripCode = `${headPlate}-${toInputDate(date).split("-").reverse().join("")}`;
 
-  const ticketNo = (row[C.ticketNo] ?? "").trim();
-  const note = [ticketNo ? `ตั๋ว ${ticketNo}` : "", (row[C.note] ?? "").trim()].filter(Boolean).join(" · ") || null;
+  const ticketO = (row[C.ticketNoOrigin] ?? "").trim();
+  const ticketD = (row[C.ticketNoDest] ?? "").trim();
+  const note = [
+    ticketO ? `ตั๋วต้นทาง ${ticketO}` : "",
+    ticketD ? `ตั๋วปลายทาง ${ticketD}` : "",
+    (row[C.note] ?? "").trim(),
+  ].filter(Boolean).join(" · ") || null;
 
   try {
     const job = await prisma.job.create({

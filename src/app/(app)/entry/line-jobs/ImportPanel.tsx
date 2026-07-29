@@ -44,7 +44,7 @@ export function ImportPanel() {
               </>
             )}
             {result.pendingReview > 0 && (
-              <> · มีอีก <b>{result.pendingReview}</b> งานที่ได้ตั๋วแล้วแต่ยังไม่ได้กด «ยืนยัน» ในชีต</>
+              <> · มีอีก <b>{result.pendingReview}</b> งานที่ส่งของเสร็จสิ้นแล้วแต่ยังไม่ได้กด «ยืนยัน» ในชีต</>
             )}
             {result.imported === 0 && result.failed === 0 && <> — ไม่มีแถวสถานะ «ยืนยัน» ค้างอยู่</>}
           </div>

@@ -12,7 +12,7 @@
  *  3. รับรูปตั๋วจากคนขับ → OCR อ่านข้อความ → กรอกลงชีต     → doPost()
  *
  * หลักความปลอดภัยของข้อมูล (สำคัญ — อย่าแก้ให้ข้ามขั้น)
- *  • ผล OCR "ไม่เขียนลงฐานข้อมูลเว็บโดยตรง" — ลงชีตสถานะ «ได้ตั๋วแล้ว» ก่อน
+ *  • ผล OCR "ไม่เขียนลงฐานข้อมูลเว็บโดยตรง" — ลงชีตก่อน (รับของแล้ว/ส่งของเสร็จสิ้น)
  *    พนักงานออฟฟิศตรวจความถูกต้อง แล้วเปลี่ยนสถานะเป็น «ยืนยัน»
  *    จากนั้นเว็บ TMS จะเป็นฝ่ายดึงข้อมูลไปบันทึกเอง (ดูหน้า «งานจากไลน์» ในเว็บ)
  *  • ทุกแถวงานมีรหัสงานไม่ซ้ำ — ฝั่งเว็บใช้กันการนำเข้าซ้ำสองชั้น
@@ -50,19 +50,24 @@ var JC = {
   NOTE: 11,       // คำสั่งถึงคนขับ / หมายเหตุ
   STATUS: 12,     // สถานะงาน
   NOTIFIED_AT: 13,// เวลาแจ้งไลน์
-  TICKET_NO: 14,  // เลขที่ตั๋ว (จาก OCR — แก้ได้)
-  W_ORIGIN: 15,   // น้ำหนักต้นทาง (ตัน)
-  W_DEST: 16,     // น้ำหนักปลายทาง (ตัน)
-  TICKET_IMG: 17, // ลิงก์รูปตั๋วใน Drive
-  IMPORT_RESULT: 18, // ผลนำเข้าเว็บ — ฝั่งเว็บเขียนกลับ
-  ACK_AT: 19,     // เวลาคนขับกดปุ่มรับทราบงาน
-  ALC_IMG: 20,    // ลิงก์รูปเป่าแอลกอฮอล์ก่อนเริ่มงาน
+  // ตั๋ว 2 ใบต่อ 1 งาน: ใบที่ 1 ตอนรับของ (นน.ต้นทาง) · ใบที่ 2 ตอนลงของ (นน.ปลายทาง)
+  TICKET_NO_O: 14, // เลขที่ตั๋วต้นทาง (จาก OCR — แก้ได้)
+  W_ORIGIN: 15,    // น้ำหนักต้นทาง (ตัน)
+  IMG_ORIGIN: 16,  // รูปตั๋วต้นทาง
+  TICKET_NO_D: 17, // เลขที่ตั๋วปลายทาง
+  W_DEST: 18,      // น้ำหนักปลายทาง (ตัน)
+  IMG_DEST: 19,    // รูปตั๋วปลายทาง
+  IMPORT_RESULT: 20, // ผลนำเข้าเว็บ — ฝั่งเว็บเขียนกลับ
+  ACK_AT: 21,      // เวลาคนขับกดปุ่มรับทราบงาน
+  ALC_IMG: 22,     // ลิงก์รูปเป่าแอลกอฮอล์ก่อนเริ่มงาน
 };
 var JOBS_HEADER = [
   "รหัสงาน", "วันที่", "รหัสคนขับ", "ชื่อคนขับ", "ทะเบียนรถ", "ทะเบียนหาง",
   "รหัสลูกค้า", "ต้นทาง", "ปลายทาง", "ประเภทสินค้า", "คำสั่ง/หมายเหตุ",
-  "สถานะ", "เวลาแจ้งไลน์", "เลขที่ตั๋ว", "นน.ต้นทาง (ตัน)", "นน.ปลายทาง (ตัน)",
-  "รูปตั๋ว", "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์",
+  "สถานะ", "เวลาแจ้งไลน์",
+  "เลขตั๋วต้นทาง", "นน.ต้นทาง (ตัน)", "รูปตั๋วต้นทาง",
+  "เลขตั๋วปลายทาง", "นน.ปลายทาง (ตัน)", "รูปตั๋วปลายทาง",
+  "ผลนำเข้าเว็บ", "รับทราบเมื่อ", "รูปเป่าแอลกอฮอล์",
 ];
 
 // คอลัมน์ของแท็บ «คนขับ»
@@ -70,20 +75,22 @@ var DC = { CODE: 1, NAME: 2, LINE_ID: 3, REGISTERED_AT: 4 };
 var DRIVERS_HEADER = ["รหัสคนขับ", "ชื่อ-นามสกุล", "LINE User ID", "ลงทะเบียนเมื่อ"];
 
 // คอลัมน์ของแท็บ «ตั๋ว» — บันทึกทุกภาพที่ส่งเข้ามา (ไว้ตรวจย้อนหลัง)
-var TC = { AT: 1, DRIVER: 2, JOB_ID: 3, MSG_ID: 4, IMG: 5, OCR_TEXT: 6, PARSED: 7 };
-var TICKETS_HEADER = ["เวลา", "รหัสคนขับ", "รหัสงาน", "LINE Message ID", "รูป", "ข้อความจาก OCR", "ค่าที่อ่านได้"];
+var TC = { AT: 1, DRIVER: 2, JOB_ID: 3, LEG: 4, MSG_ID: 5, IMG: 6, OCR_TEXT: 7, PARSED: 8 };
+var TICKETS_HEADER = ["เวลา", "รหัสคนขับ", "รหัสงาน", "ขา", "LINE Message ID", "รูป", "ข้อความจาก OCR", "ค่าที่อ่านได้"];
 
-// สถานะของงาน — เดินหน้าอย่างเดียว: สั่งงาน → แจ้งแล้ว → ได้ตั๋วแล้ว → ยืนยัน → นำเข้าแล้ว
+// สถานะของงาน — เดินหน้าอย่างเดียว:
+// สั่งงาน → แจ้งแล้ว → รับของแล้ว (ตั๋วใบ 1) → ส่งของเสร็จสิ้น (ตั๋วใบ 2) → ยืนยัน → นำเข้าแล้ว
 var ST = {
   NEW: "สั่งงาน",
   NOTIFIED: "แจ้งแล้ว",
-  TICKET: "ได้ตั๋วแล้ว",
+  LOADED: "รับของแล้ว",        // ได้ตั๋วต้นทาง (นน.ต้นทาง) แล้ว
+  DELIVERED: "ส่งของเสร็จสิ้น",  // ได้ตั๋วปลายทาง (นน.ปลายทาง) แล้ว — รอออฟฟิศตรวจ
   CONFIRMED: "ยืนยัน",       // พนักงานตรวจแล้ว — รอเว็บดึงไปบันทึก
   IMPORTED: "นำเข้าแล้ว",     // ฝั่งเว็บเขียนกลับ
   IMPORT_FAILED: "นำเข้าไม่ผ่าน", // ฝั่งเว็บเขียนกลับ พร้อมเหตุผลในคอลัมน์ผลนำเข้า
   CANCELLED: "ยกเลิก",
 };
-var ALL_STATUSES = [ST.NEW, ST.NOTIFIED, ST.TICKET, ST.CONFIRMED, ST.IMPORTED, ST.IMPORT_FAILED, ST.CANCELLED];
+var ALL_STATUSES = [ST.NEW, ST.NOTIFIED, ST.LOADED, ST.DELIVERED, ST.CONFIRMED, ST.IMPORTED, ST.IMPORT_FAILED, ST.CANCELLED];
 
 var TZ = "Asia/Bangkok";
 
@@ -297,7 +304,7 @@ function jobsMessage_(title, name, code, items) {
   });
   lines.push("👇 กดปุ่ม «✅ รับทราบงาน» ด้านล่างเพื่อตอบรับงาน");
   lines.push("🍺 ก่อนเริ่มงาน กดปุ่ม «ส่งรูปเป่าแอลกอฮอล์» แล้วส่งรูปผลเป่า");
-  lines.push("📸 เมื่อรับงานได้ตั๋วแล้ว ถ่ายรูปตั๋วส่งกลับมาในแชทนี้ได้เลย");
+  lines.push("📸 รับของเสร็จ ส่งรูปตั๋วใบที่ 1 (นน.ต้นทาง) · ลงของเสร็จ ส่งรูปตั๋วใบที่ 2 (นน.ปลายทาง)");
   return lines.join("\n");
 }
 
@@ -543,43 +550,74 @@ function handleImage_(ev, userId) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    // จับคู่กับงานของคนขับคนนี้ "วันนี้" ที่ยังไม่มีตั๋ว (เรียงตามลำดับแถวในชีต)
+    // จับคู่กับงาน "วันนี้" ของคนขับ แล้วดูว่าเป็นตั๋วใบไหน (เรียงตามลำดับแถวในชีต):
+    //   งานที่ยังไม่มีรูปตั๋วต้นทาง → รูปนี้คือ ตั๋วต้นทาง (รับของแล้ว)
+    //   งานที่มีตั๋วต้นทางแล้ว แต่ยังไม่มีตั๋วปลายทาง → รูปนี้คือ ตั๋วปลายทาง (ส่งของเสร็จสิ้น)
     var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
-    var target = jobsOnDateOf_(code, today, ST.NOTIFIED)[0] || jobsOnDateOf_(code, today, ST.NEW)[0] || null;
+    var candidates = jobsOnDateOf_(code, today, null);
+    var openStatuses = [ST.NEW, ST.NOTIFIED, ST.LOADED];
+    var target = null;
+    var leg = ""; // "ต้นทาง" | "ปลายทาง"
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (openStatuses.indexOf(String(c.v[JC.STATUS - 1])) < 0) continue;
+      if (String(c.v[JC.IMG_ORIGIN - 1]).trim() === "") {
+        target = c; leg = "ต้นทาง"; break;
+      }
+      if (String(c.v[JC.IMG_DEST - 1]).trim() === "") {
+        target = c; leg = "ปลายทาง"; break;
+      }
+    }
+
     var jobs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.JOBS);
     var jobId = "";
 
     if (target) {
       jobId = String(target.v[JC.ID - 1]);
       // เติมเฉพาะช่องที่ยังว่าง — ไม่ทับข้อมูลที่ออฟฟิศกรอกไว้แล้ว
-      fillIfEmpty_(jobs, target.row, JC.TICKET_NO, parsed.ticketNo);
-      fillIfEmpty_(jobs, target.row, JC.W_ORIGIN, parsed.weightOrigin);
-      fillIfEmpty_(jobs, target.row, JC.W_DEST, parsed.weightDest);
-      jobs.getRange(target.row, JC.TICKET_IMG).setValue(imgUrl);
-      jobs.getRange(target.row, JC.STATUS).setValue(ST.TICKET);
+      if (leg === "ต้นทาง") {
+        fillIfEmpty_(jobs, target.row, JC.TICKET_NO_O, parsed.ticketNo);
+        fillIfEmpty_(jobs, target.row, JC.W_ORIGIN, parsed.netTons);
+        jobs.getRange(target.row, JC.IMG_ORIGIN).setValue(imgUrl);
+        jobs.getRange(target.row, JC.STATUS).setValue(ST.LOADED);
+      } else {
+        fillIfEmpty_(jobs, target.row, JC.TICKET_NO_D, parsed.ticketNo);
+        fillIfEmpty_(jobs, target.row, JC.W_DEST, parsed.netTons);
+        jobs.getRange(target.row, JC.IMG_DEST).setValue(imgUrl);
+        jobs.getRange(target.row, JC.STATUS).setValue(ST.DELIVERED);
+      }
     }
 
     // ลงบันทึกแท็บตั๋วทุกครั้ง — ตรวจย้อนหลังได้เสมอ แม้จับคู่งานไม่ได้
     var tickets = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.TICKETS);
     tickets.appendRow([
       Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
-      code, jobId || "(จับคู่ไม่ได้)", ev.message.id, imgUrl,
+      code, jobId || "(จับคู่ไม่ได้)", leg || "-", ev.message.id, imgUrl,
       ocrText.slice(0, 5000), JSON.stringify(parsed),
     ]);
 
     if (target) {
-      var summary = ["📸 รับรูปตั๋วแล้ว [" + jobId + "]"];
-      if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
-      if (parsed.weightOrigin) summary.push("นน.ต้นทาง: " + parsed.weightOrigin + " ตัน");
-      if (parsed.weightDest) summary.push("นน.ปลายทาง: " + parsed.weightDest + " ตัน");
-      if (!parsed.ticketNo && !parsed.weightOrigin && !parsed.weightDest) {
-        summary.push("(ระบบอ่านตัวเลขไม่ได้ ออฟฟิศจะอ่านจากรูปแทน)");
+      var summary = [];
+      if (leg === "ต้นทาง") {
+        summary.push("📦 บันทึกตั๋วต้นทางแล้ว [" + jobId + "]");
+        if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
+        if (parsed.netTons) summary.push("นน.ต้นทาง: " + parsed.netTons + " ตัน");
+        summary.push("สถานะ: รับของแล้ว ✅");
+        summary.push("\nเมื่อลงของเสร็จ ถ่ายรูปตั๋วปลายทางส่งมาอีกครั้งนะครับ");
+      } else {
+        summary.push("🏁 บันทึกตั๋วปลายทางแล้ว [" + jobId + "]");
+        if (parsed.ticketNo) summary.push("เลขที่ตั๋ว: " + parsed.ticketNo);
+        if (parsed.netTons) summary.push("นน.ปลายทาง: " + parsed.netTons + " ตัน");
+        summary.push("สถานะ: ส่งของเสร็จสิ้น ✅ งานเสร็จสมบูรณ์");
+        summary.push("\nขอบคุณครับ 🙏 ออฟฟิศจะตรวจและยืนยันอีกครั้ง");
       }
-      summary.push("\nขอบคุณครับ ✅ ออฟฟิศจะตรวจและยืนยันอีกครั้ง");
+      if (!parsed.ticketNo && !parsed.netTons) {
+        summary.push("(ระบบอ่านตัวเลขจากรูปไม่ได้ ออฟฟิศจะอ่านจากรูปแทน)");
+      }
       lineReply_(ev.replyToken, summary.join("\n"));
     } else {
-      lineReply_(ev.replyToken, "รับรูปไว้แล้ว แต่ไม่พบงานของท่านในวันนี้ ออฟฟิศจะตรวจสอบให้ครับ");
-      notifyAdmin_("⚠ คนขับ " + code + " ส่งรูปตั๋วมา แต่ไม่พบงานของเขาวันนี้ — ดูที่แท็บ «ตั๋ว»");
+      lineReply_(ev.replyToken, "รับรูปไว้แล้ว แต่ไม่พบงานของท่านที่ยังรอตั๋วในวันนี้ ออฟฟิศจะตรวจสอบให้ครับ");
+      notifyAdmin_("⚠ คนขับ " + code + " ส่งรูปตั๋วมา แต่ไม่พบงานที่ยังรอตั๋วของเขาวันนี้ — ดูที่แท็บ «ตั๋ว»");
     }
   } finally {
     lock.releaseLock();
@@ -645,30 +683,29 @@ function ocrImage_(blob) {
  * ดึงค่าจากข้อความ OCR แบบ "พยายามเต็มที่ แต่ไม่เดามั่ว"
  * อ่านไม่ได้ = ปล่อยว่างให้คนตรวจ ดีกว่ากรอกเลขผิดลงระบบ
  *
- * รองรับตั๋วชั่งทั่วไป: เลขที่ตั๋ว, น้ำหนักสุทธิ (กก. → แปลงเป็นตัน)
+ * สิ่งที่ต้องการจากตั๋ว: เลขที่ตั๋ว + น้ำหนักสุทธิ (แปลงเป็น "ตัน" เสมอ)
+ * ส่วนเป็นตั๋วต้นทางหรือปลายทาง ระบบดูจากลำดับการส่งของงานนั้น ไม่ได้ดูจากตั๋ว
  */
 function parseTicket_(text) {
-  var out = { ticketNo: "", weightOrigin: "", weightDest: "", date: "" };
+  var out = { ticketNo: "", netTons: "", date: "" };
   if (!text) return out;
   var t = text.replace(/[，،]/g, ",");
 
-  // เลขที่ตั๋ว: "เลขที่ ..." / "No. ..." / "Ticket ..."
-  var m = t.match(/(?:เลขที่(?:ตั๋ว|บิล|เอกสาร)?|ticket\s*no\.?|no\.?)\s*[:：#]?\s*([A-Za-z0-9\/\-]{4,20})/i);
+  // เลขที่ตั๋ว: "เลขที่ ..." / "เลขที่ตั๋ว/บิล/เอกสาร" / "Ticket No." / "No."
+  var m = t.match(/(?:เลขที่(?:ตั๋ว|บิล|เอกสาร|ชั่ง)?|ticket\s*no\.?|doc\.?\s*no\.?|no\.?)\s*[:：#]?\s*([A-Za-z0-9\/\-]{4,20})/i);
   if (m) out.ticketNo = m[1];
 
   // วันที่บนตั๋ว (ไว้ให้ออฟฟิศเทียบ ไม่ได้ใช้อัตโนมัติ)
   m = t.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
   if (m) out.date = m[1];
 
-  // น้ำหนักสุทธิ: "น้ำหนักสุทธิ 30,540 กก." / "NET 30540"
-  m = t.match(/(?:น้ำหนักสุทธิ|นน\.?สุทธิ|สุทธิ|net\s*(?:weight)?)\s*[:：]?\s*([\d,]+(?:\.\d+)?)/i);
+  // น้ำหนักสุทธิ: "น้ำหนักสุทธิ 30,540 กก." / "นน.สุทธิ" / "NET WEIGHT 30540" / "NET 30.54"
+  m = t.match(/(?:น้ำหนักสุทธิ|นน\.?\s*สุทธิ|สุทธิ|net\s*(?:weight|wt)?\.?)\s*[:：]?\s*([\d,]+(?:\.\d+)?)/i);
   if (m) {
-    var kg = Number(m[1].replace(/,/g, ""));
-    if (kg > 0) {
-      // เกิน 500 ถือว่าหน่วยเป็นกิโลกรัม แปลงเป็นตัน / ไม่เกินถือว่าเป็นตันอยู่แล้ว
-      var tons = kg > 500 ? Math.round((kg / 1000) * 1000) / 1000 : kg;
-      // ตั๋วชั่งส่วนใหญ่คือน้ำหนักขาขึ้นสินค้า — ใส่ช่องต้นทาง ออฟฟิศย้ายเองได้ถ้าเป็นขาลง
-      out.weightOrigin = tons;
+    var num = Number(m[1].replace(/,/g, ""));
+    if (num > 0) {
+      // ผลลัพธ์เป็น "ตัน" เสมอ: เลขเกิน 500 ถือว่าตั๋วบอกเป็นกิโลกรัม หาร 1,000 ให้
+      out.netTons = num > 500 ? Math.round(num) / 1000 : num;
     }
   }
   return out;
