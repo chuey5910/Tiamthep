@@ -838,24 +838,66 @@ function ocrImage_(blob) {
 function parseTicket_(text) {
   var out = { ticketNo: "", netTons: "", date: "" };
   if (!text) return out;
-  var t = text.replace(/[，،]/g, ",");
+  // ปรับข้อความ OCR ให้เทียบง่าย: แก้สระ ำ ที่ OCR ชอบแยกร่าง + ตัดอักขระล่องหน
+  var t = text.replace(/[，،]/g, ",").replace(/นํ้า|นำ้/g, "น้ำ").replace(/​/g, "");
 
-  // เลขที่ตั๋ว: "เลขที่ ..." / "เลขที่ตั๋ว/บิล/เอกสาร" / "Ticket No." / "No."
-  var m = t.match(/(?:เลขที่(?:ตั๋ว|บิล|เอกสาร|ชั่ง)?|ticket\s*no\.?|doc\.?\s*no\.?|no\.?)\s*[:：#]?\s*([A-Za-z0-9\/\-]{4,20})/i);
-  if (m) out.ticketNo = m[1];
+  // ── เลขที่ตั๋ว — ไล่จากคำเฉพาะเจาะจงของตั๋วแต่ละเจ้า ไปหาคำกว้างทีหลัง ──
+  // อ้างอิงตั๋วจริง: ทัศนา/บุญศิลารัตน์ (เลขที่ใบชั่ง) · ใบชั่งโรงงาน (เลขที่ใบส่งของ)
+  // TNC (เอกสารหมายเลข) · Rayong Fertilizer (Doc.No) · BGC (เลขที่ :)
+  var noPatterns = [
+    /เลขที่\s*ใบชั่ง\s*[:：]?\s*([A-Za-z0-9\/\-]{4,25})/,        // ทัศนา/บุญศิลารัตน์/แพรคติคัม
+    /เลขที่\s*ใบส่งของ\s*[:：]?\s*([A-Za-z0-9\/\-]{4,25})/,      // ใบชั่งโรงงาน/Chememan
+    /เอกสาร\s*หมายเลข\s*[:：]?\s*([A-Za-z0-9\/\-]{4,25})/,       // TNC FLO.007
+    /document\s*no\.?\s*[:：#]?\s*([A-Za-z0-9\-]{4,25})/i,       // TNC Sales Shipment (SH26-1332)
+    /invoice\s*no\.?\s*[:：.…]*\s*([A-Za-z0-9\-]{4,25})/i,       // TPP/TPI (TPR658105)
+    /doc\.?\s*no\.?\s*[:：#]?\s*([A-Za-z0-9\/\-]{4,25})/i,       // Rayong Fertilizer
+    /เลขที่\s*(?:ตั๋ว|บิล|เอกสาร)?\s*[:：#]?\s*([A-Za-z0-9\/\-]{4,25})/, // BGC/PMC/SD-SB
+    /ticket\s*no\.?\s*[:：#]?\s*([A-Za-z0-9\/\-]{4,25})/i,
+    /\b([OI]\d{9,12})\b/,                                        // Ratchaburi/BGC เลขใบชั่งขึ้นต้น O ไม่มีคำนำหน้า
+  ];
+  for (var i = 0; i < noPatterns.length; i++) {
+    var m = t.match(noPatterns[i]);
+    if (m) { out.ticketNo = m[1]; break; }
+  }
 
   // วันที่บนตั๋ว (ไว้ให้ออฟฟิศเทียบ ไม่ได้ใช้อัตโนมัติ)
-  m = t.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
-  if (m) out.date = m[1];
+  var dm = t.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+  if (dm) out.date = dm[1];
 
-  // น้ำหนักสุทธิ: "น้ำหนักสุทธิ 30,540 กก." / "นน.สุทธิ" / "NET WEIGHT 30540" / "NET 30.54"
-  m = t.match(/(?:น้ำหนักสุทธิ|นน\.?\s*สุทธิ|สุทธิ|net\s*(?:weight|wt)?\.?)\s*[:：]?\s*([\d,]+(?:\.\d+)?)/i);
-  if (m) {
-    var num = Number(m[1].replace(/,/g, ""));
-    if (num > 0) {
-      // ผลลัพธ์เป็น "ตัน" ทศนิยม 3 หลักเสมอ: เลขเกิน 500 ถือว่าตั๋วบอกเป็นกิโลกรัม หาร 1,000 ให้
-      out.netTons = num > 500 ? Math.round(num) / 1000 : Math.round(num * 1000) / 1000;
-    }
+  // ── น้ำหนักสุทธิ → "ตัน" ทศนิยม 3 หลักเสมอ ──
+  // NUM ต้องไม่ตามด้วย / หรือ - กันจับเลขวันที่/ทะเบียนโดยพลาด
+  var NUM = "([\\d,]+(?:\\.\\d+)?)(?![\\/\\-])";
+  var wPatterns = [
+    // "จำนวนตัน 13.80" (ทัศนา/บุญศิลารัตน์) — หน่วยตันแน่นอน
+    { re: new RegExp("จำนวน\\s*ตัน\\s*[:：]?\\s*" + NUM), unit: "ตัน" },
+    // "น้ำหนักชั่งสุทธิ (ตัน) 31.660" / "น้ำหนักสินค้าสุทธิ (ตัน)"
+    { re: new RegExp("(?:รวม\\s*)?น้ำหนัก\\s*(?:ชั่ง|สินค้า)?\\s*สุทธิ\\s*\\(\\s*ตัน\\s*\\)\\s*[:：=]?\\s*" + NUM), unit: "ตัน" },
+    // "รวมน้ำหนักสุทธิ 30,350.00 กก." / "น้ำหนักสุทธิ = 30,350.00" (BGC)
+    { re: new RegExp("(?:รวม\\s*)?น้ำหนัก\\s*(?:ชั่ง|สินค้า)?\\s*สุทธิ\\s*(?:\\(\\s*(?:กก|kg)\\.?\\s*\\))?\\s*[:：=]?\\s*" + NUM), unit: "" },
+    { re: new RegExp("นน\\.?\\s*สุทธิ\\s*[:：=]?\\s*" + NUM), unit: "" },
+    // ตารางแนวนอนแบบ Rayong: หัวคอลัมน์ Car/Gross/Net weight แล้วค่าตามมา 3 ตัว — เอาตัวที่ 3
+    { re: new RegExp("car\\s*weight[\\s\\S]{0,120}?net\\s*weight[^\\d]{0,60}[\\d,]+(?:\\.\\d+)?[^\\d]+[\\d,]+(?:\\.\\d+)?[^\\d]+" + NUM, "i"), unit: "" },
+    // "Net weight (kg.) 28,990" / "Net.Weight 30270 กก." (TPI Polene)
+    { re: new RegExp("net\\s*\\.?\\s*(?:weight|wt)?\\.?\\s*(?:\\(\\s*kg\\.?\\s*\\))?\\s*[:：=]?\\s*" + NUM, "i"), unit: "" },
+    // "จำนวน 20 ตัน" (TNC FLO.007)
+    { re: new RegExp("จำนวน\\s*" + NUM + "\\s*ตัน"), unit: "ตัน" },
+    // "20,000 KGS" (TNC Sales Shipment)
+    { re: new RegExp(NUM + "\\s*kgs\\b", "i"), unit: "กก" },
+    // ตาข่ายสุดท้าย: "สุทธิ <เลข>"
+    { re: new RegExp("สุทธิ\\s*[=:：]?\\s*" + NUM), unit: "" },
+  ];
+  for (var j = 0; j < wPatterns.length; j++) {
+    var mm = t.match(wPatterns[j].re);
+    if (!mm) continue;
+    var num = Number(mm[1].replace(/,/g, ""));
+    if (!(num > 0)) continue;
+    var tons;
+    if (wPatterns[j].unit === "ตัน") tons = num;        // ตั๋วระบุหน่วยตันชัดเจน
+    else if (wPatterns[j].unit === "กก") tons = num / 1000; // ตั๋วระบุหน่วยกิโลกรัมชัดเจน
+    else if (num > 500) tons = num / 1000;              // เลขใหญ่ = กิโลกรัม แปลงเป็นตัน
+    else tons = num;                                    // เลขเล็ก = ตันอยู่แล้ว
+    out.netTons = Math.round(tons * 1000) / 1000;
+    break;
   }
   return out;
 }
@@ -922,11 +964,37 @@ function lineHeaders_() {
   return { Authorization: "Bearer " + token };
 }
 
-/** สร้างก้อนข้อความ (แนบปุ่ม quick reply ได้) */
+/**
+ * สร้างก้อนข้อความ — ถ้ามีปุ่ม ใช้ Flex Message:
+ * ปุ่มใหญ่เต็มความกว้าง เรียงแนวตั้งใต้ข้อความ กดง่าย และอยู่ในแชทถาวร
+ * (ต่างจาก quick reply ที่เป็นเม็ดเล็กและหายไปเมื่อมีข้อความใหม่)
+ */
 function textMessage_(text, quickItems) {
-  var msg = { type: "text", text: text.slice(0, 4900) };
-  if (quickItems && quickItems.length) msg.quickReply = { items: quickItems };
-  return msg;
+  if (!quickItems || !quickItems.length) return { type: "text", text: text.slice(0, 4900) };
+
+  var buttons = quickItems.map(function (it) {
+    return {
+      type: "button",
+      style: "primary",
+      color: "#1e3a5f", // สีน้ำเงินเข้มตาม CI
+      height: "md",
+      margin: "sm",
+      action: it.action,
+    };
+  });
+  return {
+    type: "flex",
+    altText: text.slice(0, 300), // ข้อความที่โชว์ในแถบแจ้งเตือนมือถือ
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [{ type: "text", text: text.slice(0, 4900), wrap: true, size: "md" }],
+      },
+      footer: { type: "box", layout: "vertical", spacing: "sm", contents: buttons },
+    },
+  };
 }
 
 function linePush_(userId, text, quickItems) {
