@@ -528,8 +528,7 @@ function handleImage_(ev, userId) {
   var blob = lineGetContent_(ev.message.id);
   var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
   blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
-  var folder = DriveApp.getFolderById(prop_("DRIVE_FOLDER_ID"));
-  var file = folder.createFile(blob);
+  var file = imageFolder_("รูปตั๋ว").createFile(blob);
   var imgUrl = file.getUrl();
 
   // OCR — พังก็ไม่เป็นไร รูปยังอยู่ ให้ออฟฟิศอ่านเอง
@@ -595,9 +594,8 @@ function handleImage_(ev, userId) {
 function handleAlcoholImage_(ev, code) {
   var blob = lineGetContent_(ev.message.id);
   var stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
-  blob.setName("ALC_" + stamp + "_" + code + "_" + ev.message.id + ".jpg");
-  var folder = DriveApp.getFolderById(prop_("DRIVE_FOLDER_ID"));
-  var imgUrl = folder.createFile(blob).getUrl();
+  blob.setName(stamp + "_" + code + "_" + ev.message.id + ".jpg");
+  var imgUrl = imageFolder_("เป่าแอลกอฮอล์").createFile(blob).getUrl();
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -792,6 +790,28 @@ function jobQuickReply_(jobIds) {
     },
   });
   return items;
+}
+
+/**
+ * โฟลเดอร์ปลายทางของรูป — แยกตามประเภทแล้วแยกรายเดือน สร้างให้เองถ้ายังไม่มี
+ * เช่น <โฟลเดอร์หลัก>/รูปตั๋ว/2026-07/
+ */
+function imageFolder_(kind) {
+  // กันสองรูปมาพร้อมกันแล้วสร้างโฟลเดอร์ซ้ำ
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); } catch (e) { /* ไม่ได้ล็อกก็สร้างได้ แค่เสี่ยงโฟลเดอร์ซ้ำเล็กน้อย */ }
+  try {
+    var main = DriveApp.getFolderById(prop_("DRIVE_FOLDER_ID"));
+    var month = Utilities.formatDate(new Date(), TZ, "yyyy-MM");
+    return childFolder_(childFolder_(main, kind), month);
+  } finally {
+    try { lock.releaseLock(); } catch (e) { /* ไม่ได้ถือล็อกอยู่ */ }
+  }
+}
+
+function childFolder_(parent, name) {
+  var it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
 /** ดาวน์โหลดไฟล์แนบ (รูป) ของข้อความจาก LINE */
