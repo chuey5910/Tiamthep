@@ -839,7 +839,9 @@ function findRowByJobId_(code, jobId) {
  * ต้องเปิด Advanced Drive Service (v2) ในหน้า Apps Script ก่อน — ดู README
  */
 function ocrImage_(blob) {
-  var resource = { title: "ocr_tmp_" + Date.now(), mimeType: "application/vnd.google-apps.document" };
+  // ห้ามระบุ mimeType เป็น Google Doc เอง — ใส่ธง ocr แล้ว Google จะแปลงรูปเป็นเอกสารให้
+  // (ถ้าระบุเอง API จะปฏิเสธ: "OCR is not supported for files of type google-apps.document")
+  var resource = { title: "ocr_tmp_" + Date.now() };
   var docFile = Drive.Files.insert(resource, blob, { ocr: true, ocrLanguage: "th" });
   try {
     var text = DocumentApp.openById(docFile.id).getBody().getText();
