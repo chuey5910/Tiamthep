@@ -107,6 +107,25 @@ function prop_(key) {
   return PropertiesService.getScriptProperties().getProperty(key) || "";
 }
 
+/**
+ * สวิตช์ระบบรับรูปจากคนขับ (ตั๋ว/เป่าแอลกอฮอล์/รูปสินค้า)
+ * ปิด = เหลือแค่แจ้งงาน + ปุ่มรับทราบงาน · สลับได้จากเมนู 🚚 ไลน์บอท ไม่ต้องแก้โค้ด
+ */
+function photosEnabled_() {
+  return prop_("PHOTOS_ENABLED") !== "0";
+}
+
+function togglePhotoSystem() {
+  var props = PropertiesService.getScriptProperties();
+  var next = photosEnabled_() ? "0" : "1";
+  props.setProperty("PHOTOS_ENABLED", next);
+  SpreadsheetApp.getUi().alert(
+    next === "0"
+      ? "ปิดระบบรับรูปแล้ว 📵\nไลน์บอทเหลือ: แจ้งงาน + ปุ่มรับทราบงาน\nคนขับที่ส่งรูปมาจะได้รับข้อความแจ้งว่ายังไม่เปิดใช้"
+      : "เปิดระบบรับรูปแล้ว ✅\nรับรูปตั๋ว / เป่าแอลกอฮอล์ / รูปสินค้าขึ้นรถ ตามปกติ"
+  );
+}
+
 // ═════════════════════════════════════════════════════════════
 // 1) ติดตั้งครั้งแรก
 // ═════════════════════════════════════════════════════════════
@@ -120,6 +139,8 @@ function onOpen() {
     .addSeparator()
     .addItem("ส่งแจ้งงานที่ค้างเดี๋ยวนี้ (วันนี้+พรุ่งนี้)", "sendMorningJobs")
     .addItem("ทดสอบส่งข้อความหาผู้ดูแล", "testNotifyAdmin")
+    .addSeparator()
+    .addItem("สลับระบบรับรูปจากคนขับ (ตอนนี้: " + (photosEnabled_() ? "เปิด ✅" : "ปิด 📵") + ")", "togglePhotoSystem")
     .addToUi();
 }
 
@@ -307,8 +328,10 @@ function jobsMessage_(title, name, code, items) {
     lines.push("");
   });
   lines.push("👇 กดปุ่ม «✅ รับทราบงาน» ด้านล่างเพื่อตอบรับงาน");
-  lines.push("🍺 ก่อนเริ่มงาน กดปุ่ม «ส่งรูปเป่าแอลกอฮอล์» แล้วส่งรูปผลเป่า");
-  lines.push("📸 รับของเสร็จ ส่งรูปตั๋วใบที่ 1 (นน.ต้นทาง) · ลงของเสร็จ ส่งรูปตั๋วใบที่ 2 (นน.ปลายทาง)");
+  if (photosEnabled_()) {
+    lines.push("🍺 ก่อนเริ่มงาน กดปุ่ม «ส่งรูปเป่าแอลกอฮอล์» แล้วส่งรูปผลเป่า");
+    lines.push("📸 รับของเสร็จ ส่งรูปตั๋วใบที่ 1 (นน.ต้นทาง) · ลงของเสร็จ ส่งรูปตั๋วใบที่ 2 (นน.ปลายทาง)");
+  }
   return lines.join("\n");
 }
 
@@ -381,15 +404,22 @@ function handlePostback_(ev, userId, data) {
     return;
   }
 
+  // ปุ่มเกี่ยวกับรูปทั้งหมด (เป่า/ส่งใหม่/รูปสินค้า) ใช้ได้เฉพาะตอนเปิดระบบรับรูป
+  if (data.indexOf("ack|") !== 0 && !photosEnabled_()) {
+    lineReply_(ev.replyToken, "📵 ช่วงนี้ระบบยังไม่เปิดรับรูปทางไลน์\nข้อมูลตั๋ว/เอกสาร ส่งกับออฟฟิศตามปกติครับ");
+    return;
+  }
+
   // «รับทราบงาน» — ประทับเวลาลงทุกแถวงานที่อยู่ในข้อความนั้น
   if (data.indexOf("ack|") === 0) {
     var ids = data.slice(4).split(",").map(function (s) { return s.trim(); }).filter(Boolean);
     var count = ackJobs_(code, ids);
     if (count > 0) {
-      lineReply_(ev.replyToken,
-        "✅ รับทราบงานเรียบร้อย (" + count + " งาน) ขอบคุณครับ\n\n" +
-        "🍺 ก่อนเริ่มงาน อย่าลืมกดปุ่มด้านล่างแล้วส่งรูปผลเป่าแอลกอฮอล์",
-        jobQuickReply_(null));
+      var thanks = "✅ รับทราบงานเรียบร้อย (" + count + " งาน) ขอบคุณครับ";
+      if (photosEnabled_()) {
+        thanks += "\n\n🍺 ก่อนเริ่มงาน อย่าลืมกดปุ่มด้านล่างแล้วส่งรูปผลเป่าแอลกอฮอล์";
+      }
+      lineReply_(ev.replyToken, thanks, jobQuickReply_(null));
     } else {
       lineReply_(ev.replyToken, "งานชุดนี้ถูกบันทึกรับทราบไว้แล้วครับ ✅");
     }
@@ -462,13 +492,17 @@ function handleText_(ev, userId, text) {
     handlePostback_(ev, userId, "alc"); // พิมพ์คำสั่งได้ผลเดียวกับกดปุ่ม
     return;
   }
-  lineReply_(ev.replyToken,
+  var help =
     "คำสั่งที่ใช้ได้\n" +
     "• พิมพ์ «งานวันนี้» — ดูงานของท่านวันนี้\n" +
-    "• พิมพ์ «งานพรุ่งนี้» — ดูงานล่วงหน้าของพรุ่งนี้\n" +
-    "• พิมพ์ «เป่า» แล้วส่งรูป — บันทึกผลเป่าแอลกอฮอล์\n" +
-    "• ส่งรูปตั๋ว — ระบบจะบันทึกให้อัตโนมัติ\n" +
-    "• «ลงทะเบียน <รหัสพนักงาน>» — ผูกไลน์กับรหัสของท่าน");
+    "• พิมพ์ «งานพรุ่งนี้» — ดูงานล่วงหน้าของพรุ่งนี้\n";
+  if (photosEnabled_()) {
+    help +=
+      "• พิมพ์ «เป่า» แล้วส่งรูป — บันทึกผลเป่าแอลกอฮอล์\n" +
+      "• ส่งรูปตั๋ว — ระบบจะบันทึกให้อัตโนมัติ\n";
+  }
+  help += "• «ลงทะเบียน <รหัสพนักงาน>» — ผูกไลน์กับรหัสของท่าน";
+  lineReply_(ev.replyToken, help);
 }
 
 /**
@@ -539,6 +573,12 @@ function handleImage_(ev, userId) {
   var code = driverCodeOf_(userId);
   if (!code) {
     lineReply_(ev.replyToken, "ยังไม่ได้ลงทะเบียน — พิมพ์ «ลงทะเบียน <รหัสพนักงาน>» ก่อน แล้วส่งรูปใหม่อีกครั้งครับ");
+    return;
+  }
+
+  // สวิตช์ปิดระบบรับรูปอยู่ — แจ้งคนขับสุภาพๆ ไม่บันทึกอะไร
+  if (!photosEnabled_()) {
+    lineReply_(ev.replyToken, "📵 ช่วงนี้ระบบยังไม่เปิดรับรูปทางไลน์\nข้อมูลตั๋ว/เอกสาร ส่งกับออฟฟิศตามปกติครับ");
     return;
   }
 
@@ -1059,15 +1099,17 @@ function jobQuickReply_(jobIds) {
       },
     });
   }
-  items.push({
-    type: "action",
-    action: {
-      type: "postback",
-      label: "🍺 ส่งรูปเป่าแอลกอฮอล์",
-      data: "alc",
-      displayText: "ขอส่งรูปเป่าแอลกอฮอล์",
-    },
-  });
+  if (photosEnabled_()) {
+    items.push({
+      type: "action",
+      action: {
+        type: "postback",
+        label: "🍺 ส่งรูปเป่าแอลกอฮอล์",
+        data: "alc",
+        displayText: "ขอส่งรูปเป่าแอลกอฮอล์",
+      },
+    });
+  }
   return items;
 }
 
