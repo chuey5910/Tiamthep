@@ -16,6 +16,8 @@
     "sheet:import": "tsx scripts/import-line-jobs.ts",
     "routes:import": "tsx scripts/import-allowance-routes.ts",
     "reset:users": "tsx scripts/reset-users.ts",
+    "list:users": "tsx scripts/list-users.ts",
+    "set:password": "tsx scripts/set-password.ts",
     "setup": "prisma generate && prisma migrate deploy && npm run db:seed",
     "verify": "tsx scripts/verify-consistency.ts"
   },

@@ -6,11 +6,14 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { loadEnv } from "../scripts/load-env";
 import { readFileSync } from "node:fs";
 import { randomBytes, scrypt } from "node:crypto";
 import { promisify } from "node:util";
 import { join } from "node:path";
 
+// อ่าน .env เอง — Prisma รุ่นใหม่ไม่โหลดให้อัตโนมัติเวลารันผ่าน tsx
+loadEnv();
 const prisma = new PrismaClient();
 const WITH_DEMO = !process.argv.includes("--no-demo");
 

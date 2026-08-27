@@ -7,9 +7,10 @@
  * ลบเฉพาะบัญชีและ session — ข้อมูลงานขนส่ง รายงาน และบันทึกการเข้าระบบยังอยู่ครบ
  * เปิดเว็บครั้งถัดไปจะเข้าหน้า "ตั้งค่าครั้งแรก" ให้สร้างผู้ดูแลใหม่เอง
  */
-import "./load-env";
+import { loadEnv } from "./load-env";
 import { PrismaClient } from "@prisma/client";
 
+loadEnv();
 const prisma = new PrismaClient();
 
 async function main() {
