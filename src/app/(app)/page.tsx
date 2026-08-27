@@ -166,6 +166,7 @@ export default async function Dashboard() {
                     <th>เอกสาร</th>
                     <th>วันหมดอายุ</th>
                     <th className="num">คงเหลือ</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,6 +182,16 @@ export default async function Dashboard() {
                         ) : (
                           <Badge tone="warn">อีก {a.daysLeft} วัน</Badge>
                         )}
+                      </td>
+                      <td>
+                        {/* เปิดข้อมูลรถ/พขร. รายการนั้นขึ้นมาแก้วันหมดอายุได้ทันที */}
+                        <Link
+                          href={a.href}
+                          className="btn btn-ghost px-2 py-1 text-[12px]"
+                          title={`ดูข้อมูล ${a.subject}`}
+                        >
+                          ดูข้อมูล
+                        </Link>
                       </td>
                     </tr>
                   ))}

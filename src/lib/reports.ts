@@ -732,6 +732,8 @@ export type Alert = {
   date: Date;
   daysLeft: number;
   severity: "expired" | "soon";
+  /** ลิงก์เปิดข้อมูลรายการนั้นขึ้นมาแก้ไขได้ทันที */
+  href: string;
 };
 
 export async function documentAlerts(alertDays: number, today = new Date()): Promise<Alert[]> {
@@ -741,21 +743,28 @@ export async function documentAlerts(alertDays: number, today = new Date()): Pro
   ]);
 
   const out: Alert[] = [];
-  const push = (kind: string, subject: string, label: string, date: Date | null) => {
+  const push = (kind: string, subject: string, label: string, date: Date | null, href: string) => {
     if (!date) return;
     const daysLeft = Math.round((date.getTime() - new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).getTime()) / 86400000);
     if (daysLeft > alertDays) return;
-    out.push({ kind, subject, label, date, daysLeft, severity: daysLeft < 0 ? "expired" : "soon" });
+    out.push({ kind, subject, label, date, daysLeft, severity: daysLeft < 0 ? "expired" : "soon", href });
   };
 
   for (const v of vehicles) {
-    push("รถ", v.plate, "ภาษีรถ", v.taxDueDate);
-    push("รถ", v.plate, "พ.ร.บ.", v.actDueDate);
-    push("รถ", v.plate, "ประกันภัย", v.insuranceDue);
-    push("รถ", v.plate, "ประกันสินค้า", v.cargoInsDue);
+    const href = `/db/vehicles?edit=${encodeURIComponent(v.plate)}`;
+    push("รถ", v.plate, "ภาษีรถ", v.taxDueDate, href);
+    push("รถ", v.plate, "พ.ร.บ.", v.actDueDate, href);
+    push("รถ", v.plate, "ประกันภัย", v.insuranceDue, href);
+    push("รถ", v.plate, "ประกันสินค้า", v.cargoInsDue, href);
   }
   for (const dr of drivers) {
-    push("พขร.", `${dr.code} ${dr.firstName} ${dr.lastName}`.trim(), "ใบขับขี่", dr.licenseExpiry);
+    push(
+      "พขร.",
+      `${dr.code} ${dr.firstName} ${dr.lastName}`.trim(),
+      "ใบขับขี่",
+      dr.licenseExpiry,
+      `/db/drivers?edit=${encodeURIComponent(dr.code)}`,
+    );
   }
 
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
