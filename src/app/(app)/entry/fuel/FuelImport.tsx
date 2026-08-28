@@ -79,8 +79,11 @@ function ImportResult({ result }: { result: ImportPreview }) {
       >
         <b>{result.dryRun ? "ผลการตรวจสอบ (ยังไม่บันทึก)" : "นำเข้าเรียบร้อย"}</b> — ไฟล์ {result.fileName}
         <br />
-        อ่านได้ {result.parsed.toLocaleString("th-TH")} แถว · ซ้ำกับที่เคยนำเข้าแล้ว{" "}
+        อ่านได้ {result.parsed.toLocaleString("th-TH")} แถว · ซ้ำ{" "}
         {result.duplicates.toLocaleString("th-TH")} แถว
+        {result.inFileDuplicates > 0 && (
+          <> (ในนี้ {result.inFileDuplicates.toLocaleString("th-TH")} แถวเป็นเลขสลิปซ้ำกันเองในไฟล์ — เก็บแถวแรกไว้)</>
+        )}
         {result.dryRun ? (
           <> · จะนำเข้าใหม่ {(result.parsed - result.duplicates).toLocaleString("th-TH")} แถว</>
         ) : (

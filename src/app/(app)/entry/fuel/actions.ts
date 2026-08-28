@@ -18,6 +18,8 @@ export type ImportPreview = {
   parsed: number;
   imported: number;
   duplicates: number;
+  /** ในจำนวน duplicates นี้ กี่แถวที่ซ้ำกันเองภายในไฟล์ (เลขสลิปเดียวกัน) */
+  inFileDuplicates: number;
   unknownPlates: string[];
   unknownDrivers: string[];
   skipped: { row: number; reason: string }[];
@@ -56,6 +58,7 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
     parsed: 0,
     imported: 0,
     duplicates: 0,
+    inFileDuplicates: 0,
     unknownPlates: [],
     unknownDrivers: [],
     skipped: [],
@@ -106,7 +109,20 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
     ...new Set(rows.map((r) => r.driverCode).filter((d): d is string => !!d && !knownDrivers.has(d))),
   ];
 
-  const fresh = rows.filter((r) => !existingRefs.has(r.refNo));
+  // กันซ้ำสองชั้น: ซ้ำกับที่เคยนำเข้าไปแล้ว และซ้ำกันเองภายในไฟล์
+  // (ไฟล์จริงมีเลขสลิปซ้ำได้ ถ้าปล่อยไปจะชนกฎ unique แล้วทั้งหน้าพัง)
+  const seen = new Set<string>();
+  const fresh: ParsedFuelRow[] = [];
+  let inFileDuplicates = 0;
+  for (const r of rows) {
+    if (existingRefs.has(r.refNo)) continue;
+    if (seen.has(r.refNo)) {
+      inFileDuplicates++;
+      continue;
+    }
+    seen.add(r.refNo);
+    fresh.push(r);
+  }
   const duplicates = rows.length - fresh.length;
 
   let imported = 0;
@@ -124,8 +140,21 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
       station: r.station,
       refNo: r.refNo,
     }));
-    const res = await prisma.fuelEntry.createMany({ data });
-    imported = res.count;
+    try {
+      // skipDuplicates กันกรณีมีคนกดนำเข้าไฟล์เดียวกันพร้อมกันสองเครื่อง
+      const res = await prisma.fuelEntry.createMany({ data, skipDuplicates: true });
+      imported = res.count;
+    } catch (e) {
+      return {
+        ...empty,
+        fileName: file.name,
+        parsed: rows.length,
+        duplicates,
+        inFileDuplicates,
+        error: `บันทึกลงฐานข้อมูลไม่สำเร็จ: ${e instanceof Error ? e.message.split("\n").slice(-1)[0] : e}`,
+        skipped: skipped.slice(0, 20),
+      };
+    }
     revalidatePath("/", "layout");
   }
 
@@ -137,6 +166,7 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
     parsed: rows.length,
     imported,
     duplicates,
+    inFileDuplicates,
     unknownPlates,
     unknownDrivers,
     skipped: skipped.slice(0, 20),
