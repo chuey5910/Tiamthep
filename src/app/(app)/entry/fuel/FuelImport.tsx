@@ -99,68 +99,86 @@ function ImportResult({ result }: { result: ImportPreview }) {
         )}
       </div>
 
-      {result.unknownPlates.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-          <b>⚠ ทะเบียนที่ยังไม่มีในฐานข้อมูลรถ ({result.unknownPlates.length} คัน):</b>{" "}
-          {result.unknownPlates.slice(0, 20).join(", ")}
-          {result.unknownPlates.length > 20 && ` และอีก ${result.unknownPlates.length - 20} คัน`}
-          <br />
-          ข้อมูลยังนำเข้าได้ แต่จะไม่ปรากฏในรายงานรายคัน จนกว่าจะเพิ่มทะเบียนเหล่านี้ที่หน้าข้อมูลรถ
+      {/* สรุปรวมว่ามีอะไรต้องไปเพิ่มในฐานข้อมูลบ้าง — รายละเอียดรายแถวดูในตารางข้างล่าง */}
+      {(result.unknownPlates.length > 0 || result.unknownDrivers.length > 0) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] leading-relaxed text-amber-900">
+          <b>ต้องเพิ่มในฐานข้อมูลก่อน ตัวเลขจึงจะเข้ารายงานครบ</b>
+          {result.unknownPlates.length > 0 && (
+            <div className="mt-0.5">
+              ทะเบียนที่ยังไม่มี ({result.unknownPlates.length} คัน): {result.unknownPlates.slice(0, 20).join(", ")}
+              {result.unknownPlates.length > 20 && ` และอีก ${result.unknownPlates.length - 20} คัน`}
+            </div>
+          )}
+          {result.unknownDrivers.length > 0 && (
+            <div className="mt-0.5">
+              รหัส พขร. ที่ยังไม่มี ({result.unknownDrivers.length} คน): {result.unknownDrivers.slice(0, 20).join(", ")}
+              {result.unknownDrivers.length > 20 && ` และอีก ${result.unknownDrivers.length - 20} คน`}
+            </div>
+          )}
         </div>
       )}
 
-      {result.unknownDrivers.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-          <b>⚠ รหัส พขร. ที่ไม่มีในระบบ:</b> {result.unknownDrivers.slice(0, 20).join(", ")}
-          <br />
-          แถวเหล่านี้จะไม่ผูกกับ พขร. — ค่าน้ำมันยังเข้ารายงานรายคันตามปกติ
+      {/* แถวที่ถูกต้องไม่ต้องโชว์ — โชว์เฉพาะแถวที่ต้องแก้ และระบายแดงเฉพาะช่องที่ผิด */}
+      {result.problems.length === 0 ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-900">
+          ✓ ตรวจแล้วทุกแถวถูกต้องครบถ้วน ไม่มีแถวที่ต้องแก้
         </div>
-      )}
-
-      {result.skipped.length > 0 && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-700">
-          <b>แถวที่ข้ามไป:</b>
-          <ul className="mt-1 space-y-0.5">
-            {result.skipped.map((s, i) => (
-              <li key={i}>
-                แถวที่ {s.row}: {s.reason}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {result.sample.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>วันที่</th>
-                <th>ทะเบียน</th>
-                <th>พขร.</th>
-                <th className="num">ลิตร</th>
-                <th className="num">บาท/ลิตร</th>
-                <th className="num">จำนวนเงิน</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.sample.map((r, i) => (
-                <tr key={i}>
-                  <td>{r.date}</td>
-                  <td className={r.known ? "" : "text-amber-700"}>
-                    {r.plate} {!r.known && "⚠"}
-                  </td>
-                  <td>{r.driverCode ?? "-"}</td>
-                  <td className="num">{num(r.litres, 2)}</td>
-                  <td className="num">{num(r.pricePerL, 2)}</td>
-                  <td className="num">{baht(r.amount)}</td>
+      ) : (
+        <div className="rounded-lg border border-red-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-900">
+            <b>แถวที่ต้องตรวจสอบ {result.problems.length.toLocaleString("th-TH")} แถว</b>
+            <span className="text-[12px]">
+              ถูกต้องพร้อมบันทึก {result.cleanRows.toLocaleString("th-TH")} แถว (ไม่แสดง)
+            </span>
+          </div>
+          <div className="max-h-[28rem] overflow-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>แถวในไฟล์</th>
+                  <th>วันที่</th>
+                  <th>ทะเบียน</th>
+                  <th>พขร.</th>
+                  <th className="num">ลิตร</th>
+                  <th className="num">บาท/ลิตร</th>
+                  <th className="num">จำนวนเงิน</th>
+                  <th>ปัญหาที่พบ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="px-3 py-2 text-[11px] text-slate-400">แสดงตัวอย่าง {result.sample.length} แถวแรก</p>
+              </thead>
+              <tbody>
+                {result.problems.map((r, i) => {
+                  const bad = (f: string) =>
+                    r.badFields.includes(f as never) ? "bg-red-50 font-semibold text-red-700" : "";
+                  return (
+                    <tr key={i}>
+                      <td className={bad("row")}>{r.row}</td>
+                      <td className={bad("date")}>{r.date}</td>
+                      <td className={bad("plate")}>{r.plate}</td>
+                      <td className={bad("driver")}>{r.driverCode ?? "— ไม่มี —"}</td>
+                      <td className={`num ${bad("litres")}`}>{num(r.litres, 2)}</td>
+                      <td className={`num ${bad("price")}`}>{num(r.pricePerL, 2)}</td>
+                      <td className={`num ${bad("amount")}`}>{baht(r.amount)}</td>
+                      <td className="text-[12px] leading-relaxed">
+                        {r.issues.map((msg, k) => (
+                          <div key={k} className={r.willImport ? "text-amber-700" : "text-red-700"}>
+                            {r.willImport ? "⚠" : "✕"} {msg}
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-red-200 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+            <b className="text-red-700">✕ แดง</b> = แถวนี้จะไม่ถูกบันทึก ·{" "}
+            <b className="text-amber-700">⚠ ส้ม</b> = บันทึกได้ แต่ข้อมูลไม่ครบ อาจไม่เข้ารายงานบางตัว ·
+            ช่องที่ระบายแดงคือช่องที่มีปัญหา — แก้ที่แถวนั้นในไฟล์ต้นทางแล้วอัปโหลดใหม่ได้เลย
+          </p>
         </div>
       )}
+
     </div>
   );
 }

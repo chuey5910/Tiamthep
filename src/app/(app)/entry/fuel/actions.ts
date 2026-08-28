@@ -8,6 +8,9 @@ import { prisma } from "@/lib/prisma";
 import { parseDate } from "@/lib/date";
 import { normalizePlate, parseFuelRows, type FuelSourceKey, type ParsedFuelRow } from "@/lib/fuel-import";
 
+/** ช่องข้อมูลในแถวที่อาจมีปัญหา — ใช้ระบายสีแดงเฉพาะช่องนั้น */
+export type FuelField = "row" | "date" | "plate" | "driver" | "litres" | "amount" | "price";
+
 export type ImportPreview = {
   ok: boolean;
   error?: string;
@@ -23,15 +26,26 @@ export type ImportPreview = {
   unknownPlates: string[];
   unknownDrivers: string[];
   skipped: { row: number; reason: string }[];
-  sample: {
+  /**
+   * เฉพาะแถวที่มีปัญหา — แถวที่ถูกต้องครบถ้วนไม่ต้องแสดง
+   * แสดงครบทุกแถว เพื่อให้แก้ไฟล์ต้นทางได้ในรอบเดียว
+   */
+  problems: {
+    row: number;
     date: string;
     plate: string;
     driverCode: string | null;
     litres: number;
     pricePerL: number;
     amount: number;
-    known: boolean;
+    issues: string[];
+    /** ช่องที่มีปัญหา — หน้าเว็บจะไฮไลต์ช่องเหล่านี้เป็นสีแดง */
+    badFields: FuelField[];
+    /** true = แถวนี้ยังบันทึกได้ (แค่มีข้อควรระวัง) · false = บันทึกไม่ได้ */
+    willImport: boolean;
   }[];
+  /** จำนวนแถวที่ตรวจแล้วไม่มีปัญหา พร้อมบันทึก */
+  cleanRows: number;
   totals: { litres: number; amount: number };
 };
 
@@ -62,7 +76,8 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
     unknownPlates: [],
     unknownDrivers: [],
     skipped: [],
-    sample: [],
+    problems: [],
+    cleanRows: 0,
     totals: { litres: 0, amount: 0 },
   };
 
@@ -111,18 +126,103 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
 
   // กันซ้ำสองชั้น: ซ้ำกับที่เคยนำเข้าไปแล้ว และซ้ำกันเองภายในไฟล์
   // (ไฟล์จริงมีเลขสลิปซ้ำได้ ถ้าปล่อยไปจะชนกฎ unique แล้วทั้งหน้าพัง)
+  //
+  // ระหว่างวนรอบนี้เก็บ "ปัญหารายแถว" ไปด้วย — หน้าเว็บจะโชว์เฉพาะแถวที่มีปัญหา
+  // แถวที่ถูกต้องครบถ้วนไม่ต้องแสดงให้รก
   const seen = new Set<string>();
   const fresh: ParsedFuelRow[] = [];
+  const problems: ImportPreview["problems"] = [];
   let inFileDuplicates = 0;
+  let cleanRows = 0;
+
   for (const r of rows) {
-    if (existingRefs.has(r.refNo)) continue;
-    if (seen.has(r.refNo)) {
+    const issues: string[] = [];
+    const badFields = new Set<FuelField>();
+    let willImport = true;
+
+    if (existingRefs.has(r.refNo)) {
+      issues.push("นำเข้าไปแล้วก่อนหน้านี้ (เลขอ้างอิงซ้ำ)");
+      badFields.add("row");
+      willImport = false;
+    } else if (seen.has(r.refNo)) {
+      issues.push(`เลขอ้างอิง "${r.refNo}" ซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน — เก็บแถวแรกไว้แถวเดียว`);
+      badFields.add("row");
+      willImport = false;
       inFileDuplicates++;
-      continue;
     }
-    seen.add(r.refNo);
-    fresh.push(r);
+
+    // ปัญหาที่ยังนำเข้าได้ แต่ต้องรู้ไว้ เพราะกระทบรายงาน
+    if (!knownPlates.has(r.plate)) {
+      issues.push(`ไม่พบทะเบียน "${r.plate}" ในระบบ — นำเข้าได้ แต่จะไม่เข้ารายงานรายคันจนกว่าจะเพิ่มรถ`);
+      badFields.add("plate");
+    }
+    if (r.driverCode && !knownDrivers.has(r.driverCode)) {
+      issues.push(`ไม่พบรหัสพนักงาน "${r.driverCode}" ในระบบ — จะบันทึกโดยไม่ผูกคนขับ`);
+      badFields.add("driver");
+    }
+    if (!r.driverCode) {
+      issues.push("ไม่มีรหัสพนักงานขับรถ — จะไม่เข้ารายงานรายคนและโบนัสน้ำมัน");
+      badFields.add("driver");
+    }
+    if (!(r.litres > 0)) {
+      issues.push("จำนวนลิตรเป็น 0 หรืออ่านไม่ได้");
+      badFields.add("litres");
+    }
+    if (!(r.amount > 0)) {
+      issues.push("จำนวนเงินเป็น 0 หรืออ่านไม่ได้");
+      badFields.add("amount");
+    }
+    if (!(r.pricePerL > 0)) {
+      issues.push("ราคาต่อลิตรเป็น 0 หรืออ่านไม่ได้");
+      badFields.add("price");
+    }
+
+    if (willImport) {
+      seen.add(r.refNo);
+      fresh.push(r);
+    }
+
+    if (issues.length > 0) {
+      problems.push({
+        row: r.excelRow,
+        date: r.date.toISOString().slice(0, 10),
+        plate: r.plate,
+        driverCode: r.driverCode,
+        litres: r.litres,
+        pricePerL: r.pricePerL,
+        amount: r.amount,
+        issues,
+        badFields: [...badFields],
+        willImport,
+      });
+    } else {
+      cleanRows++;
+    }
   }
+
+  // แถวที่อ่านไม่ได้เลยตั้งแต่ต้น (วันที่เพี้ยน ทะเบียนว่าง ฯลฯ) ก็เป็นปัญหาที่ต้องแก้
+  for (const s of skipped) {
+    // เดาช่องที่ผิดจากข้อความเหตุผล เพื่อระบายสีให้ตรงช่อง
+    const bad: FuelField[] = [];
+    if (s.reason.includes("วันที่")) bad.push("date");
+    if (s.reason.includes("ทะเบียน")) bad.push("plate");
+    if (s.reason.includes("ลิตร")) bad.push("litres");
+    if (s.reason.includes("เงิน")) bad.push("amount");
+    problems.push({
+      row: s.row,
+      date: "-",
+      plate: "-",
+      driverCode: null,
+      litres: 0,
+      pricePerL: 0,
+      amount: 0,
+      issues: [s.reason],
+      badFields: bad.length > 0 ? bad : ["row"],
+      willImport: false,
+    });
+  }
+  problems.sort((a, b) => a.row - b.row);
+
   const duplicates = rows.length - fresh.length;
 
   let imported = 0;
@@ -151,6 +251,8 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
         parsed: rows.length,
         duplicates,
         inFileDuplicates,
+        problems,
+        cleanRows,
         error: `บันทึกลงฐานข้อมูลไม่สำเร็จ: ${e instanceof Error ? e.message.split("\n").slice(-1)[0] : e}`,
         skipped: skipped.slice(0, 20),
       };
@@ -170,15 +272,8 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
     unknownPlates,
     unknownDrivers,
     skipped: skipped.slice(0, 20),
-    sample: fresh.slice(0, 15).map((r) => ({
-      date: r.date.toISOString().slice(0, 10),
-      plate: r.plate,
-      driverCode: r.driverCode,
-      litres: r.litres,
-      pricePerL: r.pricePerL,
-      amount: r.amount,
-      known: knownPlates.has(r.plate),
-    })),
+    problems,
+    cleanRows,
     totals: {
       litres: Math.round(fresh.reduce((a, r) => a + r.litres, 0) * 100) / 100,
       amount: Math.round(fresh.reduce((a, r) => a + r.amount, 0) * 100) / 100,

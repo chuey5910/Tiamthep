@@ -19,6 +19,8 @@ export type ParsedFuelRow = {
   mileage: number | null;
   station: string | null;
   refNo: string;
+  /** เลขแถวในไฟล์ Excel — ไว้บอกผู้ใช้ว่าต้องไปแก้แถวไหน */
+  excelRow: number;
 };
 
 export type ParseReport = {
@@ -196,6 +198,7 @@ export function parseFuelRows(source: FuelSourceKey, table: unknown[][]): ParseR
       mileage: mileageVal > 0 ? mileageVal : null,
       station: toText(col(r, L.station)) || null,
       refNo,
+      excelRow,
     });
   }
 
