@@ -280,6 +280,8 @@ model TravelAdvance {
   /// ค่าทางด่วนที่ พขร. จ่ายจริง (บวกคืนให้)
   toll       Float    @default(0)
   note       String?
+  /// รหัสงานจากชีตสั่งงานไลน์ — unique กันดึงรายการเดิมเข้าซ้ำ (1 งาน = 1 แถวเงินเดินทาง)
+  sheetRef   String?  @unique
 
   @@index([date])
   @@index([driverCode, date])

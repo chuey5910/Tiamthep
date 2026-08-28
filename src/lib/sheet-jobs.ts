@@ -30,9 +30,10 @@ const C = {
   id: 0, date: 1, driver: 2, head: 4, trailer: 5, customer: 6,
   origin: 7, dest: 8, cargo: 9, note: 10, status: 11,
   ticketNoOrigin: 13, wOrigin: 14, ticketNoDest: 16, wDest: 17,
+  toll: 19, advance: 20,
 } as const;
 const STATUS_COL = "L"; // = index 11
-const RESULT_COL = "T"; // = index 19
+const RESULT_COL = "V"; // = index 21
 
 const ST = {
   CONFIRMED: "ยืนยัน",
@@ -175,6 +176,28 @@ async function importRow(
     (row[C.note] ?? "").trim(),
   ].filter(Boolean).join(" · ") || null;
 
+  // เงินเดินทาง/ค่าทางด่วนที่ออฟฟิศกรอกในชีต → ลงหน้า «เงินเดินทาง / ค่าทางด่วน» ของเว็บ
+  // upsert ตามรหัสงาน (unique) — ดึงซ้ำไม่เกิดรายการซ้ำ และแก้ยอดในชีตแล้วดึงใหม่ ยอดตามให้
+  const toll = numOrNull(row[C.toll] ?? "") ?? 0;
+  const advance = numOrNull(row[C.advance] ?? "") ?? 0;
+  const saveAdvance = async () => {
+    if (toll <= 0 && advance <= 0) return "";
+    await prisma.travelAdvance.upsert({
+      where: { sheetRef: jobId },
+      update: { advance, toll, date, plate: headPlate, driverCode: driverCode ?? "" },
+      create: {
+        sheetRef: jobId,
+        date,
+        plate: headPlate,
+        driverCode: driverCode ?? "",
+        advance,
+        toll,
+        note: `จากชีตสั่งงาน ${jobId}`,
+      },
+    });
+    return " + เงินเดินทาง/ทางด่วน";
+  };
+
   try {
     const job = await prisma.job.create({
       data: {
@@ -195,12 +218,14 @@ async function importRow(
         sheetRef: jobId,
       },
     });
+    const advNote = await saveAdvance();
     const routeNote = route ? "" : " (ยังจับคู่เส้นทางไม่ได้ — ไปเลือกในหน้า บันทึกงานขนส่ง)";
-    return { ok: true, message: `เว็บ #${job.id}${routeNote}` };
+    return { ok: true, message: `เว็บ #${job.id}${advNote}${routeNote}` };
   } catch (e) {
     // รหัสงานนี้เคยนำเข้าแล้ว (unique ชน) — ถือว่าสำเร็จ ไม่ให้เกิดซ้ำ
     if (e instanceof Error && e.message.includes("sheetRef")) {
       const existing = await prisma.job.findUnique({ where: { sheetRef: jobId } });
+      await saveAdvance().catch(() => "");
       return { ok: true, message: `นำเข้าไว้ก่อนแล้ว (เว็บ #${existing?.id ?? "?"})` };
     }
     return { ok: false, message: e instanceof Error ? e.message.slice(0, 200) : "บันทึกไม่สำเร็จ" };
