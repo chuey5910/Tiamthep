@@ -229,6 +229,16 @@ export type JobInput = {
   routeId: number | null;
 };
 
+/** ช่องข้อมูลในตารางงานที่อาจมีปัญหา */
+export type JobField =
+  | "plate"
+  | "driver"
+  | "route"
+  | "weight"
+  | "price"
+  | "revenue"
+  | "outsource";
+
 export type JobCalc = {
   jobId: number;
   /** วันที่ที่ใช้เรียกเก็บเงิน (ขึ้นหรือลงสินค้า ตามเกณฑ์ของลูกค้า) */
@@ -257,17 +267,24 @@ export type JobCalc = {
   outsourcePay: number;
   /** คำเตือนที่ต้องให้ผู้ใช้แก้ไข */
   issues: string[];
+  /** ช่องที่เป็นต้นเหตุของคำเตือน — หน้าเว็บใช้ระบายสีแดงเฉพาะช่องนั้น */
+  badFields: JobField[];
 };
 
 export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const issues: string[] = [];
+  const badFieldSet = new Set<JobField>();
+  const flag = (field: JobField, message: string) => {
+    badFieldSet.add(field);
+    issues.push(message);
+  };
   const customer = ctx.customerById.get(job.customerId);
   const vehicle = ctx.vehicleByPlate.get(job.headPlate.trim());
 
   const ownerType = vehicle?.ownerType ?? "รถบริษัท";
   const partnerName = vehicle?.partner?.name ?? null;
   const vehicleType = vehicle?.vehicleType ?? null;
-  if (!vehicle) issues.push(`ไม่พบทะเบียน ${job.headPlate} ในฐานข้อมูลรถ`);
+  if (!vehicle) flag("plate", `ไม่พบทะเบียน ${job.headPlate} ในฐานข้อมูลรถ`);
 
   // วันที่เรียกเก็บเงิน: ส่วนใหญ่ใช้วันขึ้นสินค้า มีบางรายใช้วันลงสินค้า
   const billingDate =
@@ -278,17 +295,17 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   if (!route && vehicleType) {
     route = ctx.routeByKey.get(routeKey(job.origin, job.destination, vehicleType)) ?? null;
   }
-  if (!route) issues.push(`ไม่พบเส้นทาง ${job.origin} → ${job.destination} (${vehicleType ?? "ไม่ทราบประเภทรถ"})`);
+  if (!route) flag("route", `ไม่พบเส้นทาง ${job.origin} → ${job.destination} (${vehicleType ?? "ไม่ทราบประเภทรถ"})`);
 
   const driverCode =
     job.driverCode ?? resolveDriver(ctx.pairings, job.headPlate, job.trailerPlate, job.loadDate);
   if (!driverCode && ownerType !== "รถร่วม") {
-    issues.push("ไม่พบข้อมูลจับคู่ พขร. — ให้เพิ่มแถวในหน้าจับคู่รถ");
+    flag("driver", "ไม่พบข้อมูลจับคู่ พขร. — ให้เพิ่มแถวในหน้าจับคู่รถ");
   }
 
   // ราคาน้ำมันอ้างอิงตามเกณฑ์ของลูกค้า
   const referencePrice = resolveReferencePrice(ctx.fuelPrices, customer?.fuelBasis ?? null, billingDate);
-  if (referencePrice == null) issues.push("ยังไม่มีราคาน้ำมันอ้างอิงสำหรับช่วงวันที่นี้");
+  if (referencePrice == null) flag("price", "ยังไม่มีราคาน้ำมันอ้างอิงสำหรับช่วงวันที่นี้");
 
   const band = bandFor(ctx.bands, referencePrice);
 
@@ -297,7 +314,7 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const billingWeight =
     (weightBasis === "น้ำหนักต้นทาง" ? job.weightOrigin : job.weightDest) ?? 0;
   if (priceUnit === "ต่อตัน" && billingWeight <= 0) {
-    issues.push(`เส้นทางนี้คิดราคาต่อตัน แต่ยังไม่ได้กรอก${weightBasis}`);
+    flag("weight", `เส้นทางนี้คิดราคาต่อตัน แต่ยังไม่ได้กรอก${weightBasis}`);
   }
 
   const rp = route && band ? ctx.priceByRoute.get(route.id)?.get(band.id) ?? null : null;
@@ -305,7 +322,7 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const outsourceRate = rp?.outsourcePrice ?? null;
 
   if (route && band && customerRate == null) {
-    issues.push(`ยังไม่ได้ตั้งราคาลูกค้าของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
+    flag("revenue", `ยังไม่ได้ตั้งราคาลูกค้าของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
   }
 
   const multiplier = priceUnit === "ต่อตัน" ? billingWeight : 1;
@@ -313,7 +330,7 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
 
   const isOutsource = ownerType === "รถร่วม";
   if (isOutsource && route && band && outsourceRate == null) {
-    issues.push(`ยังไม่ได้ตั้งราคาจ่ายรถร่วมของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
+    flag("outsource", `ยังไม่ได้ตั้งราคาจ่ายรถร่วมของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
   }
   const outsourcePay = isOutsource && outsourceRate != null ? round2(outsourceRate * multiplier) : 0;
 
@@ -347,6 +364,7 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
     outsourceRate,
     outsourcePay,
     issues,
+    badFields: [...badFieldSet],
   };
 }
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { DateRangeFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
 import { formatThaiDate, toInputDate } from "@/lib/date";
@@ -13,6 +14,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const { from, to, fromStr, toStr } = readRange(sp);
   const editId = typeof sp.edit === "string" ? Number(sp.edit) : null;
+  // ?problems=1 = แสดงเฉพาะขาที่ข้อมูลยังไม่ครบ (เหมือนหน้านำเข้าน้ำมัน)
+  const onlyProblems = sp.problems === "1";
 
   const [vehiclesRaw, customers, locations, cargoTypes, jobs, ctx] = await Promise.all([
     prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: "asc" } }),
@@ -31,6 +34,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
   const customerById = new Map(customers.map((c) => [c.id, c]));
   const calcs = jobs.map((j) => ({ job: j, calc: computeJob(ctx, j) }));
+  const shown = onlyProblems ? calcs.filter((x) => x.calc.issues.length > 0) : calcs;
 
   const totals = {
     legs: calcs.length,
@@ -106,9 +110,29 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         />
       </div>
 
+      <div className="no-print mb-2 flex flex-wrap items-center gap-2">
+        <Link
+          href={`?from=${fromStr}&to=${toStr}`}
+          className={`btn px-3 py-1 text-[12px] ${onlyProblems ? "btn-ghost" : "btn-primary"}`}
+        >
+          ทุกขา ({calcs.length})
+        </Link>
+        <Link
+          href={`?from=${fromStr}&to=${toStr}&problems=1`}
+          className={`btn px-3 py-1 text-[12px] ${onlyProblems ? "btn-primary" : "btn-ghost"}`}
+        >
+          เฉพาะขาที่ต้องแก้ ({totals.issues})
+        </Link>
+        {onlyProblems && (
+          <span className="text-[12px] text-slate-500">
+            ซ่อนขาที่ข้อมูลครบถ้วนแล้ว {calcs.length - totals.issues} ขา
+          </span>
+        )}
+      </div>
+
       <Card bodyClass="p-0">
-        {calcs.length === 0 ? (
-          <Empty>ยังไม่มีงานในช่วงวันที่นี้</Empty>
+        {shown.length === 0 ? (
+          <Empty>{onlyProblems ? "ไม่มีขาที่ต้องแก้ในช่วงนี้ — ข้อมูลครบทุกขา" : "ยังไม่มีงานในช่วงวันที่นี้"}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="tbl">
@@ -131,17 +155,20 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                 </tr>
               </thead>
               <tbody>
-                {calcs.map(({ job, calc }) => {
+                {shown.map(({ job, calc }) => {
                   const customer = customerById.get(job.customerId);
+                  // ระบายแดงเฉพาะช่องที่เป็นต้นเหตุ ให้เห็นตำแหน่งที่ต้องแก้ทันที
+                  const bad = (f: string) =>
+                    calc.badFields.includes(f as never) ? " bg-red-50 font-semibold text-red-700" : "";
                   return (
                     <tr key={job.id}>
                       <td className="whitespace-nowrap">{formatThaiDate(job.loadDate)}</td>
                       <td className="font-mono text-[11px] text-slate-500">{job.tripCode}</td>
-                      <td className="whitespace-nowrap font-medium">
+                      <td className={`whitespace-nowrap font-medium${bad("plate")}`}>
                         {job.headPlate}
                         {job.trailerPlate && <span className="text-slate-400"> + {job.trailerPlate}</span>}
                       </td>
-                      <td>
+                      <td className={bad("driver") + bad("outsource")}>
                         {calc.ownerType === "รถร่วม" ? (
                           <Badge tone="info">{calc.partnerName ?? "รถร่วม"}</Badge>
                         ) : (
@@ -149,10 +176,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                         )}
                       </td>
                       <td>{customer?.code ?? "-"}</td>
-                      <td className="whitespace-nowrap">
+                      <td className={`whitespace-nowrap${bad("route")}`}>
                         {job.origin} → {job.destination}
                       </td>
-                      <td className="num">
+                      <td className={`num${bad("weight")}`}>
                         {num(calc.billingWeight, 2)}
                         <span className="ml-1 text-[10px] text-slate-400">
                           {customer?.weightBasis === "น้ำหนักต้นทาง" ? "ต้นทาง" : "ปลายทาง"}
@@ -161,7 +188,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                       <td className="num text-slate-500">{calc.distanceKm != null ? `${num(calc.distanceKm, 0)} กม.` : "-"}</td>
                       <td className="num text-slate-500">{calc.kpiLitres != null ? `${num(calc.kpiLitres, 1)} ล.` : "-"}</td>
                       <td className="num text-slate-500">{calc.allowance ? baht(calc.allowance) : "-"}</td>
-                      <td className="whitespace-nowrap text-[12px] text-slate-500">
+                      <td className={`whitespace-nowrap text-[12px] text-slate-500${bad("price")}`}>
                         {calc.referencePrice != null ? (
                           <>
                             {num(calc.referencePrice, 2)} บ./ล.
@@ -172,14 +199,16 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                           "-"
                         )}
                       </td>
-                      <td className="num font-semibold">{baht(calc.revenue)}</td>
+                      <td className={`num font-semibold${bad("revenue")}`}>{baht(calc.revenue)}</td>
                       <td>
                         {calc.issues.length === 0 ? (
                           <Badge tone="ok">ครบ</Badge>
                         ) : (
-                          <span title={calc.issues.join("\n")}>
-                            <Badge tone="error">{calc.issues.length} ปัญหา</Badge>
-                          </span>
+                          <div className="min-w-52 space-y-0.5 text-[11px] leading-relaxed text-red-700">
+                            {calc.issues.map((msg, k) => (
+                              <div key={k}>✕ {msg}</div>
+                            ))}
+                          </div>
                         )}
                       </td>
                       <td className="no-print">
