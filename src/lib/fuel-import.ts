@@ -19,6 +19,8 @@ export type ParsedFuelRow = {
   mileage: number | null;
   station: string | null;
   refNo: string;
+  /** true = ไฟล์ไม่มีเลขกันซ้ำในแถวนี้ ระบบสร้างให้ชั่วคราว */
+  refMissing: boolean;
   /** เลขแถวในไฟล์ Excel — ไว้บอกผู้ใช้ว่าต้องไปแก้แถวไหน */
   excelRow: number;
 };
@@ -41,6 +43,8 @@ const LAYOUTS: Record<
     driver: number;
     /** ชื่อคนขับอยู่ในรูป "D001 สมชาย ใจดี" ต้องตัดเอาเฉพาะรหัส */
     driverIsCombined: boolean;
+    /** ชื่อคอลัมน์ที่ใช้กันข้อมูลซ้ำ — เอาไว้เขียนข้อความแจ้งผู้ใช้ */
+    refLabel: string;
     litres: number;
     pricePerL: number;
     amount: number;
@@ -66,7 +70,9 @@ const LAYOUTS: Record<
     litres: 17,
     pricePerL: 18,
     amount: 19,
-    refNo: 2,
+    // กันซ้ำที่ "รายการที่" — หมายเลขสลิปของปั๊มในบริษัทซ้ำกันได้ ใช้กันซ้ำไม่ได้
+    refNo: 3,
+    refLabel: "รายการที่",
   },
   FleetCard: {
     label: "Fleet Card ปั๊มภายนอก",
@@ -82,7 +88,9 @@ const LAYOUTS: Record<
     pricePerL: 20,
     litres: 21,
     amount: 26,
+    // กันซ้ำที่ TRANSACTION_ID
     refNo: 2,
+    refLabel: "TRANSACTION_ID",
     statusCol: 27,
     statusOk: "สำเร็จ",
   },
@@ -93,7 +101,13 @@ export function fuelLayouts() {
     key: k,
     label: LAYOUTS[k].label,
     describe: LAYOUTS[k].describe,
+    refLabel: LAYOUTS[k].refLabel,
   }));
+}
+
+/** ชื่อคอลัมน์ที่ใช้กันข้อมูลซ้ำของรูปแบบไฟล์นั้น */
+export function refLabelOf(source: FuelSourceKey): string {
+  return LAYOUTS[source].refLabel;
 }
 
 function toNumber(v: unknown): number {
@@ -183,8 +197,11 @@ export function parseFuelRows(source: FuelSourceKey, table: unknown[][]): ParseR
     if (amount <= 0 && litres > 0 && pricePerL > 0) amount = Math.round(litres * pricePerL * 100) / 100;
     if (pricePerL <= 0 && litres > 0 && amount > 0) pricePerL = Math.round((amount / litres) * 100) / 100;
 
+    // เลขที่ใช้กันซ้ำ ("รายการที่" หรือ TRANSACTION_ID) — ถ้าไฟล์ไม่มี
+    // สร้างเลขจากตัวข้อมูลแทน เพื่อยังนำเข้าได้ แต่จะเตือนในผลตรวจสอบ
     const refRaw = toText(col(r, L.refNo));
     const refNo = refRaw || `${source}-${plate}-${date.toISOString().slice(0, 10)}-${excelRow}`;
+    const refMissing = !refRaw;
 
     const mileageVal = toNumber(col(r, L.mileage));
 
@@ -198,6 +215,7 @@ export function parseFuelRows(source: FuelSourceKey, table: unknown[][]): ParseR
       mileage: mileageVal > 0 ? mileageVal : null,
       station: toText(col(r, L.station)) || null,
       refNo,
+      refMissing,
       excelRow,
     });
   }

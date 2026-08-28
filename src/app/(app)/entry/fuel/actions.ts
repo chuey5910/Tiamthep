@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { parseDate } from "@/lib/date";
-import { normalizePlate, parseFuelRows, type FuelSourceKey, type ParsedFuelRow } from "@/lib/fuel-import";
+import { normalizePlate, parseFuelRows, refLabelOf, type FuelSourceKey, type ParsedFuelRow } from "@/lib/fuel-import";
 
 /** ช่องข้อมูลในแถวที่อาจมีปัญหา — ใช้ระบายสีแดงเฉพาะช่องนั้น */
 export type FuelField = "row" | "date" | "plate" | "driver" | "litres" | "amount" | "price";
@@ -135,20 +135,27 @@ export async function importFuelFile(form: FormData): Promise<ImportPreview> {
   let inFileDuplicates = 0;
   let cleanRows = 0;
 
+  const refLabel = refLabelOf(source);
+
   for (const r of rows) {
     const issues: string[] = [];
     const badFields = new Set<FuelField>();
     let willImport = true;
 
     if (existingRefs.has(r.refNo)) {
-      issues.push("นำเข้าไปแล้วก่อนหน้านี้ (เลขอ้างอิงซ้ำ)");
+      issues.push(`นำเข้าไปแล้วก่อนหน้านี้ (${refLabel} "${r.refNo}" ซ้ำกับข้อมูลในระบบ)`);
       badFields.add("row");
       willImport = false;
     } else if (seen.has(r.refNo)) {
-      issues.push(`เลขอ้างอิง "${r.refNo}" ซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน — เก็บแถวแรกไว้แถวเดียว`);
+      issues.push(`${refLabel} "${r.refNo}" ซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน — เก็บแถวแรกไว้แถวเดียว`);
       badFields.add("row");
       willImport = false;
       inFileDuplicates++;
+    }
+
+    if (r.refMissing) {
+      issues.push(`ไม่มี${refLabel}ในแถวนี้ — ระบบสร้างเลขให้ชั่วคราว ถ้านำเข้าไฟล์นี้ซ้ำอาจได้ข้อมูลซ้ำ`);
+      badFields.add("row");
     }
 
     // ปัญหาที่ยังนำเข้าได้ แต่ต้องรู้ไว้ เพราะกระทบรายงาน

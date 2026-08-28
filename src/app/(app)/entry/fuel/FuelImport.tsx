@@ -6,7 +6,11 @@ import { addFuelEntry, deleteFuelEntry, importFuelFile, type ImportPreview } fro
 import type { Option } from "@/lib/crud";
 import { baht, num } from "@/lib/format";
 
-export function FuelImportForm({ layouts }: { layouts: { key: string; label: string; describe: string }[] }) {
+export function FuelImportForm({
+  layouts,
+}: {
+  layouts: { key: string; label: string; describe: string; refLabel: string }[];
+}) {
   const router = useRouter();
   const [result, setResult] = useState<ImportPreview | null>(null);
   const [pending, start] = useTransition();
@@ -40,7 +44,13 @@ export function FuelImportForm({ layouts }: { layouts: { key: string; label: str
           </div>
         </div>
 
-        {active && <p className="mt-2 text-[11px] leading-relaxed text-slate-500">ลำดับคอลัมน์ที่ระบบคาดหวัง — {active.describe}</p>}
+        {active && (
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            ลำดับคอลัมน์ที่ระบบคาดหวัง — {active.describe}
+            <br />
+            <b>กันข้อมูลซ้ำด้วยคอลัมน์ &laquo;{active.refLabel}&raquo;</b> — นำเข้าไฟล์เดิมซ้ำได้ ระบบจะข้ามรายการที่มีอยู่แล้ว
+          </p>
+        )}
 
         <label className="mt-3 flex items-center gap-2 text-[13px] text-slate-700">
           <input type="checkbox" name="commit" className="h-4 w-4 rounded" />
@@ -82,7 +92,7 @@ function ImportResult({ result }: { result: ImportPreview }) {
         อ่านได้ {result.parsed.toLocaleString("th-TH")} แถว · ซ้ำ{" "}
         {result.duplicates.toLocaleString("th-TH")} แถว
         {result.inFileDuplicates > 0 && (
-          <> (ในนี้ {result.inFileDuplicates.toLocaleString("th-TH")} แถวเป็นเลขสลิปซ้ำกันเองในไฟล์ — เก็บแถวแรกไว้)</>
+          <> (ในนี้ {result.inFileDuplicates.toLocaleString("th-TH")} แถวซ้ำกันเองในไฟล์ — เก็บแถวแรกไว้)</>
         )}
         {result.dryRun ? (
           <> · จะนำเข้าใหม่ {(result.parsed - result.duplicates).toLocaleString("th-TH")} แถว</>
