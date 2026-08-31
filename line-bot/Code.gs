@@ -273,14 +273,29 @@ function sendMorningJobs() {
     var driverMap = driverLineIds_(); // รหัสคนขับ → {userId, name}
 
     // จัดกลุ่มงานพรุ่งนี้ (และงานวันนี้ที่ตกค้าง) สถานะ «สั่งงาน» แยกรายคนขับ
+    // แถวที่ตกเงื่อนไขให้นับเหตุผลไว้ด้วย — จะได้บอกออฟฟิศได้ว่าทำไมไม่มีอะไรถูกส่ง
     var byDriver = {}; // code → [{row, values}]
+    var skip = { past: 0, future: 0, badDate: 0, noDriver: 0, pastSample: "", futureSample: "" };
     data.forEach(function (v, i) {
       if (String(v[JC.STATUS - 1]) !== ST.NEW) return;
       var ds = dateStr_(v[JC.DATE - 1]);
-      if (ds !== tomorrow && ds !== today) return;
+      if (ds !== tomorrow && ds !== today) {
+        if (!ds) skip.badDate++;
+        else if (ds < today) {
+          skip.past++;
+          if (!skip.pastSample) skip.pastSample = thaiDateOfYmd_(ds);
+        } else {
+          skip.future++;
+          if (!skip.futureSample) skip.futureSample = thaiDateOfYmd_(ds);
+        }
+        return;
+      }
       // แปลงเป็นตัวใหญ่เสมอ — ทะเบียนคนขับเก็บแบบตัวใหญ่ พิมพ์ d001/D001/admin ก็ต้องเจอ
       var code = String(v[JC.DRIVER - 1]).trim().toUpperCase();
-      if (!code) return;
+      if (!code) {
+        skip.noDriver++;
+        return;
+      }
       (byDriver[code] = byDriver[code] || []).push({ row: i + 2, v: v });
     });
 
@@ -309,7 +324,33 @@ function sendMorningJobs() {
     if (problems.length) {
       notifyAdmin_("⚠ แจ้งงานรอบนี้มีปัญหา:\n" + problems.join("\n") + "\n\nแก้แล้วกดเมนู «ส่งแจ้งงานที่ค้างเดี๋ยวนี้» เพื่อส่งซ้ำได้ (ไม่ส่งซ้ำคนที่ได้รับแล้ว)");
     }
-    log_("INFO", "แจ้งงานล่วงหน้า: คนขับ " + Object.keys(byDriver).length + " คน ปัญหา " + problems.length + " รายการ");
+
+    // สรุปเหตุผลของแถวที่ไม่ถูกส่ง — ปัญหาที่เจอบ่อยสุดคือลงวันที่ผิด แล้วระบบเงียบจนคิดว่าพัง
+    var skipped = [];
+    if (skip.past) skipped.push("• " + skip.past + " แถว วันที่เป็นอดีต (เช่น " + skip.pastSample + ") — ระบบแจ้งเฉพาะงานวันนี้/พรุ่งนี้");
+    if (skip.future) skipped.push("• " + skip.future + " แถว วันที่ไกลเกินพรุ่งนี้ (เช่น " + skip.futureSample + ") — จะถูกแจ้งเองในเย็นวันก่อนหน้างาน");
+    if (skip.badDate) skipped.push("• " + skip.badDate + " แถว อ่านวันที่ไม่ออก — พิมพ์ใหม่เป็น 01/09/2569 (ต้องมี / ครบ 2 ตัว)");
+    if (skip.noDriver) skipped.push("• " + skip.noDriver + " แถว ยังไม่ได้เลือกรหัสคนขับ");
+
+    var sentDrivers = Object.keys(byDriver).length - problems.length;
+    log_("INFO", "แจ้งงานล่วงหน้า: คนขับ " + Object.keys(byDriver).length + " คน ปัญหา " + problems.length +
+      " รายการ" + (skipped.length ? " · ข้าม: อดีต " + skip.past + " / อนาคต " + skip.future +
+      " / วันที่ผิด " + skip.badDate + " / ไม่มีคนขับ " + skip.noDriver : ""));
+
+    // กดจากเมนู = มีหน้าจอให้ตอบกลับ (ทริกเกอร์ตามเวลาไม่มี UI จึงต้องครอบ try)
+    try {
+      var msg = sentDrivers > 0
+        ? "✅ ส่งแจ้งงานแล้ว " + sentDrivers + " คน"
+        : "ไม่มีงานที่ต้องแจ้งในรอบนี้";
+      if (problems.length) msg += "\n\n⚠ ส่งไม่สำเร็จ:\n" + problems.join("\n");
+      if (skipped.length) msg += "\n\nแถวสถานะ «สั่งงาน» ที่ไม่เข้าเงื่อนไข:\n" + skipped.join("\n");
+      if (sentDrivers === 0 && !problems.length && !skipped.length) {
+        msg += "\n(ไม่พบแถวสถานะ «สั่งงาน» ที่ค้างอยู่ — งานอาจถูกแจ้งไปแล้วทั้งหมด)";
+      }
+      SpreadsheetApp.getUi().alert(msg);
+    } catch (e) {
+      // เรียกจากตัวตั้งเวลา ไม่มีหน้าจอ — ข้ามไป (ผลอยู่ในแท็บ LOG แล้ว)
+    }
   } finally {
     lock.releaseLock();
   }
