@@ -7,7 +7,7 @@
  * กติกาที่เคาะร่วมกับออฟฟิศ (27 ส.ค. 2569):
  *  • "ราคาต่อเที่ยว" ในไฟล์ = เบี้ยเลี้ยงจ่ายคนขับต่อเที่ยว → ลงช่อง allowance
  *  • ชื่อที่สะกดสองแบบ ใช้: "ไทยเปเปอร์มิลล์" และ "ท่าเรือ สยามคอมเมอเชียล"
- *  • แถวที่ไม่ระบุประเภทรถ = "รถดั๊มพ์"
+ *  • แถวที่ไม่ระบุประเภทรถ = "รถดั๊ม" (สะกดให้ตรงกับทะเบียนรถในระบบ)
  *  • จำนวนเชื้อเพลิง (ลิตร) → แปลงเป็นอัตราสิ้นเปลืองเป้าหมาย กม./ลิตร (= ระยะทาง ÷ ลิตร)
  *
  * รันซ้ำได้เสมอ: ใช้ upsert ตามคีย์ (ต้นทาง+ปลายทาง+ประเภทรถ) — ไม่มีทางเกิดเส้นทางซ้ำ
@@ -17,6 +17,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadEnv } from "./load-env";
+import { normalizeVehicleType } from "../src/lib/vehicle-type";
 
 loadEnv();
 
@@ -55,7 +56,8 @@ async function main() {
   for (const r of rows) {
     const origin = fixName(r.origin);
     const destination = fixName(r.dest);
-    const vehicleType = r.vtype.trim() || "รถดั๊มพ์";
+    // สะกดให้ตรงกับทะเบียนรถเสมอ ไม่งั้นงานจะจับคู่เส้นทางไม่เจอ
+    const vehicleType = normalizeVehicleType(r.vtype) || "รถดั๊ม";
 
     if (!origin || !destination) {
       warnings.push(`แถว ${r.no}: ต้นทาง/ปลายทางว่าง — ข้าม`);
@@ -88,7 +90,7 @@ async function main() {
   }
 
   // เติมประเภทรถที่ยังไม่มีในรายการตัวเลือก (dropdown หน้าข้อมูลรถ/เส้นทาง)
-  const types = [...new Set(rows.map((r) => r.vtype.trim() || "รถดั๊มพ์"))];
+  const types = [...new Set(rows.map((r) => normalizeVehicleType(r.vtype) || "รถดั๊ม"))];
   for (const value of types) {
     await prisma.lookup.upsert({
       where: { kind_value: { kind: "vehicleType", value } },

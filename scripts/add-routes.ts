@@ -2,7 +2,8 @@
  * เพิ่มเส้นทาง (ต้นทาง → ปลายทาง) เข้าระบบจากไฟล์ data/extra-routes.json
  *
  *   npm run routes:add                 เพิ่มเส้นทางตามไฟล์
- *   npm run routes:add -- --merge-dump รวมเส้นทางประเภท "รถดั๊มพ์" เข้ากับ "รถดั๊ม" ด้วย
+ *   npm run routes:add -- --merge-dump แก้คำสะกดประเภทรถให้เป็นแบบเดียวกันทั้งระบบด้วย
+ *                                     (เช่น "รถดั๊มพ์" → "รถดั๊ม" ทั้งเส้นทางและทะเบียนรถ)
  *
  * ต้องมีเส้นทางใหม่ก็เพิ่มบรรทัดในไฟล์ JSON แล้วรันซ้ำได้เลย รันกี่รอบก็ไม่เกิดเส้นทางซ้ำ
  * (คีย์คือ ต้นทาง + ปลายทาง + ประเภทรถ)
@@ -14,6 +15,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadEnv } from "./load-env";
+import { VEHICLE_TYPE_ALIASES, normalizeVehicleType } from "../src/lib/vehicle-type";
 
 loadEnv();
 
@@ -48,7 +50,7 @@ async function main() {
   for (const r of rows) {
     const origin = clean(r.origin);
     const destination = clean(r.destination);
-    const vehicleType = clean(r.vehicleType);
+    const vehicleType = normalizeVehicleType(r.vehicleType);
     if (!origin || !destination || !vehicleType) {
       console.log(`  ⚠ ข้าม: ${origin || "(ว่าง)"} → ${destination || "(ว่าง)"} ข้อมูลไม่ครบ`);
       continue;
@@ -117,88 +119,114 @@ async function main() {
   );
   console.log(`สถานที่ในรายการตัวเลือก: ตรวจ/เพิ่มแล้ว ${places.size} ชื่อ`);
 
-  if (mergeDump) await mergeDumpType(prisma);
-  else await reportDumpType(prisma);
+  if (mergeDump) await mergeAliasTypes(prisma);
+  else await reportAliasTypes(prisma);
 
   console.log("\nขั้นถัดไป: เปิดเว็บ ฐานข้อมูล → เส้นทาง ระยะทาง ราคา");
   console.log("เพื่อกรอกระยะทาง เบี้ยเลี้ยง และราคาตามช่วงน้ำมันของเส้นทางที่เพิ่งเพิ่ม");
 }
 
-/** แจ้งเตือนเฉยๆ ว่ามีเส้นทางที่ประเภทรถสะกดไม่ตรงกับทะเบียนรถจริง */
-async function reportDumpType(prisma: typeof import("../src/lib/prisma").prisma) {
-  const stale = await prisma.route.count({ where: { vehicleType: "รถดั๊มพ์" } });
-  if (stale === 0) return;
-  console.log(`\n⚠ พบเส้นทางประเภท "รถดั๊มพ์" อยู่ ${stale} เส้นทาง`);
-  console.log('  แต่ทะเบียนรถในระบบใช้คำว่า "รถดั๊ม" (ไม่มี พ์) — เส้นทางกลุ่มนี้จึงไม่ถูกจับคู่กับงาน');
-  console.log("  ถ้าต้องการรวมให้เป็นคำเดียวกัน ให้รัน:  npm run routes:add -- --merge-dump");
+const ALIASES = Object.entries(VEHICLE_TYPE_ALIASES);
+
+/** แจ้งเตือนเฉยๆ ว่ามีประเภทรถที่สะกดคนละแบบกับทะเบียนรถค้างอยู่ */
+async function reportAliasTypes(prisma: typeof import("../src/lib/prisma").prisma) {
+  for (const [alias, correct] of ALIASES) {
+    const routes = await prisma.route.count({ where: { vehicleType: alias } });
+    const vehicles = await prisma.vehicle.count({ where: { vehicleType: alias } });
+    if (routes === 0 && vehicles === 0) continue;
+    console.log(`\n⚠ พบคำสะกด "${alias}" ค้างอยู่ — เส้นทาง ${routes} เส้น · รถ ${vehicles} คัน`);
+    console.log(`  ระบบยึดคำว่า "${correct}" ของที่สะกดคนละแบบจึงจับคู่งานกับเส้นทางไม่ได้`);
+    console.log("  แก้ให้เหมือนกันทั้งหมดด้วย:  npm run routes:add -- --merge-dump");
+  }
 }
 
-/** รวมเส้นทาง "รถดั๊มพ์" เข้ากับ "รถดั๊ม" ให้ตรงกับประเภทรถที่ใช้จริงในทะเบียนรถ */
-async function mergeDumpType(prisma: typeof import("../src/lib/prisma").prisma) {
-  const stale = await prisma.route.findMany({ where: { vehicleType: "รถดั๊มพ์" } });
-  if (stale.length === 0) {
-    console.log('\nไม่มีเส้นทางประเภท "รถดั๊มพ์" ค้างอยู่ — ข้ามการรวม');
-    return;
-  }
-
+/**
+ * แก้คำสะกดประเภทรถให้เป็นแบบเดียวกันทั้งระบบ
+ * ถ้ามีเส้นทางเดิมที่สะกดถูกอยู่แล้ว จะรวมเข้าด้วยกันโดยยกราคาและงานที่ผูกไว้ไปให้ครบ
+ */
+async function mergeAliasTypes(prisma: typeof import("../src/lib/prisma").prisma) {
   let renamed = 0;
   let merged = 0;
+  let vehiclesFixed = 0;
 
-  for (const old of stale) {
-    const twin = await prisma.route.findUnique({
-      where: {
-        origin_destination_vehicleType: {
-          origin: old.origin,
-          destination: old.destination,
-          vehicleType: "รถดั๊ม",
-        },
-      },
-    });
+  for (const [alias, correct] of ALIASES) {
+    const stale = await prisma.route.findMany({ where: { vehicleType: alias } });
 
-    if (!twin) {
-      // ไม่มีคู่แฝด — เปลี่ยนชื่อประเภทรถได้เลย ราคาที่ผูกไว้ติดไปด้วย
-      await prisma.route.update({ where: { id: old.id }, data: { vehicleType: "รถดั๊ม" } });
-      renamed++;
-      continue;
-    }
-
-    // มีทั้งสองแบบ — ยกค่าที่ตัวใหม่ยังว่างมาจากตัวเก่า แล้วลบตัวเก่าทิ้ง
-    const patch: Record<string, unknown> = {};
-    if (twin.distanceKm == null && old.distanceKm != null) patch.distanceKm = old.distanceKm;
-    if (twin.targetKmPerL == null && old.targetKmPerL != null) patch.targetKmPerL = old.targetKmPerL;
-    if (!twin.allowance && old.allowance) patch.allowance = old.allowance;
-    if (Object.keys(patch).length > 0) {
-      await prisma.route.update({ where: { id: twin.id }, data: patch });
-    }
-
-    // ย้ายราคาตามช่วงน้ำมันที่ตัวใหม่ยังไม่มี แล้วค่อยลบเส้นทางเก่า
-    const oldPrices = await prisma.routePrice.findMany({ where: { routeId: old.id } });
-    for (const p of oldPrices) {
-      const exists = await prisma.routePrice.findUnique({
-        where: { routeId_bandId: { routeId: twin.id, bandId: p.bandId } },
-      });
-      if (!exists) {
-        await prisma.routePrice.create({
-          data: {
-            routeId: twin.id,
-            bandId: p.bandId,
-            customerPrice: p.customerPrice,
-            outsourcePrice: p.outsourcePrice,
+    for (const old of stale) {
+      const twin = await prisma.route.findUnique({
+        where: {
+          origin_destination_vehicleType: {
+            origin: old.origin,
+            destination: old.destination,
+            vehicleType: correct,
           },
-        });
+        },
+      });
+
+      if (!twin) {
+        // ไม่มีคู่แฝด — เปลี่ยนคำสะกดได้เลย ราคาที่ผูกไว้ติดไปด้วย
+        await prisma.route.update({ where: { id: old.id }, data: { vehicleType: correct } });
+        renamed++;
+        continue;
       }
+
+      // มีทั้งสองแบบ — ยกค่าที่ตัวที่สะกดถูกยังว่างมาจากตัวเก่า แล้วลบตัวเก่าทิ้ง
+      const patch: Record<string, unknown> = {};
+      if (twin.distanceKm == null && old.distanceKm != null) patch.distanceKm = old.distanceKm;
+      if (twin.targetKmPerL == null && old.targetKmPerL != null) patch.targetKmPerL = old.targetKmPerL;
+      if (!twin.allowance && old.allowance) patch.allowance = old.allowance;
+      if (Object.keys(patch).length > 0) {
+        await prisma.route.update({ where: { id: twin.id }, data: patch });
+      }
+
+      // ย้ายราคาตามช่วงน้ำมันที่ตัวใหม่ยังไม่มี แล้วค่อยลบเส้นทางเก่า
+      const oldPrices = await prisma.routePrice.findMany({ where: { routeId: old.id } });
+      for (const pr of oldPrices) {
+        const exists = await prisma.routePrice.findUnique({
+          where: { routeId_bandId: { routeId: twin.id, bandId: pr.bandId } },
+        });
+        if (!exists) {
+          await prisma.routePrice.create({
+            data: {
+              routeId: twin.id,
+              bandId: pr.bandId,
+              customerPrice: pr.customerPrice,
+              outsourcePrice: pr.outsourcePrice,
+            },
+          });
+        }
+      }
+
+      // ย้ายงานที่ผูกกับเส้นทางเก่ามาที่เส้นทางที่สะกดถูก ก่อนลบ
+      await prisma.job.updateMany({ where: { routeId: old.id }, data: { routeId: twin.id } });
+      await prisma.route.delete({ where: { id: old.id } });
+      merged++;
     }
 
-    // ย้ายงานที่ผูกกับเส้นทางเก่ามาที่เส้นทางใหม่ ก่อนลบ
-    await prisma.job.updateMany({ where: { routeId: old.id }, data: { routeId: twin.id } });
-    await prisma.route.delete({ where: { id: old.id } });
-    merged++;
+    // ทะเบียนรถที่เผลอสะกดแบบเก่าไว้ ก็แก้ให้ตรงกันด้วย
+    const fixed = await prisma.vehicle.updateMany({
+      where: { vehicleType: alias },
+      data: { vehicleType: correct },
+    });
+    vehiclesFixed += fixed.count;
+
+    // เอาคำสะกดเก่าออกจากรายการตัวเลือก จะได้ไม่มีใครเผลอเลือกอีก
+    await prisma.lookup.deleteMany({ where: { kind: "vehicleType", value: alias } });
+    await prisma.lookup.upsert({
+      where: { kind_value: { kind: "vehicleType", value: correct } },
+      update: {},
+      create: { kind: "vehicleType", value: correct },
+    });
   }
 
-  await prisma.lookup.deleteMany({ where: { kind: "vehicleType", value: "รถดั๊มพ์" } });
-
-  console.log(`\nรวมประเภทรถแล้ว: เปลี่ยนชื่อ ${renamed} เส้นทาง · รวมกับเส้นทางที่มีอยู่ ${merged} เส้นทาง`);
-  console.log('  ตอนนี้เส้นทางทั้งหมดใช้ "รถดั๊ม" ตรงกับทะเบียนรถในระบบแล้ว');
+  if (renamed === 0 && merged === 0 && vehiclesFixed === 0) {
+    console.log("\nคำสะกดประเภทรถตรงกันทั้งระบบอยู่แล้ว — ไม่มีอะไรต้องแก้");
+    return;
+  }
+  console.log(
+    `\nแก้คำสะกดประเภทรถแล้ว: เปลี่ยนชื่อ ${renamed} เส้นทาง · รวมกับเส้นทางที่มีอยู่ ${merged} เส้นทาง · ทะเบียนรถ ${vehiclesFixed} คัน`,
+  );
+  console.log("  ตอนนี้ประเภทรถในเส้นทางกับทะเบียนรถใช้คำเดียวกันแล้ว");
 }
 
 main()
