@@ -18,6 +18,7 @@
     "routes:add": "tsx scripts/add-routes.ts",
     "reset:users": "tsx scripts/reset-users.ts",
     "list:users": "tsx scripts/list-users.ts",
+    "rows": "tsx scripts/row-counts.ts",
     "set:password": "tsx scripts/set-password.ts",
     "setup": "prisma generate && prisma migrate deploy && npm run db:seed",
     "verify": "tsx scripts/verify-consistency.ts"

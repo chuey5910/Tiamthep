@@ -1,0 +1,103 @@
+# ระบบบริหารงานขนส่ง เทียมเทพ — ชุดรันบน NAS
+#
+# วางไว้ที่  /volume1/docker/tiamthep/app/  แล้วสั่งจากโฟลเดอร์นั้น
+# โครงโฟลเดอร์ที่ไฟล์นี้อ้างถึง:
+#
+#   /volume1/docker/tiamthep/
+#   ├── app/      ← โค้ด (โฟลเดอร์นี้) ลบทิ้งแล้วโคลนใหม่ได้ ไม่กระทบข้อมูล
+#   ├── data/
+#   │   ├── db/       ไฟล์ฐานข้อมูลจริง ← ห้ามลบ
+#   │   └── backup/   ไฟล์สำรองรายวัน
+#   └── secrets/
+#       ├── .env                          รหัสผ่าน + รหัสชีต
+#       └── google-service-account.json   กุญแจ Google
+#
+# คำสั่ง (อยู่ในโฟลเดอร์ app/):
+#   bash scripts/nas/tiamthep.sh up       เปิดระบบ
+#   bash scripts/nas/tiamthep.sh update   อัปเดตเป็นเวอร์ชันล่าสุด
+#   bash scripts/nas/tiamthep.sh logs     ดูว่าเกิดอะไรขึ้น
+
+name: tiamthep
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tiamthep-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tiamthep}
+      POSTGRES_USER: ${POSTGRES_USER:-tiamthep}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD ใน secrets/.env ก่อน}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+      TZ: Asia/Bangkok
+    # ไม่เปิดพอร์ตออกนอกกล่อง — เข้าถึงได้เฉพาะกล่องอื่นในชุดนี้
+    # ถ้าต้องเข้าฐานข้อมูลตรงๆ ใช้  tiamthep.sh psql
+    volumes:
+      - ../data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tiamthep} -d ${POSTGRES_DB:-tiamthep}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tiamthep-web:latest
+    container_name: tiamthep-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../secrets/.env
+    environment:
+      TZ: Asia/Bangkok
+    ports:
+      # ซ้ายคือพอร์ตบน NAS (ตั้งใน secrets/.env) · ขวาคือพอร์ตในกล่อง อย่าแก้
+      - "${APP_PORT:-3100}:3000"
+    volumes:
+      # กุญแจ Google — อ่านอย่างเดียว กล่องแก้ไฟล์ไม่ได้
+      - ../secrets:/secrets:ro
+      # ให้คำสั่งสำรองข้อมูลที่สั่งเองเขียนไฟล์ลงที่เดียวกับตัวสำรองอัตโนมัติ
+      - ../data/backup:/app/backup
+
+  backup:
+    image: postgres:16-alpine
+    container_name: tiamthep-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-tiamthep}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD ใน secrets/.env ก่อน}
+      PGDATABASE: ${POSTGRES_DB:-tiamthep}
+      TZ: Asia/Bangkok
+    volumes:
+      - ../data/backup:/backup
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "ตัวสำรองข้อมูลเริ่มทำงาน — สำรองทุกวันเวลา 02:00 เก็บย้อนหลัง 30 วัน"
+        while true; do
+          now=$$(date +%H%M)
+          if [ "$$now" = "0200" ]; then
+            base="/backup/tiamthep-$$(date +%Y%m%d-%H%M%S).sql"
+            # ไม่ pipe เข้า gzip ตรงๆ เพราะ busybox sh ไม่มี pipefail
+            # ถ้า pg_dump พังแต่ gzip สำเร็จ จะได้ไฟล์เปล่าที่ดูเหมือนสำเร็จ
+            if pg_dump --clean --if-exists --file "$$base" && [ -s "$$base" ]; then
+              gzip -f "$$base"
+              echo "สำรองข้อมูลแล้ว: $$base.gz ($$(du -h $$base.gz | cut -f1))"
+              find /backup -name 'tiamthep-*.sql.gz' -mtime +30 -delete
+            else
+              echo "สำรองข้อมูลไม่สำเร็จ — ไม่ได้เก็บไฟล์เปล่าไว้"
+              rm -f "$$base" "$$base.gz"
+            fi
+            sleep 3600
+          fi
+          sleep 50
+        done

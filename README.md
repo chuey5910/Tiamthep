@@ -133,6 +133,80 @@ WantedBy=multi-user.target
 sudo systemctl enable --now tiamthep
 ```
 
+## ติดตั้งบน NAS (UGREEN / Synology / Linux ทั่วไป)
+
+รันทั้งระบบเป็น Docker 3 กล่อง ไม่ต้องลง Node หรือ PostgreSQL บนตัว NAS
+โครงโฟลเดอร์แยกต่อแอป ไม่ปะปนกับแอปอื่นบนเครื่องเดียวกัน:
+
+```
+/volume1/docker/tiamthep/
+├── app/      โค้ด (โคลนจาก git — ลบแล้วโคลนใหม่ได้ ไม่กระทบข้อมูล)
+├── data/
+│   ├── db/       ไฟล์ฐานข้อมูลจริง  ← ห้ามลบ
+│   └── backup/   ไฟล์สำรองรายวัน
+└── secrets/
+    ├── .env                          รหัสผ่าน + รหัสชีต (chmod 600)
+    └── google-service-account.json   กุญแจ Google
+```
+
+### ติดตั้งครั้งแรก
+
+```bash
+mkdir -p /volume1/docker/tiamthep/{data/db,data/backup,secrets}
+cd /volume1/docker/tiamthep
+git clone -b main <repo> app        # หรือ branch ที่ใช้งานอยู่
+cp app/.env.nas.example secrets/.env
+nano secrets/.env                   # ตั้งรหัสผ่าน + พอร์ต (ยังไม่ต้องใส่ค่าชีต)
+chmod 600 secrets/.env
+cd app && bash scripts/nas/tiamthep.sh up
+```
+
+### คำสั่งที่ใช้ประจำ (สั่งจากโฟลเดอร์ `app/`)
+
+```bash
+bash scripts/nas/tiamthep.sh up        เปิดระบบ
+bash scripts/nas/tiamthep.sh down      ปิดระบบ (ข้อมูลไม่หาย)
+bash scripts/nas/tiamthep.sh update    สำรองข้อมูล → ดึงโค้ดล่าสุด → เปิดต่อ
+bash scripts/nas/tiamthep.sh status    ดูว่ากล่องไหนทำงานอยู่
+bash scripts/nas/tiamthep.sh logs      ดูข้อความล่าสุด
+bash scripts/nas/tiamthep.sh backup    สำรองข้อมูลเดี๋ยวนี้
+bash scripts/nas/tiamthep.sh restore ไฟล์.sql.gz
+bash scripts/nas/tiamthep.sh run npm run list:users
+```
+
+### ย้ายจากเครื่องเดิมมา NAS
+
+> ⚠ **กฎข้อเดียวที่ห้ามพลาด:** เว็บที่ตั้งค่าเชื่อมชีตได้ ต้องมี **ทีละเครื่องเดียว**
+> ถ้าเปิดพร้อมกันสองเครื่อง ทั้งคู่จะแย่งกันดึงงานจากชีตและเขียนสถานะทับกัน
+> ระหว่างทดสอบบน NAS ให้เว้น `LINE_SHEET_ID` ว่างไว้ก่อน
+
+1. **เตรียม NAS** — ติดตั้งตามขั้นตอนข้างบน ได้เว็บเปล่าฐานข้อมูลว่าง ทดสอบเปิดหน้าเว็บได้
+   (เครื่องเดิมยังใช้งานปกติ ไม่กระทบ)
+2. **ที่เครื่องเดิม** — หยุดเว็บให้สนิท แล้วสำรองข้อมูลและนับแถวไว้เทียบ
+   ```bash
+   npm run db:backup
+   npm run rows > before.txt
+   ```
+3. **ส่งไฟล์ขึ้น NAS** แล้วกู้ข้อมูล
+   ```bash
+   bash scripts/nas/tiamthep.sh restore /volume1/docker/tiamthep/data/backup/tiamthep-*.sql.gz
+   ```
+4. **ตรวจว่าครบ** — จำนวนแถวต้องตรงกันทุกตาราง และตัวเลขรายงานต้องกระทบยอดได้
+   ```bash
+   bash scripts/nas/tiamthep.sh run npm run rows      # เทียบกับ before.txt
+   bash scripts/nas/tiamthep.sh run npm run verify
+   ```
+5. **สลับใช้จริง** — เติม `LINE_SHEET_ID` และก๊อปกุญแจ Google ลง `secrets/` แล้ว
+   `tiamthep.sh up` อีกครั้ง จากนั้นกด «ดึงงานเข้าเว็บ» 1 ครั้งเพื่อทดสอบ
+6. **ปิดเครื่องเดิม** — ปิดตัวเปิดอัตโนมัติให้ถาวร ไม่งั้นเครื่องรีสตาร์ทแล้วจะกลับมาแย่งดึงชีต
+   ```bash
+   launchctl unload ~/Library/LaunchAgents/com.tiamthep.server.plist   # Mac
+   ```
+   เก็บเครื่องเดิมไว้เฉยๆ อย่าเพิ่งลบ จนกว่าจะใช้ NAS ผ่านไปสัก 2 สัปดาห์
+
+**ทำไมต้องดัมป์แล้วกู้ ไม่ก๊อปโฟลเดอร์ฐานข้อมูลไปวางเลย** — เครื่อง Mac ใช้ชิป ARM
+ส่วน NAS เป็น Intel ไฟล์ฐานข้อมูลดิบใช้ข้ามเครื่องคนละสถาปัตยกรรมไม่ได้
+
 ## ฐานข้อมูลเก็บที่ไหน
 
 ฐานข้อมูลคือ **PostgreSQL 16** ที่รันบน CHUEY-Server — ข้อมูลอยู่ใน Docker volume

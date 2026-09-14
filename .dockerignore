@@ -1,0 +1,13 @@
+# ไม่ต้องก๊อปเข้าอิมเมจ — ทำให้ build ช้าและอิมเมจใหญ่เกินจำเป็น
+node_modules
+.next
+.git
+.artifact
+backup
+data/db
+*.log
+server.log
+.env
+.env.local
+*.sql
+*.sql.gz
