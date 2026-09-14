@@ -1,0 +1,54 @@
+[
+  {
+    "origin": "โรงโม่ SCG เขาวง",
+    "destination": "เหว่ยสือ พนัสชลบุรี",
+    "vehicleType": "รถดั๊ม"
+  },
+  {
+    "origin": "เหว่ยสือ พนัสชลบุรี",
+    "destination": "โรงโม่ SCG เขาวง",
+    "vehicleType": "รถดั๊ม"
+  },
+  {
+    "origin": "โอเชียนกลาส",
+    "destination": "บางกอกคริสตัล",
+    "vehicleType": "รถดั๊ม"
+  },
+  {
+    "origin": "เคมีแมน แก่งคอย",
+    "destination": "เคมีแมน ระยอง",
+    "vehicleType": "รถดั๊ม",
+    "distanceKm": 230,
+    "targetKmPerL": 2.5,
+    "allowance": 800,
+    "note": "ตัวเลขยกมาจากรายการค่าเบี้ยเลี้ยง (เดิมบันทึกไว้เป็นประเภท รถดั๊มพ์)"
+  },
+  {
+    "origin": "ซิลิกอน เทค กาญจนบุรี",
+    "destination": "หยุ่นอาโกร",
+    "vehicleType": "รถดั๊ม",
+    "distanceKm": 350,
+    "targetKmPerL": 2.5,
+    "allowance": 1000,
+    "note": "ตัวเลขยกมาจากรายการค่าเบี้ยเลี้ยง (เดิมบันทึกไว้เป็นประเภท รถดั๊มพ์)"
+  },
+  {
+    "origin": "ท่าเรือมาบตาพุด",
+    "destination": "จี สตีล บ้านค่าย",
+    "vehicleType": "รถดั๊ม"
+  },
+  {
+    "origin": "TPP บ้านค่าย",
+    "destination": "TPI สระบุรี",
+    "vehicleType": "รถดั๊ม",
+    "distanceKm": 256,
+    "targetKmPerL": 2.5,
+    "allowance": 1200,
+    "note": "ตัวเลขยกมาจากรายการค่าเบี้ยเลี้ยง (เดิมบันทึกไว้เป็นประเภท รถดั๊มพ์)"
+  },
+  {
+    "origin": "ท่าเรือมาบตาพุด",
+    "destination": "จี เจ สตีล บ่อวิน",
+    "vehicleType": "รถดั๊ม"
+  }
+]

@@ -15,6 +15,7 @@
     "db:backup": "tsx scripts/backup.ts",
     "sheet:import": "tsx scripts/import-line-jobs.ts",
     "routes:import": "tsx scripts/import-allowance-routes.ts",
+    "routes:add": "tsx scripts/add-routes.ts",
     "reset:users": "tsx scripts/reset-users.ts",
     "list:users": "tsx scripts/list-users.ts",
     "set:password": "tsx scripts/set-password.ts",
