@@ -32,6 +32,16 @@ if [ "$DOCKER_OK" = "no" ]; then
   fi
 fi
 
+# NAS บางรุ่น (เช่น UGOS) ลง git ลงเครื่องไม่ได้ เพราะชุดแพ็กเกจถูกดัดแปลงไว้
+# ถ้าไม่มี git ก็ยืมจาก Docker แทน — ได้ผลเหมือนกัน และไม่แตะระบบของ NAS
+git_run() {
+  if command -v git >/dev/null 2>&1; then
+    git -C "$ROOT" "$@"
+  else
+    docker run --rm -v "$ROOT:/w" -w /w alpine/git -c safe.directory=/w "$@"
+  fi
+}
+
 cmd="${1:-status}"
 shift || true
 
@@ -53,7 +63,7 @@ case "$cmd" in
     echo "▶ สำรองข้อมูลก่อนอัปเดต..."
     bash "$0" backup || { echo "❌ สำรองไม่สำเร็จ — หยุดไว้ก่อน ไม่อัปเดต"; exit 1; }
     echo "▶ ดึงโค้ดล่าสุด..."
-    git -C "$ROOT" pull --ff-only
+    git_run pull --ff-only
     echo "▶ สร้างใหม่และเปิดต่อ..."
     $COMPOSE up -d --build
     echo "✅ อัปเดตเสร็จ"

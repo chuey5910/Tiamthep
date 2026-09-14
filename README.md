@@ -154,7 +154,10 @@ sudo systemctl enable --now tiamthep
 ```bash
 mkdir -p /volume1/docker/tiamthep/{data/db,data/backup,secrets}
 cd /volume1/docker/tiamthep
-git clone -b main <repo> app        # หรือ branch ที่ใช้งานอยู่
+git clone https://github.com/chuey5910/Tiamthep.git app
+# NAS ที่ลง git ลงเครื่องไม่ได้ (เช่น UGOS) ให้ยืม git จาก Docker แทน:
+#   docker run --rm -v /volume1/docker/tiamthep:/w -w /w alpine/git \
+#     clone https://github.com/chuey5910/Tiamthep.git app
 cp app/.env.nas.example secrets/.env
 nano secrets/.env                   # ตั้งรหัสผ่าน + พอร์ต (ยังไม่ต้องใส่ค่าชีต)
 chmod 600 secrets/.env
