@@ -110,6 +110,15 @@ export function RouteForm({
         </div>
       </div>
 
+      {/* ต้นทาง/ปลายทางเลือกได้เฉพาะชื่อที่มีในระบบ — บอกทางไปเพิ่มชื่อใหม่ให้ชัด */}
+      <p className="mt-2 text-[12px] text-slate-500">
+        ไม่มีชื่อต้นทาง/ปลายทางที่ต้องการ? เพิ่มชื่อใหม่ได้ที่{" "}
+        <a href="/settings/lookups?q=location" className="font-semibold text-brand-700 hover:underline">
+          ตั้งค่า → รายการตัวเลือก
+        </a>{" "}
+        เลือกประเภท &laquo;สถานที่&raquo; แล้วกลับมาหน้านี้
+      </p>
+
       {error && (
         <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">{error}</p>
       )}

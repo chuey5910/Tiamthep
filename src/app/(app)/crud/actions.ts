@@ -3,11 +3,39 @@
 import { requireWrite } from "@/lib/auth";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { RESOURCES, type Field, type Resource } from "@/lib/crud";
 import { parseDate } from "@/lib/date";
 
 type ActionResult = { ok: boolean; error?: string };
+
+/**
+ * ช่องที่ฐานข้อมูลไม่ยอมรับค่าว่าง (คอลัมน์ไม่ใช่ nullable) — เช่น Lookup.sort ที่เป็น
+ * Int มีค่าเริ่มต้น 0 · เว้นว่างในฟอร์มแล้วส่ง null เข้าไป Prisma จะปฏิเสธทั้งแถว
+ * จึงต้องรู้ก่อนว่าคอลัมน์ไหนรับ null ได้ แล้ว "ไม่ส่งช่องนั้นไปเลย" เพื่อให้ใช้ค่าเริ่มต้น
+ *
+ * อ่านจากโครงสร้างจริงของ schema (ไม่ต้องมาไล่ตั้งค่าทีละฟิลด์ให้ตกหล่น)
+ */
+const NON_NULL_COLUMNS: Map<string, Set<string>> = (() => {
+  const map = new Map<string, Set<string>>();
+  for (const model of Prisma.dmmf.datamodel.models) {
+    const key = model.name.charAt(0).toLowerCase() + model.name.slice(1);
+    const cols = new Set<string>();
+    for (const f of model.fields) {
+      if (f.kind === "scalar" && f.isRequired) cols.add(f.name);
+    }
+    map.set(key, cols);
+  }
+  return map;
+})();
+
+function acceptsNull(model: string, column: string): boolean {
+  return !NON_NULL_COLUMNS.get(model)?.has(column);
+}
+
+/** ค่าที่แปลว่า "ผู้ใช้เว้นว่างไว้" — ต่างจาก null ตรงที่จะไม่ถูกส่งเข้าฐานข้อมูล */
+const BLANK = Symbol("blank");
 
 function coerce(field: Field, raw: FormDataEntryValue | null): unknown {
   if (field.type === "checkbox") return raw === "on" || raw === "true";
@@ -15,8 +43,8 @@ function coerce(field: Field, raw: FormDataEntryValue | null): unknown {
   const s = raw == null ? "" : String(raw).trim();
 
   if (s === "") {
-    if (field.type === "number") return field.required ? 0 : null;
-    return null;
+    if (field.type === "number" && field.required) return 0;
+    return BLANK;
   }
 
   switch (field.type) {
@@ -42,6 +70,13 @@ function buildData(resource: Resource, form: FormData, forUpdate: boolean): Reco
     if (f.type !== "checkbox" && !form.has(f.name)) continue;
 
     let v = coerce(f, form.get(f.name));
+
+    if (v === BLANK) {
+      // เว้นว่างในช่องที่คอลัมน์ห้ามเป็น null → ข้ามไปเลย ให้ฐานข้อมูลใช้ค่าเริ่มต้น
+      if (!acceptsNull(resource.model, f.name)) continue;
+      v = null;
+    }
+
     if (NUMERIC_RELATION_FIELDS.has(f.name) && v != null && v !== "") v = Number(v);
     data[f.name] = v;
   }

@@ -11,7 +11,8 @@ export type FieldType = "text" | "number" | "date" | "select" | "textarea" | "ch
 
 /** แหล่งที่มาของตัวเลือกใน dropdown */
 export type OptionSource =
-  | { kind: "static"; values: string[] }
+  /** labels = ข้อความที่ให้ผู้ใช้เห็น (ถ้าไม่ใส่ จะโชว์ค่าดิบตามที่เก็บในฐานข้อมูล) */
+  | { kind: "static"; values: string[]; labels?: Record<string, string> }
   | { kind: "lookup"; lookupKind: string }
   | { kind: "vehicles"; ownerType?: string }
   | { kind: "drivers" }
@@ -432,11 +433,34 @@ export const RESOURCES: Record<string, Resource> = {
         options: {
           kind: "static",
           values: ["vehicleType", "expenseCategory", "location", "supplier", "unit", "cargoType"],
+          // ให้เห็นเป็นภาษาไทย ไม่ใช่ชื่อตัวแปรในระบบ
+          labels: {
+            vehicleType: "ประเภทรถ",
+            expenseCategory: "ประเภทค่าใช้จ่าย",
+            location: "สถานที่ (ต้นทาง / ปลายทาง)",
+            supplier: "ผู้ให้บริการ / อู่ / ร้านค้า",
+            unit: "หน่วยนับ",
+            cargoType: "ประเภทสินค้า",
+          },
         },
         span: 1,
       },
-      { name: "value", label: "ค่า", type: "text", required: true, span: 2 },
-      { name: "sort", label: "ลำดับ", type: "number", format: "num", span: 1 },
+      {
+        name: "value",
+        label: "ชื่อที่จะให้เลือกในหน้าอื่น",
+        type: "text",
+        required: true,
+        span: 2,
+        placeholder: "เช่น โรงโม่ SCG เขาวง",
+      },
+      {
+        name: "sort",
+        label: "ลำดับ",
+        type: "number",
+        format: "num",
+        span: 1,
+        help: "เว้นว่างได้ — ใช้จัดลำดับในรายการ",
+      },
     ],
   },
 };
@@ -464,7 +488,7 @@ export async function loadOptions(resource: Resource): Promise<Record<string, Op
 
     switch (src.kind) {
       case "static":
-        out[f.name] = src.values.map((v) => ({ value: v, label: v }));
+        out[f.name] = src.values.map((v) => ({ value: v, label: src.labels?.[v] ?? v }));
         break;
       case "lookup": {
         const rows = await prisma.lookup.findMany({
