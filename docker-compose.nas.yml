@@ -45,6 +45,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # ใช้เน็ตของตัวเครื่องตอน build — บาง NAS (โดยเฉพาะที่ลง Tailscale ไว้)
+      # กล่อง Docker จะแปลงชื่อเว็บเป็นไอพีไม่ได้ ทำให้ npm ดึงไลบรารีไม่ลง
+      network: host
     image: tiamthep-web:latest
     container_name: tiamthep-web
     restart: unless-stopped
@@ -55,6 +58,12 @@ services:
       - ../secrets/.env
     environment:
       TZ: Asia/Bangkok
+    # ตั้ง DNS ให้กล่องเว็บโดยเฉพาะ — จำเป็นตอนต่อไปคุยกับ Google Sheet
+    # (ไม่ไปแก้ตั้งค่า Docker ของเครื่อง จึงไม่กระทบแอปอื่นบน NAS)
+    # ชื่อกล่องในชุดเดียวกันอย่าง "db" ยังแปลงได้ตามปกติ
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     ports:
       # ซ้ายคือพอร์ตบน NAS (ตั้งใน secrets/.env) · ขวาคือพอร์ตในกล่อง อย่าแก้
       - "${APP_PORT:-3100}:3000"
