@@ -46,7 +46,15 @@ export function ImportPanel() {
             {result.pendingReview > 0 && (
               <> · มีอีก <b>{result.pendingReview}</b> งานที่ส่งของเสร็จสิ้นแล้วแต่ยังไม่ได้กด «ยืนยัน» ในชีต</>
             )}
-            {result.imported === 0 && result.failed === 0 && <> — ไม่มีแถวสถานะ «ยืนยัน» ค้างอยู่</>}
+            {result.advancesSynced > 0 && (
+              <>
+                {" "}· ดึงเงินเดินทาง/ค่าทางด่วนจากชีต <b>{result.advancesSynced}</b> งาน
+                (ดูที่หน้า «เงินเดินทาง / ค่าทางด่วน»)
+              </>
+            )}
+            {result.imported === 0 && result.failed === 0 && result.advancesSynced === 0 && (
+              <> — ไม่มีแถวสถานะ «ยืนยัน» ค้างอยู่</>
+            )}
           </div>
 
           {/* โชว์เฉพาะแถวที่ไม่ผ่าน — แถวที่สำเร็จบอกแค่จำนวน เหมือนหน้านำเข้าน้ำมัน */}

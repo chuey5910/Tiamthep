@@ -47,8 +47,50 @@ export type SheetImportResult = {
   imported: number;
   failed: number;
   pendingReview: number; // แถวที่ «ส่งของเสร็จสิ้น» แล้ว แต่ออฟฟิศยังไม่กด «ยืนยัน»
+  /** งานที่ปิดไปแล้ว แต่ดึงเงินเดินทาง/ค่าทางด่วนจากชีตมาเพิ่ม/อัปเดตให้ */
+  advancesSynced: number;
   rows: { jobId: string; ok: boolean; message: string }[];
 };
+
+/**
+ * ดึงเงินเดินทาง (คอลัมน์ U) และค่าทางด่วน (คอลัมน์ T) จากชีตลงเว็บ
+ *
+ * แยกออกมาเป็นฟังก์ชันของตัวเอง เพราะต้องใช้กับแถวที่ปิดงานไปแล้วด้วย —
+ * งานที่ดึงเข้าเว็บก่อนจะมีสองคอลัมน์นี้ จะไม่มีใครไปดึงเงินให้เลยถ้าไม่ทำตรงนี้
+ * และออฟฟิศมักกรอกเงินตามหลังจากปิดงานไปแล้ว
+ *
+ * upsert ตามรหัสงาน — ดึงซ้ำไม่เกิดรายการซ้ำ แก้ยอดในชีตแล้วดึงใหม่ ยอดในเว็บตามให้
+ */
+async function syncTravelAdvance(row: string[]): Promise<boolean> {
+  const jobId = (row[C.id] ?? "").trim();
+  if (!jobId) return false;
+
+  const toll = numOrNull(row[C.toll] ?? "") ?? 0;
+  const advance = numOrNull(row[C.advance] ?? "") ?? 0;
+  // ไม่มีเงินทั้งสองช่อง = ไม่ต้องสร้างรายการเปล่า และไม่ลบของเดิมทิ้ง
+  if (toll <= 0 && advance <= 0) return false;
+
+  const date = parseDate(row[C.date] ?? "");
+  if (!date) return false;
+
+  const plate = (row[C.head] ?? "").trim();
+  const driverCode = (row[C.driver] ?? "").trim().toUpperCase();
+
+  await prisma.travelAdvance.upsert({
+    where: { sheetRef: jobId },
+    update: { advance, toll, date, plate, driverCode },
+    create: {
+      sheetRef: jobId,
+      date,
+      plate,
+      driverCode,
+      advance,
+      toll,
+      note: `จากชีตสั่งงาน ${jobId}`,
+    },
+  });
+  return true;
+}
 
 /** ตัวเลขจากชีต — "" คืน null, อ่านไม่ได้ก็คืน null (ให้คนตรวจ ไม่เดา) */
 function numOrNull(s: string): number | null {
@@ -64,7 +106,9 @@ function numOrNull(s: string): number | null {
  */
 export async function runSheetImport(): Promise<SheetImportResult> {
   const cfg = sheetConfig();
-  if ("error" in cfg) return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, rows: [] };
+  if ("error" in cfg) {
+    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, rows: [] };
+  }
   const { sheetId, keyFile } = cfg;
 
   try {
@@ -79,13 +123,19 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     let imported = 0;
     let failed = 0;
     let pendingReview = 0;
+    let advancesSynced = 0;
 
     for (let i = 0; i < values.length; i++) {
       const row = values[i];
       const rowNo = i + 2; // แถวจริงในชีต (ข้อมูลเริ่มแถว 2)
       const status = (row[C.status] ?? "").trim();
       if (status === "ส่งของเสร็จสิ้น") pendingReview++;
-      if (status !== ST.CONFIRMED) continue;
+      if (status !== ST.CONFIRMED) {
+        // งานที่ปิดไปแล้ว ไม่ต้องสร้างงานซ้ำ แต่ยังต้องตามเก็บเงินเดินทาง/ค่าทางด่วน
+        // เพราะออฟฟิศมักกรอกเงินตามหลัง และงานเก่าดึงเข้าเว็บตอนที่ยังไม่มีสองคอลัมน์นี้
+        if (status === ST.IMPORTED && (await syncTravelAdvance(row))) advancesSynced++;
+        continue;
+      }
 
       const jobId = (row[C.id] ?? "").trim();
       const res = await importRow(row, jobId, ctx, driverByCode, customerByCode);
@@ -112,12 +162,12 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     // อัปเดตข้อมูลหลักให้ dropdown ในชีตตรงกับเว็บเสมอ
     await pushMasterData(keyFile, sheetId, ctx, drivers);
 
-    return { ok: true, imported, failed, pendingReview, rows: results };
+    return { ok: true, imported, failed, pendingReview, advancesSynced, rows: results };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "เชื่อมต่อชีตไม่สำเร็จ",
-      imported: 0, failed: 0, pendingReview: 0, rows: [],
+      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, rows: [],
     };
   }
 }
@@ -176,27 +226,8 @@ async function importRow(
     (row[C.note] ?? "").trim(),
   ].filter(Boolean).join(" · ") || null;
 
-  // เงินเดินทาง/ค่าทางด่วนที่ออฟฟิศกรอกในชีต → ลงหน้า «เงินเดินทาง / ค่าทางด่วน» ของเว็บ
-  // upsert ตามรหัสงาน (unique) — ดึงซ้ำไม่เกิดรายการซ้ำ และแก้ยอดในชีตแล้วดึงใหม่ ยอดตามให้
-  const toll = numOrNull(row[C.toll] ?? "") ?? 0;
-  const advance = numOrNull(row[C.advance] ?? "") ?? 0;
-  const saveAdvance = async () => {
-    if (toll <= 0 && advance <= 0) return "";
-    await prisma.travelAdvance.upsert({
-      where: { sheetRef: jobId },
-      update: { advance, toll, date, plate: headPlate, driverCode: driverCode ?? "" },
-      create: {
-        sheetRef: jobId,
-        date,
-        plate: headPlate,
-        driverCode: driverCode ?? "",
-        advance,
-        toll,
-        note: `จากชีตสั่งงาน ${jobId}`,
-      },
-    });
-    return " + เงินเดินทาง/ทางด่วน";
-  };
+  // เงินเดินทาง (คอลัมน์ U) / ค่าทางด่วน (คอลัมน์ T) → หน้า «เงินเดินทาง / ค่าทางด่วน» ของเว็บ
+  const saveAdvance = async () => ((await syncTravelAdvance(row)) ? " + เงินเดินทาง/ทางด่วน" : "");
 
   try {
     const job = await prisma.job.create({
