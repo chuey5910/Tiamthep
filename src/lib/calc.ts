@@ -8,6 +8,7 @@
 import { prisma } from "./prisma";
 import { addDays, daysInMonth, startOfDay, utcDate } from "./date";
 import { isWeightPriced, priceMultiplier } from "./price-unit";
+import { vehicleTypeKey } from "./vehicle-type";
 
 // ─────────────────────────────────────────────────────────────
 // ราคาน้ำมันอ้างอิง
@@ -170,8 +171,13 @@ export async function buildContext() {
   };
 }
 
+/**
+ * คีย์จับคู่งาน ↔ เส้นทาง — ต้นทาง/ปลายทางเทียบแบบไม่สนช่องว่างซ้ำและตัวพิมพ์ใหญ่-เล็ก
+ * ประเภทรถเทียบผ่าน vehicleTypeKey ("หัวลาก" กับ "รถหัวลาก" ถือว่าตัวเดียวกัน)
+ */
 export function routeKey(origin: string, destination: string, vehicleType: string): string {
-  return `${origin.trim()}|${destination.trim()}|${vehicleType.trim()}`;
+  const place = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  return `${place(origin)}|${place(destination)}|${vehicleTypeKey(vehicleType)}`;
 }
 
 /** หาช่วงราคาน้ำมันที่ราคานี้ตกอยู่ (นอกช่วงให้ใช้ช่วงต่ำสุด/สูงสุด) */
@@ -323,7 +329,7 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const outsourceRate = rp?.outsourcePrice ?? null;
 
   if (route && band && customerRate == null) {
-    flag("revenue", `ยังไม่ได้ตั้งราคาลูกค้าของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
+    flag("revenue", `ยังไม่ได้ตั้งราคาลูกค้า ${route.origin} → ${route.destination} (${route.vehicleType}) ที่ช่วงน้ำมัน ${band.label}`);
   }
 
   // น้ำหนักในระบบเป็นตัน — ราคาต่อกิโลกรัม (เช่น 0.261) คูณด้วยน้ำหนักเป็นกิโล
@@ -332,7 +338,7 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
 
   const isOutsource = ownerType === "รถร่วม";
   if (isOutsource && route && band && outsourceRate == null) {
-    flag("outsource", `ยังไม่ได้ตั้งราคาจ่ายรถร่วมของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
+    flag("outsource", `ยังไม่ได้ตั้งราคาจ่ายรถร่วม ${route.origin} → ${route.destination} (${route.vehicleType}) ที่ช่วงน้ำมัน ${band.label}`);
   }
   const outsourcePay = isOutsource && outsourceRate != null ? round2(outsourceRate * multiplier) : 0;
 
