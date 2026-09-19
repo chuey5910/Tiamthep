@@ -158,3 +158,15 @@ export function SearchFilter({ value, placeholder = "ค้นหา…" }: { va
     </div>
   );
 }
+
+/** สวิตช์ "เฉพาะที่ใกล้หมดอายุ" (?expiring=1) — ใช้กับตารางที่มีวันหมดอายุ เช่น รถ / พขร. */
+export function ExpiringToggle({ on, alertDays }: { on: boolean; alertDays: number }) {
+  const { set } = useSetParams();
+  return (
+    <label className="flex h-[38px] cursor-pointer items-center gap-2 text-[13px]">
+      <input type="checkbox" className="h-4 w-4 rounded" checked={on} onChange={(e) => set({ expiring: e.target.checked ? "1" : null, page: null })} />
+      เฉพาะที่ใกล้หมดอายุ / หมดอายุแล้ว
+      <span className="text-[11px] text-slate-400">(ล่วงหน้า {alertDays} วัน)</span>
+    </label>
+  );
+}

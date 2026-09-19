@@ -76,6 +76,14 @@ body {
 .tbl tbody tr:hover td {
   background: #fafafa;
 }
+/* แถวที่มีเอกสารใกล้หมดอายุ/หมดอายุแล้ว — แดงทั้งแถวจนกว่าจะต่อครบทุกรายการ */
+.tbl tbody tr.row-danger td {
+  color: #b42318;
+  background: #fff5f5;
+}
+.tbl tbody tr.row-danger:hover td {
+  background: #ffeaea;
+}
 .tbl tfoot td {
   padding: 0.55rem 0.75rem;
   font-weight: 700;

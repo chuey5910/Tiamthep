@@ -60,6 +60,14 @@ export type Resource = {
   orderBy: Record<string, "asc" | "desc"> | Record<string, "asc" | "desc">[];
   /** ฟิลด์ที่ใช้ค้นหา (ข้อความ) */
   searchFields?: string[];
+  /** ฟิลด์ select ที่ให้มี dropdown กรองบนหัวตาราง (เลือกค่าเดียว เหมือน filter ในชีต) */
+  filterFields?: string[];
+  /**
+   * ฟิลด์วันที่ที่เป็น "วันหมดอายุ" — ทั้งแถวขึ้นสีแดงเมื่อฟิลด์ใดฟิลด์หนึ่ง
+   * เหลือไม่เกินจำนวนวันแจ้งเตือน (ตั้งค่า → แจ้งเตือนเอกสารล่วงหน้า) หรือเลยวันแล้ว
+   * และจะแดงต่อไปจนกว่าจะต่ออายุครบทุกรายการ
+   */
+  expiryFields?: string[];
   /** จำนวนแถวต่อหน้า */
   pageSize?: number;
   /** ข้อความช่วยเหลือใต้หัวข้อ */
@@ -78,6 +86,8 @@ export const RESOURCES: Record<string, Resource> = {
     idType: "string",
     orderBy: { plate: "asc" },
     searchFields: ["plate", "vehicleType"],
+    filterFields: ["vehicleType", "ownerType"],
+    expiryFields: ["taxDueDate", "actDueDate", "insuranceDue", "cargoInsDue"],
     pageSize: 100,
     notes: [
       "อายุรถคำนวณจาก 'วันที่เริ่มใช้รถ' เทียบกับวันนี้",
@@ -107,6 +117,7 @@ export const RESOURCES: Record<string, Resource> = {
     idType: "string",
     orderBy: { code: "asc" },
     searchFields: ["code", "firstName", "lastName", "nationalId", "licenseNo"],
+    expiryFields: ["licenseExpiry"],
     pageSize: 100,
     fields: [
       { name: "code", label: "รหัส พขร.", type: "text", required: true, immutable: true, span: 1, placeholder: "D001" },

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CrudForm, DeleteButton } from "./CrudForm";
 import { Card, Empty, PageHeader } from "./ui";
-import { SearchFilter } from "./Filters";
+import { ExpiringToggle, SearchFilter, SelectFilter } from "./Filters";
 import { loadOptions, type Option, type Resource } from "@/lib/crud";
 import { prisma } from "@/lib/prisma";
 import { formatThaiDate } from "@/lib/date";
@@ -57,10 +57,48 @@ export async function CrudPage({
 
   // PostgreSQL เทียบตัวพิมพ์ใหญ่-เล็กเป็นคนละตัว จึงต้องสั่ง insensitive
   // ไม่งั้นค้น "bgc" จะไม่เจอ "BGC"
-  const where: Record<string, unknown> =
-    q && resource.searchFields?.length
-      ? { OR: resource.searchFields.map((f) => ({ [f]: { contains: q, mode: "insensitive" } })) }
-      : {};
+  const and: Record<string, unknown>[] = [];
+  if (q && resource.searchFields?.length) {
+    and.push({ OR: resource.searchFields.map((f) => ({ [f]: { contains: q, mode: "insensitive" } })) });
+  }
+
+  // dropdown กรองรายคอลัมน์ (?f_ชื่อฟิลด์=ค่า) — เลือกค่าเดียว เหมือน filter บนหัวตารางในชีต
+  const filterValues: Record<string, string> = {};
+  for (const f of resource.filterFields ?? []) {
+    const v = searchParams[`f_${f}`];
+    const val = typeof v === "string" ? v.trim() : "";
+    if (val) {
+      filterValues[f] = val;
+      and.push({ [f]: val });
+    }
+  }
+
+  // เอกสารใกล้หมดอายุ — ใช้จำนวนวันแจ้งเตือนเดียวกับหน้าหลัก (ตั้งค่า → แจ้งเตือนเอกสารล่วงหน้า)
+  const expiryFields = resource.expiryFields ?? [];
+  let alertDays = 30;
+  if (expiryFields.length) {
+    const s = await prisma.setting.findUnique({ where: { key: "docAlertDays" } });
+    alertDays = Number(s?.value) > 0 ? Number(s!.value) : 30;
+  }
+  const todayUtc = new Date();
+  const today = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate()));
+  const threshold = new Date(today.getTime() + alertDays * 86400000);
+  const onlyExpiring = searchParams.expiring === "1" && expiryFields.length > 0;
+  if (onlyExpiring) and.push({ OR: expiryFields.map((f) => ({ [f]: { lte: threshold } })) });
+
+  const where: Record<string, unknown> = and.length ? { AND: and } : {};
+
+  /** ฟิลด์วันหมดอายุของแถวนี้ที่ใกล้ถึง/เลยกำหนด: ชื่อฟิลด์ → จำนวนวันที่เหลือ (ติดลบ = เลยแล้ว) */
+  const expiryOf = (row: Row): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const f of expiryFields) {
+      const d = row[f];
+      if (!(d instanceof Date)) continue;
+      const daysLeft = Math.round((d.getTime() - today.getTime()) / 86400000);
+      if (daysLeft <= alertDays) out[f] = daysLeft;
+    }
+    return out;
+  };
 
   const model = (prisma as never as Record<string, {
     findMany: (a: unknown) => Promise<Row[]>;
@@ -130,16 +168,33 @@ export async function CrudPage({
         />
       </Card>
 
-      {resource.searchFields && resource.searchFields.length > 0 && (
+      {(resource.searchFields?.length || resource.filterFields?.length || expiryFields.length) ? (
         <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
-          <SearchFilter value={q} />
+          {resource.searchFields?.length ? <SearchFilter value={q} /> : null}
+          {(resource.filterFields ?? []).map((f) => {
+            const field = resource.fields.find((x) => x.name === f);
+            if (!field) return null;
+            return (
+              <SelectFilter
+                key={f}
+                name={`f_${f}`}
+                label={field.label}
+                value={filterValues[f] ?? ""}
+                width="w-44"
+                options={[{ value: "", label: "— ทั้งหมด —" }, ...(options[f] ?? [])]}
+              />
+            );
+          })}
+          {expiryFields.length > 0 && (
+            <ExpiringToggle on={onlyExpiring} alertDays={alertDays} />
+          )}
           <span className="pb-2 text-[12px] text-slate-500">พบ {total.toLocaleString("th-TH")} รายการ</span>
         </div>
-      )}
+      ) : null}
 
       <Card bodyClass="p-0">
         {rows.length === 0 ? (
-          <Empty>{q ? `ไม่พบข้อมูลที่ตรงกับ "${q}"` : "ยังไม่มีข้อมูล — เพิ่มได้จากฟอร์มด้านบน"}</Empty>
+          <Empty>{q || Object.keys(filterValues).length || onlyExpiring ? "ไม่พบข้อมูลตามเงื่อนไขที่กรอง" : "ยังไม่มีข้อมูล — เพิ่มได้จากฟอร์มด้านบน"}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="tbl">
@@ -156,16 +211,26 @@ export async function CrudPage({
               <tbody>
                 {rows.map((row) => {
                   const id = idOf(row);
+                  const expiring = expiryOf(row);
+                  const danger = Object.keys(expiring).length > 0;
                   return (
-                    <tr key={id}>
-                      {tableFields.map((f) => (
-                        <td
-                          key={f.name}
-                          className={f.format === "money" || f.format === "num" ? "num" : undefined}
-                        >
-                          {cellText(row[f.name], f.format, options[f.name])}
-                        </td>
-                      ))}
+                    <tr key={id} className={danger ? "row-danger" : undefined}>
+                      {tableFields.map((f) => {
+                        const daysLeft = expiring[f.name];
+                        return (
+                          <td
+                            key={f.name}
+                            className={f.format === "money" || f.format === "num" ? "num" : undefined}
+                          >
+                            {cellText(row[f.name], f.format, options[f.name])}
+                            {daysLeft != null && (
+                              <span className="ml-1 whitespace-nowrap text-[11px] font-bold">
+                                {daysLeft < 0 ? `หมดอายุแล้ว ${-daysLeft} วัน` : daysLeft === 0 ? "หมดวันนี้" : `อีก ${daysLeft} วัน`}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
                       <td className="no-print">
                         <div className="flex gap-1">
                           <Link href={`?edit=${encodeURIComponent(id)}`} className="btn btn-ghost px-2 py-1 text-[12px]">
