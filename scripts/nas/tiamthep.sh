@@ -38,7 +38,8 @@ git_run() {
   if command -v git >/dev/null 2>&1; then
     git -C "$ROOT" "$@"
   else
-    docker run --rm -v "$ROOT:/w" -w /w alpine/git -c safe.directory=/w "$@"
+    # --network host: ใช้เน็ตของตัวเครื่อง ไม่งั้นกล่องแปลงชื่อ github.com ไม่ได้บน NAS ที่ลง Tailscale
+    docker run --rm --network host -v "$ROOT:/w" -w /w alpine/git -c safe.directory=/w "$@"
   fi
 }
 
@@ -63,10 +64,18 @@ case "$cmd" in
     echo "▶ สำรองข้อมูลก่อนอัปเดต..."
     bash "$0" backup || { echo "❌ สำรองไม่สำเร็จ — หยุดไว้ก่อน ไม่อัปเดต"; exit 1; }
     echo "▶ ดึงโค้ดล่าสุด..."
-    git_run pull --ff-only
-    echo "▶ สร้างใหม่และเปิดต่อ..."
+    before=$(git_run rev-parse --short HEAD)
+    git_run pull --ff-only || { echo "❌ ดึงโค้ดไม่สำเร็จ — ยังไม่ได้เปลี่ยนอะไร ดูข้อความข้างบน"; exit 1; }
+    after=$(git_run rev-parse --short HEAD)
+    if [ "$before" = "$after" ]; then
+      echo "ℹ โค้ดเป็นเวอร์ชันล่าสุดอยู่แล้ว ($after) — สร้างใหม่อีกรอบเผื่อไว้"
+    else
+      echo "▶ อัปเดตจาก $before → $after"
+      git_run log --oneline "$before..$after" | sed 's/^/   /'
+    fi
+    echo "▶ สร้างใหม่และเปิดต่อ (ประมาณ 3–5 นาที)..."
     $COMPOSE up -d --build
-    echo "✅ อัปเดตเสร็จ"
+    echo "✅ อัปเดตเสร็จ — เวอร์ชันที่รันอยู่: $after"
     ;;
 
   status)
