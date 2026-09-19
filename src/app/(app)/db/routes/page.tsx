@@ -97,6 +97,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
           className="mb-4"
         >
           <PriceMatrix
+            key={priceRoute.id}
             routeId={priceRoute.id}
             routeLabel={`${priceRoute.origin} → ${priceRoute.destination} (${priceRoute.vehicleType})`}
             priceUnit={priceRoute.priceUnit}
@@ -109,6 +110,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
             otherRoutes={routes
               .filter((r) => r.id !== priceRoute.id)
               .map((r) => ({ value: String(r.id), label: `${r.origin} → ${r.destination} (${r.vehicleType})` }))}
+            backHref={backHref}
           />
         </Card>
       )}

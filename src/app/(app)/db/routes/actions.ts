@@ -75,24 +75,34 @@ export async function deleteRoute(id: number): Promise<Result> {
   return { ok: true };
 }
 
-/** บันทึกตารางราคาทั้งหมดของเส้นทางหนึ่ง (ราคาลูกค้า + ราคาจ่ายรถร่วม ทุกช่วงราคาน้ำมัน) */
-export async function savePrices(routeId: number, form: FormData): Promise<Result> {
+export type PriceInput = { bandId: number; customerPrice: number | null; outsourcePrice: number | null };
+
+/**
+ * บันทึกตารางราคาทั้งหมดของเส้นทางหนึ่ง (ราคาลูกค้า + ราคาจ่ายรถร่วม ทุกช่วงราคาน้ำมัน)
+ * รับค่าตามที่เห็นบนหน้าจอทั้งตาราง — ช่วงที่ว่างทั้งสองช่องถือว่าไม่มีราคา จะถูกลบออก
+ */
+export async function savePrices(routeId: number, rows: PriceInput[]): Promise<Result & { saved?: number }> {
   await requireWrite();
-  const bands = await prisma.priceBand.findMany({ orderBy: { sort: "asc" } });
+  const bands = await prisma.priceBand.findMany({ select: { id: true } });
+  const known = new Set(bands.map((b) => b.id));
 
-  const ops = bands.map((band) => {
-    const c = String(form.get(`c_${band.id}`) ?? "").trim();
-    const o = String(form.get(`o_${band.id}`) ?? "").trim();
-    const customerPrice = c === "" ? null : Number(c);
-    const outsourcePrice = o === "" ? null : Number(o);
-
-    if (customerPrice == null && outsourcePrice == null) {
-      return prisma.routePrice.deleteMany({ where: { routeId, bandId: band.id } });
+  for (const r of rows) {
+    if (!known.has(r.bandId)) return { ok: false, error: "ช่วงราคาน้ำมันไม่ตรงกับในระบบ — รีเฟรชหน้าแล้วลองใหม่" };
+    for (const v of [r.customerPrice, r.outsourcePrice]) {
+      if (v != null && (!Number.isFinite(v) || v < 0)) return { ok: false, error: "ราคาต้องเป็นตัวเลข 0 ขึ้นไป" };
     }
+  }
+
+  let saved = 0;
+  const ops = rows.map((r) => {
+    if (r.customerPrice == null && r.outsourcePrice == null) {
+      return prisma.routePrice.deleteMany({ where: { routeId, bandId: r.bandId } });
+    }
+    saved++;
     return prisma.routePrice.upsert({
-      where: { routeId_bandId: { routeId, bandId: band.id } },
-      create: { routeId, bandId: band.id, customerPrice, outsourcePrice },
-      update: { customerPrice, outsourcePrice },
+      where: { routeId_bandId: { routeId, bandId: r.bandId } },
+      create: { routeId, bandId: r.bandId, customerPrice: r.customerPrice, outsourcePrice: r.outsourcePrice },
+      update: { customerPrice: r.customerPrice, outsourcePrice: r.outsourcePrice },
     });
   });
 
@@ -103,77 +113,19 @@ export async function savePrices(routeId: number, form: FormData): Promise<Resul
   }
 
   revalidatePath("/", "layout");
-  return { ok: true };
+  return { ok: true, saved };
 }
 
 /**
- * เติมราคาช่วงที่เหลือให้อัตโนมัติแบบขั้นบันได
- * ใช้เมื่อรู้ราคาที่ช่วงหนึ่ง แล้วอยากให้ช่วงถัดไปเพิ่มขึ้นทีละเท่าๆ กัน (เหมือนตารางเดิมใน Excel)
+ * อ่านราคาทั้งชุดของเส้นทางอื่นมาให้หน้าจอ (ใช้ตอนเพิ่มเส้นทางขากลับ)
+ * ไม่เขียนลงฐานข้อมูล — ผู้ใช้ตรวจ/แก้บนหน้าจอแล้วกดบันทึกเอง
  */
-export async function fillPriceLadder(
-  routeId: number,
-  baseBandId: number,
-  customerStep: number,
-  outsourceStep: number,
-): Promise<Result> {
+export async function copyPricesFrom(sourceRouteId: number): Promise<Result & { prices?: PriceInput[] }> {
   await requireWrite();
-  const bands = await prisma.priceBand.findMany({ orderBy: { sort: "asc" } });
-  const baseIndex = bands.findIndex((b) => b.id === baseBandId);
-  if (baseIndex < 0) return { ok: false, error: "ไม่พบช่วงราคาที่เลือกเป็นฐาน" };
-
-  const base = await prisma.routePrice.findUnique({
-    where: { routeId_bandId: { routeId, bandId: baseBandId } },
-  });
-  if (!base || (base.customerPrice == null && base.outsourcePrice == null)) {
-    return { ok: false, error: "ต้องกรอกราคาของช่วงที่ใช้เป็นฐานก่อน" };
-  }
-
-  const ops = bands.map((band, i) => {
-    const steps = i - baseIndex;
-    const customerPrice =
-      base.customerPrice == null ? null : Math.round((base.customerPrice + steps * customerStep) * 100) / 100;
-    const outsourcePrice =
-      base.outsourcePrice == null ? null : Math.round((base.outsourcePrice + steps * outsourceStep) * 100) / 100;
-    return prisma.routePrice.upsert({
-      where: { routeId_bandId: { routeId, bandId: band.id } },
-      create: { routeId, bandId: band.id, customerPrice, outsourcePrice },
-      update: { customerPrice, outsourcePrice },
-    });
-  });
-
-  try {
-    await prisma.$transaction(ops);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "เติมราคาไม่สำเร็จ" };
-  }
-
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
-/** คัดลอกราคาทั้งชุดจากเส้นทางอื่น (ใช้ตอนเพิ่มเส้นทางขากลับ) */
-export async function copyPricesFrom(routeId: number, sourceRouteId: number): Promise<Result> {
-  await requireWrite();
-  if (routeId === sourceRouteId) return { ok: false, error: "เลือกเส้นทางต้นทางที่ต่างจากเส้นทางนี้" };
   const source = await prisma.routePrice.findMany({ where: { routeId: sourceRouteId } });
-  if (!source.length) return { ok: false, error: "เส้นทางต้นทางยังไม่มีราคา" };
-
-  try {
-    await prisma.$transaction([
-      prisma.routePrice.deleteMany({ where: { routeId } }),
-      prisma.routePrice.createMany({
-        data: source.map((p) => ({
-          routeId,
-          bandId: p.bandId,
-          customerPrice: p.customerPrice,
-          outsourcePrice: p.outsourcePrice,
-        })),
-      }),
-    ]);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "คัดลอกไม่สำเร็จ" };
-  }
-
-  revalidatePath("/", "layout");
-  return { ok: true };
+  if (!source.length) return { ok: false, error: "เส้นทางที่เลือกยังไม่มีราคา" };
+  return {
+    ok: true,
+    prices: source.map((p) => ({ bandId: p.bandId, customerPrice: p.customerPrice, outsourcePrice: p.outsourcePrice })),
+  };
 }

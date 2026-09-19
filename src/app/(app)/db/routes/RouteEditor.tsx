@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { copyPricesFrom, deleteRoute, fillPriceLadder, savePrices, saveRoute } from "./actions";
+import { useEffect, useState, useTransition } from "react";
+import { copyPricesFrom, deleteRoute, savePrices, saveRoute } from "./actions";
 import type { Option } from "@/lib/crud";
 
 export type RouteRow = {
@@ -190,6 +190,37 @@ export function RouteActions({ id, backHref = "?" }: { id: number; backHref?: st
 export type BandRow = { id: number; label: string; minPrice: number; maxPrice: number };
 export type PriceRow = { bandId: number; customerPrice: number | null; outsourcePrice: number | null };
 
+/** ค่าในช่องกรอก เก็บเป็นข้อความตามที่พิมพ์ — ช่องว่าง = ไม่มีราคาที่ช่วงนั้น */
+type Cell = { c: string; o: string };
+type Cells = Record<number, Cell>;
+
+const cellsFrom = (bands: BandRow[], prices: PriceRow[]): Cells => {
+  const byBand = new Map(prices.map((p) => [p.bandId, p]));
+  const out: Cells = {};
+  for (const b of bands) {
+    const p = byBand.get(b.id);
+    out[b.id] = { c: p?.customerPrice != null ? String(p.customerPrice) : "", o: p?.outsourcePrice != null ? String(p.outsourcePrice) : "" };
+  }
+  return out;
+};
+
+const toNum = (s: string): number | null => {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+};
+
+const fmt = (n: number) => String(Math.round(n * 100) / 100);
+
+/**
+ * ตารางราคาของเส้นทางหนึ่ง — ทุกอย่างทำบนหน้าจอก่อน แล้วค่อยกด «บันทึก» ครั้งเดียว
+ *
+ * เดิม «เติมให้ทุกช่วง» ไปอ่านราคาฐานจากฐานข้อมูล ทั้งที่ผู้ใช้เพิ่งพิมพ์ในช่องยังไม่ได้บันทึก
+ * เลยฟ้องว่ายังไม่กรอก และช่องกรอกเป็นแบบ defaultValue ค่าที่ระบบเติมให้ก็ไม่โผล่จนกว่าจะรีเฟรช
+ * ตอนนี้ช่องทุกช่องผูกกับ state เดียว: พิมพ์เอง เติมขั้นบันได คัดลอกจากเส้นทางอื่น ล้วนแก้ state นั้น
+ * เห็นผลทันที แก้รายช่วงได้ตามใจ แล้วค่อยบันทึกทั้งตาราง
+ */
 export function PriceMatrix({
   routeId,
   routeLabel,
@@ -197,6 +228,7 @@ export function PriceMatrix({
   bands,
   prices,
   otherRoutes,
+  backHref = "?",
 }: {
   routeId: number;
   routeLabel: string;
@@ -204,43 +236,119 @@ export function PriceMatrix({
   bands: BandRow[];
   prices: PriceRow[];
   otherRoutes: Option[];
+  backHref?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const byBand = new Map(prices.map((p) => [p.bandId, p]));
-
+  const saved = cellsFrom(bands, prices);
+  const [cells, setCells] = useState<Cells>(saved);
   const [ladderBand, setLadderBand] = useState<string>(String(bands[0]?.id ?? ""));
-  const [cStep, setCStep] = useState("150");
-  const [oStep, setOStep] = useState("140");
+  const [cStep, setCStep] = useState("0");
+  const [oStep, setOStep] = useState("0");
   const [copyFrom, setCopyFrom] = useState("");
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) => {
+  const isDirty = (id: number) => cells[id]?.c !== saved[id]?.c || cells[id]?.o !== saved[id]?.o;
+  const dirtyCount = bands.filter((b) => isDirty(b.id)).length;
+
+  // ปิดแท็บ/เปลี่ยนหน้าทั้งที่ยังไม่บันทึก — ให้เบราว์เซอร์ถามก่อน
+  useEffect(() => {
+    if (dirtyCount === 0) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirtyCount]);
+
+  const setCell = (id: number, k: keyof Cell, v: string) => {
+    setMsg(null);
+    setCells((prev) => ({ ...prev, [id]: { ...prev[id], [k]: v } }));
+  };
+
+  /** ไล่ราคาจากช่วงฐานไปทุกช่วง (ขั้น 0 = ราคาเท่ากันทุกช่วง) — ทำบนหน้าจอ ยังไม่บันทึก */
+  const fillLadder = () => {
+    setError(null);
+    setMsg(null);
+    const baseId = Number(ladderBand);
+    const baseIndex = bands.findIndex((b) => b.id === baseId);
+    const base = cells[baseId];
+    const bc = toNum(base?.c ?? "");
+    const bo = toNum(base?.o ?? "");
+    if (baseIndex < 0 || (bc == null && bo == null)) {
+      setError(`กรอกราคาในช่อง «${bands[baseIndex]?.label ?? "ช่วงฐาน"}» ในตารางด้านล่างก่อน แล้วค่อยกดเติม`);
+      return;
+    }
+    const cs = Number(cStep) || 0;
+    const os = Number(oStep) || 0;
+    setCells((prev) => {
+      const next = { ...prev };
+      bands.forEach((b, i) => {
+        const steps = i - baseIndex;
+        next[b.id] = {
+          c: bc == null ? prev[b.id].c : fmt(bc + steps * cs),
+          o: bo == null ? prev[b.id].o : fmt(bo + steps * os),
+        };
+      });
+      return next;
+    });
+    setMsg(
+      cs === 0 && os === 0
+        ? "เติมราคาเท่ากันให้ทุกช่วงแล้ว — แก้รายช่วงได้ตามต้องการ แล้วกด «บันทึกราคาทั้งหมด»"
+        : "ไล่ราคาให้ทุกช่วงแล้ว — ตรวจ/แก้รายช่วงได้ แล้วกด «บันทึกราคาทั้งหมด»",
+    );
+  };
+
+  const copy = () => {
     setError(null);
     setMsg(null);
     start(async () => {
-      const res = await fn();
-      if (!res.ok) setError(res.error ?? "ไม่สำเร็จ");
+      const res = await copyPricesFrom(Number(copyFrom));
+      if (!res.ok || !res.prices) {
+        setError(res.error ?? "คัดลอกไม่สำเร็จ");
+        return;
+      }
+      setCells(cellsFrom(bands, res.prices));
+      setMsg("คัดลอกราคามาแล้ว — ตรวจแล้วกด «บันทึกราคาทั้งหมด»");
+    });
+  };
+
+  const save = () => {
+    setError(null);
+    setMsg(null);
+    start(async () => {
+      const res = await savePrices(
+        routeId,
+        bands.map((b) => ({ bandId: b.id, customerPrice: toNum(cells[b.id].c), outsourcePrice: toNum(cells[b.id].o) })),
+      );
+      if (!res.ok) setError(res.error ?? "บันทึกไม่สำเร็จ");
       else {
-        setMsg(success);
+        setMsg(`บันทึกราคาแล้ว ${res.saved ?? 0} ช่วง`);
         router.refresh();
       }
     });
+  };
+
+  const clearAll = () => {
+    if (!confirm("ล้างราคาทุกช่องบนหน้าจอ? (ยังไม่มีผลจนกว่าจะกดบันทึก)")) return;
+    setCells(Object.fromEntries(bands.map((b) => [b.id, { c: "", o: "" }])));
+    setMsg(null);
   };
 
   return (
     <div>
       <p className="mb-3 text-[13px] text-slate-600">
         ตั้งราคาของเส้นทาง <b>{routeLabel}</b> — ราคาเป็นบาท <b>{priceUnit}</b> ·
-        เว้นช่องว่างไว้ได้ถ้าไม่มีราคาที่ช่วงนั้น
+        พิมพ์ในตารางได้เลยทีละช่วง หรือใช้ตัวช่วยด้านล่าง · เว้นช่องว่างไว้ได้ถ้าไม่มีราคาที่ช่วงนั้น ·
+        ทุกอย่างมีผลเมื่อกด «บันทึกราคาทั้งหมด»
       </p>
 
       {/* เครื่องมือช่วยกรอก — ไม่ต้องพิมพ์ทีละ 22 ช่อง */}
       <div className="mb-4 grid gap-3 rounded-lg border border-[var(--border)] bg-slate-50 p-3 lg:grid-cols-2">
         <div>
-          <div className="mb-1.5 text-[12px] font-bold text-slate-700">เติมราคาแบบขั้นบันได</div>
+          <div className="mb-1.5 text-[12px] font-bold text-slate-700">เติมจากช่วงฐานให้ทุกช่วง</div>
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="lbl">ใช้ช่วงนี้เป็นฐาน</label>
@@ -252,28 +360,19 @@ export function PriceMatrix({
             </div>
             <div>
               <label className="lbl">+ ลูกค้า/ช่วง</label>
-              <input className="inp w-24" value={cStep} onChange={(e) => setCStep(e.target.value)} />
+              <input className="inp w-24" inputMode="decimal" value={cStep} onChange={(e) => setCStep(e.target.value)} />
             </div>
             <div>
               <label className="lbl">+ รถร่วม/ช่วง</label>
-              <input className="inp w-24" value={oStep} onChange={(e) => setOStep(e.target.value)} />
+              <input className="inp w-24" inputMode="decimal" value={oStep} onChange={(e) => setOStep(e.target.value)} />
             </div>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={pending}
-              onClick={() =>
-                run(
-                  () => fillPriceLadder(routeId, Number(ladderBand), Number(cStep) || 0, Number(oStep) || 0),
-                  "เติมราคาให้ทุกช่วงแล้ว",
-                )
-              }
-            >
+            <button type="button" className="btn btn-ghost" disabled={pending} onClick={fillLadder}>
               เติมให้ทุกช่วง
             </button>
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
-            กรอกราคาช่วงฐานแล้วกดปุ่มนี้ ระบบจะไล่ราคาช่วงอื่นให้ ทั้งขึ้นและลง
+            พิมพ์ราคาในช่องของช่วงฐาน (ในตารางด้านล่าง) แล้วกดปุ่มนี้ — ใส่ 0 = ราคาเท่ากันทุกช่วง ·
+            ใส่ตัวเลข = ช่วงถัดไปบวกเพิ่มทีละเท่านั้น (ช่วงก่อนหน้าลดลง)
           </p>
         </div>
 
@@ -289,12 +388,7 @@ export function PriceMatrix({
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={pending || !copyFrom}
-              onClick={() => run(() => copyPricesFrom(routeId, Number(copyFrom)), "คัดลอกราคามาแล้ว")}
-            >
+            <button type="button" className="btn btn-ghost" disabled={pending || !copyFrom} onClick={copy}>
               คัดลอก
             </button>
           </div>
@@ -302,86 +396,86 @@ export function PriceMatrix({
         </div>
       </div>
 
-      <form
-        action={(form) => {
-          setError(null);
-          setMsg(null);
-          start(async () => {
-            const res = await savePrices(routeId, form);
-            if (!res.ok) setError(res.error ?? "บันทึกไม่สำเร็จ");
-            else {
-              setMsg("บันทึกราคาแล้ว");
-              router.refresh();
-            }
-          });
-        }}
-      >
-        <div className="max-h-[28rem] overflow-y-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>ช่วงราคาน้ำมัน (บาท/ลิตร)</th>
-                <th className="num">ราคาลูกค้า</th>
-                <th className="num">ราคาจ่ายรถร่วม</th>
-                <th className="num">ส่วนต่าง</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bands.map((b) => {
-                const p = byBand.get(b.id);
-                const diff =
-                  p?.customerPrice != null && p?.outsourcePrice != null
-                    ? p.customerPrice - p.outsourcePrice
-                    : null;
-                return (
-                  <tr key={b.id}>
-                    <td className="font-medium">{b.label}</td>
-                    <td className="num">
-                      <input
-                        name={`c_${b.id}`}
-                        type="number"
-                        step="0.01"
-                        className="inp w-28 text-right"
-                        defaultValue={p?.customerPrice ?? ""}
-                      />
-                    </td>
-                    <td className="num">
-                      <input
-                        name={`o_${b.id}`}
-                        type="number"
-                        step="0.01"
-                        className="inp w-28 text-right"
-                        defaultValue={p?.outsourcePrice ?? ""}
-                      />
-                    </td>
-                    <td className={`num ${diff != null && diff < 0 ? "text-red-700" : "text-slate-500"}`}>
-                      {diff != null ? diff.toLocaleString("th-TH") : "-"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="max-h-[28rem] overflow-y-auto">
+        {/* ตารางกว้างเท่าที่จำเป็น หัวคอลัมน์กับช่องกรอกจะได้ตรงกัน ไม่ยืดจนช่องไปโผล่ใต้หัวคอลัมน์อื่น */}
+        <table className="tbl" style={{ width: "auto", minWidth: 0 }}>
+          <thead>
+            <tr>
+              <th>ช่วงราคาน้ำมัน (บาท/ลิตร)</th>
+              <th>ราคาลูกค้า</th>
+              <th>ราคาจ่ายรถร่วม</th>
+              <th>ส่วนต่าง</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bands.map((b) => {
+              const cell = cells[b.id];
+              const c = toNum(cell.c);
+              const o = toNum(cell.o);
+              const diff = c != null && o != null ? c - o : null;
+              const dirty = isDirty(b.id);
+              return (
+                <tr key={b.id} className={dirty ? "bg-amber-50" : undefined}>
+                  <td className="font-medium">{b.label}</td>
+                  <td>
+                    <input
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      className="inp w-28 text-right"
+                      value={cell.c}
+                      onChange={(e) => setCell(b.id, "c", e.target.value)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      className="inp w-28 text-right"
+                      value={cell.o}
+                      onChange={(e) => setCell(b.id, "o", e.target.value)}
+                    />
+                  </td>
+                  <td className={`num ${diff != null && diff < 0 ? "text-red-700" : "text-slate-500"}`}>
+                    {diff != null ? diff.toLocaleString("th-TH") : "-"}
+                  </td>
+                  <td className="text-[11px] text-amber-700">{dirty ? "แก้แล้ว ยังไม่บันทึก" : ""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-        {error && (
-          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">{error}</p>
-        )}
-        {msg && (
-          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">
-            {msg}
-          </p>
-        )}
+      {error && (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">{error}</p>
+      )}
+      {msg && (
+        <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">
+          {msg}
+        </p>
+      )}
 
-        <div className="mt-4 flex gap-2">
-          <button className="btn btn-primary" disabled={pending}>
-            {pending ? "กำลังบันทึก…" : "บันทึกราคาทั้งหมด"}
-          </button>
-          <button type="button" className="btn btn-ghost" onClick={() => router.push("?")}>
-            ปิด
-          </button>
-        </div>
-      </form>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>
+          {pending ? "กำลังบันทึก…" : dirtyCount > 0 ? `บันทึกราคาทั้งหมด (${dirtyCount} ช่วงที่แก้)` : "บันทึกราคาทั้งหมด"}
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={clearAll}>
+          ล้างทุกช่อง
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => {
+            if (dirtyCount > 0 && !confirm(`มี ${dirtyCount} ช่วงที่แก้แล้วยังไม่บันทึก ปิดโดยไม่บันทึก?`)) return;
+            router.push(backHref);
+          }}
+        >
+          ปิด
+        </button>
+      </div>
     </div>
   );
 }
