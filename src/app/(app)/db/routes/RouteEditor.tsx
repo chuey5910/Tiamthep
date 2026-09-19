@@ -20,19 +20,31 @@ export type RouteRow = {
   pricedBands: number;
 };
 
+/** ให้ค่าที่แถวนี้ใช้อยู่เป็นตัวเลือกเสมอ — ถึงชื่อนั้นจะถูกลบจากรายการตัวเลือกไปแล้ว ก็ยังแก้ช่องอื่นแล้วบันทึกได้ */
+function withCurrent(options: Option[], current: string | undefined): Option[] {
+  if (!current || options.some((o) => o.value === current)) return options;
+  return [{ value: current, label: `${current} (ชื่อเดิมของแถวนี้)` }, ...options];
+}
+
 export function RouteForm({
   locations,
   vehicleTypes,
   initial,
+  backHref = "?",
 }: {
   locations: Option[];
   vehicleTypes: Option[];
   initial?: RouteRow;
+  backHref?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const editing = !!initial;
+
+  const originOptions = withCurrent(locations, initial?.origin);
+  const destinationOptions = withCurrent(locations, initial?.destination);
+  const vehicleTypeOptions = withCurrent(vehicleTypes, initial?.vehicleType);
 
   return (
     <form
@@ -42,17 +54,23 @@ export function RouteForm({
         start(async () => {
           const res = await saveRoute(initial?.id ?? null, form);
           if (!res.ok) setError(res.error ?? "บันทึกไม่สำเร็จ");
-          else if (editing) router.push("?");
+          else if (editing) router.push(backHref);
           else router.refresh();
         });
       }}
     >
+      {editing && (
+        <p className="mb-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[12px] text-brand-900">
+          กำลังแก้ไขเส้นทาง <b>#{initial.id}</b> — ทุกช่องแสดงค่าเดิมของแถวนี้ แก้เฉพาะช่องที่ต้องการแล้วกด «บันทึกการแก้ไข»
+          จะมีผลกับแถวนี้แถวเดียว
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
         <div>
           <label className="lbl">ต้นทาง <span className="text-red-500">*</span></label>
           <select name="origin" className="inp" defaultValue={initial?.origin ?? ""} required>
             <option value="">— เลือก —</option>
-            {locations.map((l) => (
+            {originOptions.map((l) => (
               <option key={l.value} value={l.value}>{l.label}</option>
             ))}
           </select>
@@ -61,7 +79,7 @@ export function RouteForm({
           <label className="lbl">ปลายทาง <span className="text-red-500">*</span></label>
           <select name="destination" className="inp" defaultValue={initial?.destination ?? ""} required>
             <option value="">— เลือก —</option>
-            {locations.map((l) => (
+            {destinationOptions.map((l) => (
               <option key={l.value} value={l.value}>{l.label}</option>
             ))}
           </select>
@@ -70,7 +88,7 @@ export function RouteForm({
           <label className="lbl">ประเภทรถ <span className="text-red-500">*</span></label>
           <select name="vehicleType" className="inp" defaultValue={initial?.vehicleType ?? ""} required>
             <option value="">— เลือก —</option>
-            {vehicleTypes.map((v) => (
+            {vehicleTypeOptions.map((v) => (
               <option key={v.value} value={v.value}>{v.label}</option>
             ))}
           </select>
@@ -128,7 +146,7 @@ export function RouteForm({
           {pending ? "กำลังบันทึก…" : editing ? "บันทึกการแก้ไข" : "+ เพิ่มเส้นทาง"}
         </button>
         {editing && (
-          <button type="button" className="btn btn-ghost" onClick={() => router.push("?")}>
+          <button type="button" className="btn btn-ghost" onClick={() => router.push(backHref)}>
             ยกเลิก
           </button>
         )}
@@ -137,15 +155,17 @@ export function RouteForm({
   );
 }
 
-export function RouteActions({ id }: { id: number }) {
+export function RouteActions({ id, backHref = "?" }: { id: number; backHref?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  // ต่อท้ายคำค้นเดิม ("?" หรือ "?q=…") จะได้กลับมาเจอตารางที่กรองไว้เหมือนเดิม
+  const link = (k: string) => `${backHref}${backHref === "?" ? "" : "&"}${k}=${id}`;
   return (
     <div className="flex gap-1">
-      <a href={`?route=${id}`} className="btn btn-ghost px-2 py-1 text-[12px]">
+      <a href={link("route")} className="btn btn-ghost px-2 py-1 text-[12px]">
         ตั้งราคา
       </a>
-      <a href={`?edit=${id}`} className="btn btn-ghost px-2 py-1 text-[12px]">
+      <a href={link("edit")} className="btn btn-ghost px-2 py-1 text-[12px]">
         แก้ไข
       </a>
       <button

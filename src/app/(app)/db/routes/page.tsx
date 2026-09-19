@@ -1,3 +1,4 @@
+import { SearchFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, PageHeader } from "@/components/ui";
 import { num } from "@/lib/format";
 import type { SearchParams } from "@/lib/params";
@@ -6,10 +7,24 @@ import { PriceMatrix, RouteActions, RouteForm, type RouteRow } from "./RouteEdit
 
 export const dynamic = "force-dynamic";
 
+// เทียบแบบไม่สนตัวพิมพ์และช่องว่าง — "TPP บ้านค่าย" กับ "tppบ้านค่าย" ถือว่าตรงกัน
+// เพราะจุดประสงค์ของช่องค้นหาคือดูว่าเส้นทางนี้มีแล้วหรือยัง สะกดไว้แบบไหน
+const fold = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/\s+/g, "");
+
+/** รวมชื่อจากรายการตัวเลือกกับชื่อที่เส้นทางใช้อยู่จริง — เรียงตามรายการตัวเลือกก่อน ที่เหลือต่อท้ายตามตัวอักษร */
+function unionOptions(lookup: string[], inUse: string[]) {
+  const seen = new Set(lookup);
+  const extra = [...new Set(inUse.filter((v) => v && !seen.has(v)))].sort((a, b) => a.localeCompare(b, "th"));
+  return [...lookup, ...extra].map((v) => ({ value: v, label: v }));
+}
+
 export default async function RoutesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
   const editId = typeof sp.edit === "string" ? Number(sp.edit) : null;
   const priceRouteId = typeof sp.route === "string" ? Number(sp.route) : null;
+  const q = typeof sp.q === "string" ? sp.q.trim() : "";
+  // ลิงก์แก้ไข/ตั้งราคา/ยกเลิก ต้องพาคำค้นติดไปด้วย กลับมาแล้วตารางยังกรองเหมือนเดิม
+  const backHref = q ? `?q=${encodeURIComponent(q)}` : "?";
 
   const [routes, bands, locations, vehicleTypes] = await Promise.all([
     prisma.route.findMany({
@@ -40,6 +55,23 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
   }));
 
   const editing = editId ? rows.find((r) => r.id === editId) : undefined;
+
+  // ตัวเลือกต้นทาง/ปลายทาง/ประเภทรถ = รายการตัวเลือก + ชื่อที่เส้นทางเดิมใช้อยู่
+  // เส้นทางที่นำเข้าจากไฟล์อาจใช้ชื่อที่ยังไม่มีในรายการตัวเลือก ถ้าไม่รวมเข้ามา
+  // ตอนกดแก้ไข ช่องปลายทางจะว่าง แล้วบันทึกไม่ได้เพราะเลือกชื่อเดิมกลับไม่ได้
+  const locationOptions = unionOptions(
+    locations.map((l) => l.value),
+    routes.flatMap((r) => [r.origin, r.destination]),
+  );
+  const vehicleTypeOptions = unionOptions(
+    vehicleTypes.map((v) => v.value),
+    routes.map((r) => r.vehicleType),
+  );
+
+  const fq = fold(q);
+  const shown = fq
+    ? rows.filter((r) => [r.origin, r.destination, r.vehicleType, r.note].some((v) => fold(v).includes(fq)))
+    : rows;
 
   const priceRoute = priceRouteId ? routes.find((r) => r.id === priceRouteId) : null;
   const prices = priceRoute
@@ -81,17 +113,28 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
         </Card>
       )}
 
-      <Card title={editing ? `แก้ไขเส้นทาง #${editing.id}` : "เพิ่มเส้นทางใหม่"} className="mb-4 no-print">
-        <RouteForm
-          locations={locations.map((l) => ({ value: l.value, label: l.value }))}
-          vehicleTypes={vehicleTypes.map((v) => ({ value: v.value, label: v.value }))}
-          initial={editing}
-        />
+      <Card
+        title={
+          editing
+            ? `แก้ไขเส้นทาง: ${editing.origin} → ${editing.destination} (${editing.vehicleType})`
+            : "เพิ่มเส้นทางใหม่"
+        }
+        className="mb-4 no-print"
+      >
+        <RouteForm locations={locationOptions} vehicleTypes={vehicleTypeOptions} initial={editing} backHref={backHref} />
       </Card>
 
+      {/* ค้นหาก่อนเพิ่ม — จะได้รู้ว่าเส้นทางนี้มีแล้วหรือยัง และสะกดชื่อไว้แบบไหน */}
+      <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
+        <SearchFilter value={q} placeholder="ต้นทาง ปลายทาง หรือประเภทรถ…" />
+        <span className="pb-2 text-[12px] text-slate-500">
+          {q ? `พบ ${shown.length} จาก ${rows.length} เส้นทาง` : `ทั้งหมด ${rows.length} เส้นทาง`}
+        </span>
+      </div>
+
       <Card bodyClass="p-0">
-        {rows.length === 0 ? (
-          <Empty>ยังไม่มีเส้นทาง — เพิ่มได้จากฟอร์มด้านบน</Empty>
+        {shown.length === 0 ? (
+          <Empty>{q ? `ไม่พบเส้นทางที่ตรงกับ "${q}" — ยังไม่มีในระบบ เพิ่มได้จากฟอร์มด้านบน` : "ยังไม่มีเส้นทาง — เพิ่มได้จากฟอร์มด้านบน"}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="tbl">
@@ -111,8 +154,8 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
+                {shown.map((r) => (
+                  <tr key={r.id} className={r.id === editing?.id ? "bg-brand-50" : undefined}>
                     <td>{r.origin}</td>
                     <td>{r.destination}</td>
                     <td className="text-slate-500">{r.vehicleType}</td>
@@ -132,7 +175,7 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
                     </td>
                     <td>{r.active ? <Badge tone="ok">ใช้งาน</Badge> : <Badge tone="muted">ปิด</Badge>}</td>
                     <td className="no-print">
-                      <RouteActions id={r.id} />
+                      <RouteActions id={r.id} backHref={backHref} />
                     </td>
                   </tr>
                 ))}
