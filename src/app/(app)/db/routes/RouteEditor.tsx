@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { copyPricesFrom, deleteRoute, savePrices, saveRoute } from "./actions";
+import { PRICE_UNITS } from "@/lib/price-unit";
 import type { Option } from "@/lib/crud";
 
 export type RouteRow = {
@@ -96,9 +97,11 @@ export function RouteForm({
         <div>
           <label className="lbl">หน่วยคิดราคา</label>
           <select name="priceUnit" className="inp" defaultValue={initial?.priceUnit ?? "ต่อเที่ยว"}>
-            <option value="ต่อเที่ยว">ต่อเที่ยว</option>
-            <option value="ต่อตัน">ต่อตัน</option>
+            {PRICE_UNITS.map((u) => (
+              <option key={u} value={u}>{u}</option>
+            ))}
           </select>
+          <p className="mt-0.5 text-[11px] text-slate-400">ต่อตัน/ต่อกิโลกรัม = ราคา × น้ำหนักที่ลูกค้าใช้คิดเงิน</p>
         </div>
 
         <div>
@@ -211,7 +214,7 @@ const toNum = (s: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const fmt = (n: number) => String(Math.round(n * 100) / 100);
+const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
 
 /**
  * ตารางราคาของเส้นทางหนึ่ง — ทุกอย่างทำบนหน้าจอก่อน แล้วค่อยกด «บันทึก» ครั้งเดียว
@@ -341,7 +344,7 @@ export function PriceMatrix({
     <div>
       <p className="mb-3 text-[13px] text-slate-600">
         ตั้งราคาของเส้นทาง <b>{routeLabel}</b> — ราคาเป็นบาท <b>{priceUnit}</b> ·
-        พิมพ์ในตารางได้เลยทีละช่วง หรือใช้ตัวช่วยด้านล่าง · เว้นช่องว่างไว้ได้ถ้าไม่มีราคาที่ช่วงนั้น ·
+        พิมพ์ในตารางได้เลยทีละช่วง หรือใช้ตัวช่วยด้านล่าง · ใส่ทศนิยมได้ 3 ตำแหน่ง (เช่น 0.261 บาท/กก.) · เว้นช่องว่างไว้ได้ถ้าไม่มีราคาที่ช่วงนั้น ·
         ทุกอย่างมีผลเมื่อกด «บันทึกราคาทั้งหมด»
       </p>
 
@@ -421,7 +424,8 @@ export function PriceMatrix({
                   <td>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.001"
+                      min="0"
                       inputMode="decimal"
                       className="inp w-28 text-right"
                       value={cell.c}
@@ -431,7 +435,8 @@ export function PriceMatrix({
                   <td>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.001"
+                      min="0"
                       inputMode="decimal"
                       className="inp w-28 text-right"
                       value={cell.o}

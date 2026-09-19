@@ -3,6 +3,7 @@
 import { requireWrite } from "@/lib/auth";
 
 import { revalidatePath } from "next/cache";
+import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
 
 export type Result = { ok: boolean; error?: string };
@@ -37,7 +38,7 @@ export async function saveRoute(id: number | null, form: FormData): Promise<Resu
     origin,
     destination,
     vehicleType,
-    priceUnit: str(form, "priceUnit") === "ต่อตัน" ? "ต่อตัน" : "ต่อเที่ยว",
+    priceUnit: (PRICE_UNITS as readonly string[]).includes(str(form, "priceUnit")) ? str(form, "priceUnit") : "ต่อเที่ยว",
     distanceKm: numOrNull(form, "distanceKm"),
     targetKmPerL,
     allowance: numOrNull(form, "allowance") ?? 0,

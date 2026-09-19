@@ -16,6 +16,7 @@
 import { prisma } from "./prisma";
 import { parseDate, toInputDate } from "./date";
 import { buildContext, routeKey } from "./calc";
+import { NO_TRAILER, trailerOrNull } from "./vehicle-type";
 import { batchWriteValues, clearValues, readValues, sheetConfig, writeValues } from "./google-sheets";
 
 // ── โครงชีต — ต้องตรงกับ line-bot/Code.gs (แก้ที่หนึ่งต้องแก้อีกที่หนึ่ง) ──
@@ -191,9 +192,10 @@ async function importRow(
   if (!headPlate) problems.push("ไม่ได้กรอกทะเบียนรถ");
   else if (!ctx.vehicleByPlate.has(headPlate)) problems.push(`ทะเบียน ${headPlate} ไม่มีในเว็บ (หน้า ข้อมูลรถ)`);
 
-  const trailerPlate = (row[C.trailer] ?? "").trim() || null;
+  // «รถเดี่ยว» / ว่าง / "-" = ไม่มีหาง — ไม่ต้องมีทะเบียนหลอก
+  const trailerPlate = trailerOrNull(row[C.trailer]);
   if (trailerPlate && !ctx.vehicleByPlate.has(trailerPlate)) {
-    problems.push(`ทะเบียนหาง ${trailerPlate} ไม่มีในเว็บ (หน้า ข้อมูลรถ)`);
+    problems.push(`ทะเบียนหาง ${trailerPlate} ไม่มีในเว็บ (หน้า ข้อมูลรถ) — ถ้าเป็นรถเดี่ยวให้เลือก «${NO_TRAILER}»`);
   }
 
   const driverCode = (row[C.driver] ?? "").trim().toUpperCase() || null;
@@ -281,7 +283,8 @@ async function pushMasterData(
   const heads = activeVehicles.filter((v) => !isTrailer(v.vehicleType)).map((v) => v.plate);
   const trailersOnly = activeVehicles.filter((v) => isTrailer(v.vehicleType)).map((v) => v.plate);
   // ถ้าฐานข้อมูลไม่ได้แยกประเภทหาง ให้ใช้ทุกทะเบียนเป็นตัวเลือกของช่องหาง
-  const trailers = trailersOnly.length > 0 ? trailersOnly : activeVehicles.map((v) => v.plate);
+  // «รถเดี่ยว» เป็นตัวเลือกแรกเสมอ — รถที่ไม่มีหางเลือกอันนี้ ไม่ต้องใส่ทะเบียนหลอก
+  const trailers = [NO_TRAILER, ...(trailersOnly.length > 0 ? trailersOnly : activeVehicles.map((v) => v.plate))];
 
   const customers = ctx.customers.filter((c) => c.active).map((c) => c.code);
   const lookups = await prisma.lookup.findMany({ orderBy: [{ kind: "asc" }, { sort: "asc" }] });
@@ -327,7 +330,8 @@ async function pushMasterData(
     if (!d.active || !pair) continue;
     pairDrivers.push(d.code);
     pairHeads.push(pair.head);
-    pairTrailers.push(pair.trailer);
+    // คู่ที่ไม่มีหาง → ส่ง «รถเดี่ยว» ให้ชีตเติมช่องหางเป็นคำนี้ แทนที่จะปล่อยว่างให้คนเดา
+    pairTrailers.push(pair.trailer || NO_TRAILER);
   }
 
   const cols = [heads, trailers, customers, locations, cargoTypes, pairDrivers, pairHeads, pairTrailers];

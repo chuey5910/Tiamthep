@@ -123,7 +123,7 @@ function FieldInput({
     const current = value == null ? "" : String(value);
     return (
       <select id={id} name={field.name} className="inp" defaultValue={current} disabled={disabled} required={field.required}>
-        {(field.allowEmpty || !field.required) && <option value="">— ไม่ระบุ —</option>}
+        {(field.allowEmpty || !field.required) && <option value="">{field.emptyLabel ?? "— ไม่ระบุ —"}</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}

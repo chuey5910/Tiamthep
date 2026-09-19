@@ -80,7 +80,7 @@ export function JobForm({
         <div>
           <label className="lbl">หางพ่วง</label>
           <select name="trailerPlate" className="inp" defaultValue={initial?.trailerPlate ?? ""}>
-            <option value="">— ไม่มี —</option>
+            <option value="">รถเดี่ยว (ไม่มีหาง)</option>
             {trailers.map((v) => (
               <option key={v.value} value={v.value}>{v.label}</option>
             ))}
@@ -127,11 +127,11 @@ export function JobForm({
 
         <div>
           <label className="lbl">น้ำหนักต้นทาง (ตัน)</label>
-          <input type="number" step="0.01" name="weightOrigin" className="inp" defaultValue={initial?.weightOrigin ?? ""} />
+          <input type="number" step="0.001" name="weightOrigin" className="inp" defaultValue={initial?.weightOrigin ?? ""} />
         </div>
         <div>
           <label className="lbl">น้ำหนักปลายทาง (ตัน)</label>
-          <input type="number" step="0.01" name="weightDest" className="inp" defaultValue={initial?.weightDest ?? ""} />
+          <input type="number" step="0.001" name="weightDest" className="inp" defaultValue={initial?.weightDest ?? ""} />
           <p className="mt-0.5 text-[11px] text-slate-400">ระบบเลือกใช้ตัวไหนตามเกณฑ์ของลูกค้ารายนั้น</p>
         </div>
         <div>

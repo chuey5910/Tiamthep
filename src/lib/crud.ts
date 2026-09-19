@@ -31,6 +31,8 @@ export type Field = {
   options?: OptionSource;
   /** อนุญาตให้เว้นว่าง (แสดงตัวเลือก "— ไม่ระบุ —") */
   allowEmpty?: boolean;
+  /** ข้อความของตัวเลือกว่าง (ค่าเริ่มต้น "— ไม่ระบุ —") เช่น "รถเดี่ยว (ไม่มีหาง)" */
+  emptyLabel?: string;
   help?: string;
   step?: string;
   placeholder?: string;
@@ -136,7 +138,7 @@ export const RESOURCES: Record<string, Resource> = {
     ],
     fields: [
       { name: "headPlate", label: "ทะเบียนแม่ (หัวลาก/รถเดี่ยว)", type: "select", required: true, options: { kind: "vehicles" }, span: 1 },
-      { name: "trailerPlate", label: "หางพ่วง", type: "select", options: { kind: "vehicles" }, allowEmpty: true, span: 1 },
+      { name: "trailerPlate", label: "หางพ่วง", type: "select", options: { kind: "vehicles" }, allowEmpty: true, emptyLabel: "รถเดี่ยว (ไม่มีหาง)", span: 1 },
       { name: "driverCode", label: "พนักงานขับรถ", type: "select", options: { kind: "drivers" }, allowEmpty: true, span: 1, help: "เว้นว่างได้ถ้าเป็นรถร่วม" },
       { name: "effectiveDate", label: "วันที่เริ่มมีผล", type: "date", required: true, format: "date", span: 1 },
       { name: "note", label: "หมายเหตุ", type: "text", span: 4, hideInTable: true },

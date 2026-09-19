@@ -7,6 +7,7 @@
 
 import { prisma } from "./prisma";
 import { addDays, daysInMonth, startOfDay, utcDate } from "./date";
+import { isWeightPriced, priceMultiplier } from "./price-unit";
 
 // ─────────────────────────────────────────────────────────────
 // ราคาน้ำมันอ้างอิง
@@ -313,8 +314,8 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const weightBasis = customer?.weightBasis ?? "น้ำหนักปลายทาง";
   const billingWeight =
     (weightBasis === "น้ำหนักต้นทาง" ? job.weightOrigin : job.weightDest) ?? 0;
-  if (priceUnit === "ต่อตัน" && billingWeight <= 0) {
-    flag("weight", `เส้นทางนี้คิดราคาต่อตัน แต่ยังไม่ได้กรอก${weightBasis}`);
+  if (isWeightPriced(priceUnit) && billingWeight <= 0) {
+    flag("weight", `เส้นทางนี้คิดราคา${priceUnit} แต่ยังไม่ได้กรอก${weightBasis}`);
   }
 
   const rp = route && band ? ctx.priceByRoute.get(route.id)?.get(band.id) ?? null : null;
@@ -325,7 +326,8 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
     flag("revenue", `ยังไม่ได้ตั้งราคาลูกค้าของเส้นทางนี้ที่ช่วงน้ำมัน ${band.label}`);
   }
 
-  const multiplier = priceUnit === "ต่อตัน" ? billingWeight : 1;
+  // น้ำหนักในระบบเป็นตัน — ราคาต่อกิโลกรัม (เช่น 0.261) คูณด้วยน้ำหนักเป็นกิโล
+  const multiplier = priceMultiplier(priceUnit, billingWeight);
   const revenue = customerRate != null ? round2(customerRate * multiplier) : 0;
 
   const isOutsource = ownerType === "รถร่วม";

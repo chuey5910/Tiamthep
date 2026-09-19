@@ -367,7 +367,9 @@ function jobsMessage_(title, name, code, items) {
     var v = it.v;
     lines.push("งานที่ " + (idx + 1) + "  [" + v[JC.ID - 1] + "]");
     lines.push("• วันที่งาน: " + thaiDateOfYmd_(dateStr_(v[JC.DATE - 1])));
-    lines.push("• รถ: " + v[JC.HEAD - 1] + (v[JC.TRAILER - 1] ? " / หาง " + v[JC.TRAILER - 1] : ""));
+    // ช่องหางเป็น «รถเดี่ยว» = ไม่มีหาง ไม่ต้องบอกคนขับ
+    var trailer = String(v[JC.TRAILER - 1] || "").trim();
+    lines.push("• รถ: " + v[JC.HEAD - 1] + (trailer && trailer !== "รถเดี่ยว" ? " / หาง " + trailer : ""));
     lines.push("• ลูกค้า: " + v[JC.CUSTOMER - 1]);
     lines.push("• เส้นทาง: " + v[JC.ORIGIN - 1] + " → " + v[JC.DEST - 1]);
     if (v[JC.CARGO - 1]) lines.push("• สินค้า: " + v[JC.CARGO - 1]);

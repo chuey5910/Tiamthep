@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { parseDate } from "@/lib/date";
 import { buildContext, resolveDriver, routeKey } from "@/lib/calc";
+import { trailerOrNull } from "@/lib/vehicle-type";
 
 export type JobResult = { ok: boolean; error?: string };
 
@@ -34,7 +35,7 @@ async function collect(form: FormData) {
   if (!origin || !destination) return { error: "กรุณาเลือกต้นทางและปลายทาง" as const };
   if (origin === destination) return { error: "ต้นทางกับปลายทางต้องไม่ใช่ที่เดียวกัน" as const };
 
-  const trailerPlate = str(form, "trailerPlate") || null;
+  const trailerPlate = trailerOrNull(str(form, "trailerPlate"));
   const unloadDate = parseDate(str(form, "unloadDate"));
 
   // รหัสรอบเว้นว่างได้ ระบบตั้งให้เอง — แต่ถ้าอยากรวมขาไป-ขากลับเป็นรอบเดียว ต้องกรอกให้ตรงกัน

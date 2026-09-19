@@ -24,3 +24,21 @@ export function normalizeVehicleType(input: string): string {
   const s = input.trim().replace(/\s+/g, " ");
   return VEHICLE_TYPE_ALIASES[s] ?? s;
 }
+
+/**
+ * คำที่ใช้แทน "ไม่มีหางพ่วง" ในช่องทะเบียนหาง
+ *
+ * รถเดี่ยว (เช่น รถดั๊ม รถหกล้อ) ไม่มีหาง แต่ในชีตช่องหางเป็น dropdown
+ * ออฟฟิศเลยเลือกทะเบียนหลอกไว้ให้ผ่านๆ ไป กลายเป็นข้อมูลปลอมในระบบ
+ * จึงให้มีตัวเลือก «รถเดี่ยว» ในชีต แล้วตอนนำเข้าเว็บแปลงเป็น "ไม่มีหาง" (null)
+ */
+export const NO_TRAILER = "รถเดี่ยว";
+
+/** ค่าที่ถือว่า "ไม่มีหาง" — รวมคำที่ออฟฟิศมักพิมพ์เอง */
+const NO_TRAILER_WORDS = new Set(["", "-", "—", NO_TRAILER, "ไม่มี", "ไม่มีหาง", "ไม่มีหางพ่วง", "รถเดี่ยว (ไม่มีหาง)"]);
+
+/** ทะเบียนหางจากชีต/ฟอร์ม → ทะเบียนจริง หรือ null ถ้าเป็นรถเดี่ยว */
+export function trailerOrNull(input: string | null | undefined): string | null {
+  const s = (input ?? "").trim().replace(/\s+/g, " ");
+  return NO_TRAILER_WORDS.has(s) ? null : s;
+}
