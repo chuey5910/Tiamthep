@@ -95,6 +95,20 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
   const opt = (v: string, l: string) => ({ value: v, label: l });
 
+  // รายการต้นทาง/ปลายทาง/ประเภทสินค้า = รายการตัวเลือก + ชื่อที่งานในช่วงนี้ใช้อยู่จริง
+  // งานที่ดึงมาจากชีตมักใช้ชื่อที่ยังไม่ได้เพิ่มในรายการตัวเลือก ถ้าไม่รวมเข้ามา
+  // ช่องจะว่างตอนกดแก้ไข แล้วข้อมูลเดิมหายโดยไม่มีใครรู้
+  const union = (master: string[], used: string[]) =>
+    sortOptionsThaiFirst([...new Set([...master, ...used.filter(Boolean)])].map((v) => opt(v, v)));
+  const locationOptions = union(
+    locations.map((l) => l.value),
+    jobs.flatMap((j) => [j.origin, j.destination]),
+  );
+  const cargoOptions = union(
+    cargoTypes.map((c) => c.value),
+    jobs.map((j) => j.cargoType ?? ""),
+  );
+
   return (
     <>
       <PageHeader
@@ -117,8 +131,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
             .filter((v) => v.vehicleType.includes("หาง"))
             .map((v) => opt(v.plate, `${v.plate} (${v.vehicleType})`))}
           customers={customers.map((c) => opt(String(c.id), `${c.code} — ${c.name}`))}
-          locations={sortOptionsThaiFirst(locations.map((l) => opt(l.value, l.value)))}
-          cargoTypes={sortOptionsThaiFirst(cargoTypes.map((c) => opt(c.value, c.value)))}
+          locations={locationOptions}
+          cargoTypes={cargoOptions}
           initial={initial}
         />
       </Card>

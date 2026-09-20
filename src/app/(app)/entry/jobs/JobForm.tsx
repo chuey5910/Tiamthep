@@ -21,6 +21,17 @@ export type JobInitial = {
   note: string;
 };
 
+/**
+ * ให้ค่าที่งานนี้ใช้อยู่เป็นตัวเลือกเสมอ แม้ชื่อนั้นจะไม่มีในรายการหลัก
+ *
+ * เดิมถ้าต้นทาง/ปลายทางของงาน (ที่ดึงมาจากชีต) ยังไม่มีใน «รายการตัวเลือก»
+ * ช่องนั้นจะว่างตอนกดแก้ไข — เผลอกดบันทึกแล้วเส้นทางเพี้ยนหรือบันทึกไม่ได้
+ */
+function withCurrent(options: Option[], current: string | undefined): Option[] {
+  if (!current || options.some((o) => o.value === current)) return options;
+  return [{ value: current, label: `${current} (ยังไม่มีในรายการตัวเลือก)` }, ...options];
+}
+
 export function JobForm({
   vehicles,
   trailers,
@@ -43,6 +54,29 @@ export function JobForm({
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // ทุก dropdown ต้องมีค่าที่งานนี้ใช้อยู่ ไม่งั้นช่องจะว่างแล้วข้อมูลเดิมหาย
+  const headOptions = withCurrent(vehicles, initial?.headPlate);
+  const trailerOptions = withCurrent(trailers, initial?.trailerPlate || undefined);
+  const customerOptions = withCurrent(customers, initial?.customerId);
+  const originOptions = withCurrent(locations, initial?.origin);
+  const destinationOptions = withCurrent(locations, initial?.destination);
+  const cargoOptions = withCurrent(cargoTypes, initial?.cargoType || undefined);
+
+  // ช่องที่ค่าเดิมไม่มีในรายการหลัก — เตือนให้ไปเพิ่มชื่อ จะได้ไม่ต้องเดาตอนกรอกครั้งหน้า
+  const missing = editing
+    ? [
+        vehicles.some((v) => v.value === initial.headPlate) ? "" : `ทะเบียน ${initial.headPlate}`,
+        !initial.trailerPlate || trailers.some((v) => v.value === initial.trailerPlate) ? "" : `หางพ่วง ${initial.trailerPlate}`,
+        locations.some((l) => l.value === initial.origin) ? "" : `ต้นทาง ${initial.origin}`,
+        locations.some((l) => l.value === initial.destination) ? "" : `ปลายทาง ${initial.destination}`,
+      ].filter(Boolean)
+    : [];
+
+  // น้ำหนักในระบบเป็น "ตัน" — เกิน 100 ตันต่อขาแปลว่ากรอกเป็นกิโลกรัมมา
+  const heavy = [initial?.weightOrigin, initial?.weightDest]
+    .map((v) => Number(v))
+    .some((n) => Number.isFinite(n) && n > 100);
+
   const onSubmit = (form: FormData) => {
     setError(null);
     start(async () => {
@@ -58,6 +92,19 @@ export function JobForm({
 
   return (
     <form action={onSubmit} key={initial?.id ?? "new"}>
+      {heavy && (
+        <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-900">
+          ⚠️ น้ำหนักของงานนี้เกิน 100 ตัน — หน่วยในระบบคือ <b>ตัน</b> ตัวเลขนี้น่าจะกรอกเป็นกิโลกรัมมา
+          (เช่น 29,800 ควรเป็น 29.8) · ถ้าไม่แก้ รายได้ของขานี้จะสูงกว่าความจริง 1,000 เท่า
+        </p>
+      )}
+      {missing.length > 0 && (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-900">
+          ⚠️ ค่าเดิมของงานนี้ยังไม่มีในรายการตัวเลือก: <b>{missing.join(" · ")}</b>
+          <br />– ระบบใส่ค่าเดิมไว้ในช่องให้แล้ว กดบันทึกได้เลยโดยข้อมูลไม่หาย
+          <br />– ถ้าจะใช้ชื่อนี้ต่อไป ให้เพิ่มที่ <a className="font-bold underline" href="/settings/lookups?q=location">ตั้งค่า → รายการตัวเลือก</a> หรือหน้า ข้อมูลรถ
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
         <div>
           <label className="lbl">วันที่ขึ้นสินค้า <span className="text-red-500">*</span></label>
@@ -72,7 +119,7 @@ export function JobForm({
           <label className="lbl">ทะเบียนแม่ (หัวลาก/รถเดี่ยว) <span className="text-red-500">*</span></label>
           <select name="headPlate" className="inp" defaultValue={initial?.headPlate ?? ""} required>
             <option value="">— เลือก —</option>
-            {vehicles.map((v) => (
+            {headOptions.map((v) => (
               <option key={v.value} value={v.value}>{v.label}</option>
             ))}
           </select>
@@ -81,7 +128,7 @@ export function JobForm({
           <label className="lbl">หางพ่วง</label>
           <select name="trailerPlate" className="inp" defaultValue={initial?.trailerPlate ?? ""}>
             <option value="">รถเดี่ยว (ไม่มีหาง)</option>
-            {trailers.map((v) => (
+            {trailerOptions.map((v) => (
               <option key={v.value} value={v.value}>{v.label}</option>
             ))}
           </select>
@@ -92,7 +139,7 @@ export function JobForm({
           <label className="lbl">ลูกค้า <span className="text-red-500">*</span></label>
           <select name="customerId" className="inp" defaultValue={initial?.customerId ?? ""} required>
             <option value="">— เลือก —</option>
-            {customers.map((c) => (
+            {customerOptions.map((c) => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
@@ -101,7 +148,7 @@ export function JobForm({
           <label className="lbl">ต้นทาง <span className="text-red-500">*</span></label>
           <select name="origin" className="inp" defaultValue={initial?.origin ?? ""} required>
             <option value="">— เลือก —</option>
-            {locations.map((l) => (
+            {originOptions.map((l) => (
               <option key={l.value} value={l.value}>{l.label}</option>
             ))}
           </select>
@@ -110,7 +157,7 @@ export function JobForm({
           <label className="lbl">ปลายทาง <span className="text-red-500">*</span></label>
           <select name="destination" className="inp" defaultValue={initial?.destination ?? ""} required>
             <option value="">— เลือก —</option>
-            {locations.map((l) => (
+            {destinationOptions.map((l) => (
               <option key={l.value} value={l.value}>{l.label}</option>
             ))}
           </select>
@@ -119,7 +166,7 @@ export function JobForm({
           <label className="lbl">ประเภทสินค้า</label>
           <select name="cargoType" className="inp" defaultValue={initial?.cargoType ?? ""}>
             <option value="">— ไม่ระบุ —</option>
-            {cargoTypes.map((c) => (
+            {cargoOptions.map((c) => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
