@@ -2,7 +2,7 @@
  * นำเข้างานจาก «ชีตสั่งงานไลน์» เข้าฐานข้อมูลเว็บ
  *
  * ขั้นตอนความปลอดภัยของข้อมูล (ห้ามลัดขั้น)
- *  1. นำเข้าเฉพาะแถวที่พนักงานตรวจแล้วและตั้งสถานะ «ยืนยัน» เท่านั้น
+ *  1. นำเข้าแถวที่พนักงานตรวจแล้วและตั้งสถานะ «ยืนยัน» (และลองแถว «นำเข้าไม่ผ่าน» ซ้ำให้ทุกครั้ง)
  *     ข้อมูลจาก OCR ที่ยังไม่ผ่านตาคน (สถานะ «ได้ตั๋วแล้ว») จะไม่ถูกแตะ
  *  2. ทุกแถวถูกตรวจกับฐานข้อมูลก่อน: ทะเบียนรถ รหัสลูกค้า รหัสคนขับ ต้องมีจริง
  *     ไม่ผ่านข้อไหนจะเขียนเหตุผลกลับลงชีต (สถานะ «นำเข้าไม่ผ่าน») ให้แก้แล้วยืนยันใหม่
@@ -131,7 +131,9 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       const rowNo = i + 2; // แถวจริงในชีต (ข้อมูลเริ่มแถว 2)
       const status = (row[C.status] ?? "").trim();
       if (status === "ส่งของเสร็จสิ้น") pendingReview++;
-      if (status !== ST.CONFIRMED) {
+      // แถว «นำเข้าไม่ผ่าน» ลองใหม่ให้ทุกครั้ง — ออฟฟิศแก้ช่องที่ผิดแล้ว (เช่น เติมรหัสลูกค้า)
+      // มักลืมเปลี่ยนสถานะกลับเป็น «ยืนยัน» งานเลยค้างอยู่อย่างนั้น ทั้งที่แก้เสร็จแล้ว
+      if (status !== ST.CONFIRMED && status !== ST.FAILED) {
         // งานที่ปิดไปแล้ว ไม่ต้องสร้างงานซ้ำ แต่ยังต้องตามเก็บเงินเดินทาง/ค่าทางด่วน
         // เพราะออฟฟิศมักกรอกเงินตามหลัง และงานเก่าดึงเข้าเว็บตอนที่ยังไม่มีสองคอลัมน์นี้
         if (status === ST.IMPORTED && (await syncTravelAdvance(row))) advancesSynced++;
@@ -149,10 +151,13 @@ export async function runSheetImport(): Promise<SheetImportResult> {
         );
       } else {
         failed++;
-        writes.push(
-          { range: `${JOBS_TAB}!${STATUS_COL}${rowNo}`, values: [[ST.FAILED]] },
-          { range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[res.message]] },
-        );
+        const unchanged = status === ST.FAILED && (row[21] ?? "").trim() === res.message;
+        if (!unchanged) {
+          writes.push(
+            { range: `${JOBS_TAB}!${STATUS_COL}${rowNo}`, values: [[ST.FAILED]] },
+            { range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[res.message]] },
+          );
+        }
       }
       results.push({ jobId: jobId || `แถว ${rowNo}`, ok: res.ok, message: res.message });
     }
