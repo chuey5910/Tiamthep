@@ -365,6 +365,14 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   if (isWeightPriced(priceUnit) && billingWeight <= 0) {
     flag("weight", `เส้นทางนี้คิดราคา${priceUnit} แต่ยังไม่ได้กรอก${weightBasis}`);
   }
+  // น้ำหนักในระบบมีหน่วยเป็น "ตัน" — รถบรรทุกคันเดียวไม่มีทางเกิน 100 ตัน
+  // ถ้าเกิน แปลว่ากรอกเป็นกิโลกรัมมา ปล่อยผ่านแล้วรายได้จะเพี้ยนพันเท่า
+  if (billingWeight > 100) {
+    flag(
+      "weight",
+      `${weightBasis} ${billingWeight.toLocaleString("th-TH")} ตัน สูงผิดปกติ — น่าจะกรอกเป็นกิโลกรัม (ควรเป็น ${(billingWeight / 1000).toLocaleString("th-TH")} ตัน) แก้ที่หน้าบันทึกงานขนส่ง หรือแก้ในชีตแล้วดึงงานใหม่`,
+    );
+  }
 
   const rp = route && band ? ctx.priceByRoute.get(route.id)?.get(band.id) ?? null : null;
   const customerRate = rp?.customerPrice ?? null;
@@ -374,13 +382,28 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
     flag("revenue", `ยังไม่ได้ตั้งราคาลูกค้า ${route.origin} → ${route.destination} (${route.vehicleType}) ที่ช่วงน้ำมัน ${band.label}`);
   }
 
-  // ราคาต่อเที่ยวที่ต่ำผิดปกติ มักแปลว่าหน่วยคิดราคาตั้งผิด (ที่จริงเป็นต่อตัน/ต่อกิโลกรัม)
-  // เงินจะต่ำกว่าจริงหลายเท่าโดยไม่มีใครรู้ จึงต้องทักไว้ให้ไปตรวจ
-  if (priceUnit === "ต่อเที่ยว" && customerRate != null && customerRate < 500 && billingWeight > 0) {
-    flag(
-      "revenue",
-      `ราคา ${customerRate} บาทต่อเที่ยว ต่ำผิดปกติสำหรับงานที่มีน้ำหนัก ${billingWeight} ตัน — ตรวจ «หน่วยคิดราคา» ของเส้นทางนี้ว่าควรเป็นต่อตันหรือต่อกิโลกรัมหรือไม่`,
-    );
+  // ── ตัวดักหน่วยคิดราคาตั้งผิด ──
+  // ตั้งผิดแล้วเงินจะเพี้ยนหลักพันเท่าโดยไม่มีอะไรฟ้อง (เช่น 185 บาท/ตัน ถ้าตั้งเป็นต่อกิโลกรัม
+  // จะกลายเป็น 5,699,850 บาท/ขา) จึงต้องทักทันทีที่ตัวเลขหลุดช่วงที่เป็นไปได้จริง
+  if (route && customerRate != null && customerRate > 0 && billingWeight > 0) {
+    const where = `${route.origin} → ${route.destination} (${route.vehicleType})`;
+    const fix = `แก้ที่ ฐานข้อมูล → เส้นทาง ระยะทาง ราคา → เส้นทาง #${route.id}`;
+    if (priceUnit === "ต่อกิโลกรัม" && customerRate >= 20) {
+      flag(
+        "revenue",
+        `ราคา ${customerRate} บาท/กก. สูงผิดปกติ — ขานี้จะคิดเป็น ${round2(customerRate * billingWeight * 1000).toLocaleString("th-TH")} บาท · ${where} น่าจะเป็น «ต่อตัน» มากกว่า · ${fix}`,
+      );
+    } else if (priceUnit === "ต่อตัน" && customerRate < 20) {
+      flag(
+        "revenue",
+        `ราคา ${customerRate} บาท/ตัน ต่ำผิดปกติ — ${where} น่าจะเป็น «ต่อกิโลกรัม» มากกว่า · ${fix}`,
+      );
+    } else if (priceUnit === "ต่อเที่ยว" && customerRate < 500) {
+      flag(
+        "revenue",
+        `ราคา ${customerRate} บาทต่อเที่ยว ต่ำผิดปกติสำหรับงานที่มีน้ำหนัก ${billingWeight} ตัน — ${where} น่าจะคิดต่อตันหรือต่อกิโลกรัม · ${fix}`,
+      );
+    }
   }
 
   // น้ำหนักในระบบเป็นตัน — ราคาต่อกิโลกรัม (เช่น 0.261) คูณด้วยน้ำหนักเป็นกิโล

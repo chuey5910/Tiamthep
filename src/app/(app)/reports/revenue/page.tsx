@@ -29,6 +29,14 @@ export default async function RevenueReportPage({ searchParams }: { searchParams
   const top = rep.byCustomer[0];
   const legs = data.billedJobs.length;
 
+  // ขาที่ยังมีปัญหา (เช่น หน่วยคิดราคาน่าสงสัย น้ำหนักผิดหน่วย ยังไม่ตั้งราคา)
+  // ต้องขึ้นเตือนบนรายงาน ไม่ใช่ปล่อยให้เห็นแต่ยอดรวมที่ผิด
+  const problemLegs = [
+    ...new Set(
+      data.billedJobs.flatMap((j) => data.calcs.get(j.id)!.issues),
+    ),
+  ];
+
   return (
     <>
       <PageHeader
@@ -47,6 +55,21 @@ export default async function RevenueReportPage({ searchParams }: { searchParams
         รายได้ต่อขา = ราคาค่าบรรทุกตามเส้นทาง ณ ช่วงราคาน้ำมันของลูกค้ารายนั้น × น้ำหนัก (ถ้าคิดต่อตัน/ต่อกิโลกรัม) ·&nbsp; ราคาน้ำมันอ้างอิงและเกณฑ์น้ำหนัก
         (ต้นทาง/ปลายทาง) ตั้งแยกได้รายลูกค้าที่หน้า <b>ฐานข้อมูล → ข้อมูลลูกค้า</b>
       </Formula>
+
+      {problemLegs.length > 0 && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-medium text-red-900">
+          ⚠️ <b>ตัวเลขในรายงานนี้ยังเชื่อไม่ได้</b> — มี {problemLegs.length} ขาที่ข้อมูลยังไม่ครบหรือตั้งค่าน่าสงสัย
+          <ul className="mt-1 space-y-0.5">
+            {problemLegs.slice(0, 3).map((m, i) => (
+              <li key={i}>– {m}</li>
+            ))}
+            {problemLegs.length > 3 && <li>– และอีก {problemLegs.length - 3} รายการ</li>}
+          </ul>
+          <Link href={`/entry/jobs?from=${fromStr}&to=${toStr}&problems=1`} className="mt-2 inline-block font-bold underline">
+            ไปดู/แก้ที่หน้าบันทึกงานขนส่ง →
+          </Link>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="รายได้รวม" value={baht(rep.total)} hint="บาท" />
