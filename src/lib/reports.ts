@@ -586,6 +586,117 @@ export type AllowanceRow = {
  *   เบี้ยเลี้ยงที่ได้จริง = เบี้ยเลี้ยงตามเส้นทาง − เงินเดินทางที่รับไปก่อน + ค่าทางด่วนที่สำรองจ่าย
  * แล้วรวมทั้งงวด (วันที่ 1-15 และ 16-สิ้นเดือน) บวกเงินพิเศษค่าน้ำมัน = ยอดจ่ายพร้อมเงินเดือน
  */
+/** 1 ขาที่วิ่งในงวด พร้อมเงินเดินทาง/ค่าทางด่วนของขานั้น (จับคู่ด้วยรหัสงานจากชีต) */
+export type AllowanceLeg = {
+  jobId: number;
+  sheetRef: string | null;
+  date: Date;
+  tripCode: string;
+  plate: string;
+  trailerPlate: string | null;
+  customer: string;
+  origin: string;
+  destination: string;
+  vehicleType: string | null;
+  /** น้ำหนักที่ใช้คิดเงิน (ตัน) */
+  weight: number;
+  allowance: number;
+  advance: number;
+  toll: number;
+  /** เบี้ยเลี้ยงสุทธิของขานี้ = เบี้ยเลี้ยง − เงินเดินทาง + ทางด่วน */
+  net: number;
+  issues: string[];
+};
+
+/** รายการเงินเดินทาง/ทางด่วนที่ยังจับคู่กับขาในงวดไม่ได้ (เช่น งานคนละงวด หรือคีย์มือ) */
+export type AllowanceAdvance = {
+  id: number;
+  date: Date;
+  plate: string | null;
+  sheetRef: string | null;
+  advance: number;
+  toll: number;
+  note: string | null;
+};
+
+export type AllowanceDetail = AllowanceRow & {
+  legRows: AllowanceLeg[];
+  /** เงินเดินทางที่ไม่ได้ผูกกับขาในงวด — ยังถูกนับในยอดรวม แต่แยกให้เห็นเพื่อตรวจสอบ */
+  looseAdvances: AllowanceAdvance[];
+  bonusRows: TripFuelBonus[];
+};
+
+/**
+ * รายละเอียดรายขาของแต่ละ พขร. ในงวด — ใช้ให้เจ้าหน้าที่ตรวจทานก่อนจ่าย
+ * ยอดรวมทุกช่องตรงกับ allowanceReport เสมอ เพราะคิดจากชุดข้อมูลเดียวกัน
+ */
+export function allowanceDetail(d: PeriodData): AllowanceDetail[] {
+  const base = allowanceReport(d);
+  const byCode = new Map(base.map((r) => [r.driverCode, { ...r, legRows: [] as AllowanceLeg[], looseAdvances: [] as AllowanceAdvance[], bonusRows: [] as TripFuelBonus[] }]));
+
+  // เงินเดินทางผูกกับขาด้วยรหัสงานจากชีต (1 งาน = 1 แถวเงินเดินทาง)
+  const advByRef = new Map<string, (typeof d.advances)[number]>();
+  for (const a of d.advances) if (a.sheetRef) advByRef.set(a.sheetRef, a);
+  const usedAdvIds = new Set<number>();
+
+  for (const j of d.ranJobs) {
+    const c = d.calcs.get(j.id)!;
+    if (!c.driverCode) continue;
+    const row = byCode.get(c.driverCode);
+    if (!row) continue;
+    const adv = j.sheetRef ? advByRef.get(j.sheetRef) : undefined;
+    if (adv) usedAdvIds.add(adv.id);
+    const advance = adv?.advance ?? 0;
+    const toll = adv?.toll ?? 0;
+    row.legRows.push({
+      jobId: j.id,
+      sheetRef: j.sheetRef ?? null,
+      date: j.loadDate,
+      tripCode: j.tripCode,
+      plate: j.headPlate,
+      trailerPlate: j.trailerPlate ?? null,
+      customer: d.ctx.customerById.get(j.customerId)?.code ?? "-",
+      origin: j.origin,
+      destination: j.destination,
+      vehicleType: c.vehicleType,
+      weight: c.billingWeight,
+      allowance: c.allowance,
+      advance,
+      toll,
+      net: round2(c.allowance - advance + toll),
+      issues: c.issues,
+    });
+  }
+
+  for (const a of d.advances) {
+    if (usedAdvIds.has(a.id)) continue;
+    const row = byCode.get(a.driverCode);
+    if (!row) continue;
+    row.looseAdvances.push({
+      id: a.id,
+      date: a.date,
+      plate: a.plate ?? null,
+      sheetRef: a.sheetRef ?? null,
+      advance: a.advance,
+      toll: a.toll,
+      note: a.note ?? null,
+    });
+  }
+
+  for (const b of d.bonuses) {
+    if (!b.driverCode) continue;
+    byCode.get(b.driverCode)?.bonusRows.push(b);
+  }
+
+  for (const row of byCode.values()) {
+    row.legRows.sort((x, y) => x.date.getTime() - y.date.getTime() || x.jobId - y.jobId);
+    row.looseAdvances.sort((x, y) => x.date.getTime() - y.date.getTime());
+    row.bonusRows.sort((x, y) => x.endDate.getTime() - y.endDate.getTime());
+  }
+
+  return [...byCode.values()];
+}
+
 export function allowanceReport(d: PeriodData): AllowanceRow[] {
   const nameOf = new Map(d.drivers.map((x) => [x.code, `${x.firstName} ${x.lastName}`.trim()]));
   const rows = new Map<string, AllowanceRow>();

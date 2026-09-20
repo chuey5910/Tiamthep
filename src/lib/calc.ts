@@ -259,6 +259,8 @@ export type JobInput = {
   weightOrigin: number | null;
   weightDest: number | null;
   routeId: number | null;
+  /** รหัสงานจากชีตสั่งงาน — ใช้จับคู่กับรายการเงินเดินทางของขานั้น */
+  sheetRef?: string | null;
 };
 
 /** ช่องข้อมูลในตารางงานที่อาจมีปัญหา */
