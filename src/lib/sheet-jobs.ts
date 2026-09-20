@@ -97,12 +97,20 @@ async function syncTravelAdvance(row: string[]): Promise<boolean> {
 
 /**
  * ข้อความ «ผลนำเข้าเว็บ» ของแถวที่นำเข้าสำเร็จ — ใช้สูตรเดียวกันทั้งตอนนำเข้าครั้งแรกและตอนรีเฟรช
- * ข้อความจึงนิ่ง: ถ้าสถานะในเว็บไม่เปลี่ยน ก็ไม่ต้องเขียนทับชีตซ้ำทุกครั้งที่กดดึงงาน
+ *
+ * รูปแบบตายตัวทุกแถว อ่านจากซ้ายไปขวาได้เลย:
+ *   ✅ เว็บ #224                              จบแล้ว ไม่มีอะไรต้องทำ
+ *   ✅ เว็บ #224 · มีเงินเดินทาง/ทางด่วน        จบแล้ว และมีเงินเดินทางผูกไว้ด้วย
+ *   ⚠️ เว็บ #224 · ต้องแก้: ...                 เข้าเว็บแล้ว แต่ยังมีเรื่องค้าง
+ * ตัวแรกบอกสถานะเสมอ จึงกวาดตาดูทั้งคอลัมน์ได้โดยไม่ต้องอ่านทั้งประโยค
+ *
+ * ข้อความนิ่ง: ถ้าสถานะในเว็บไม่เปลี่ยน ก็ไม่ต้องเขียนทับชีตซ้ำทุกครั้งที่กดดึงงาน
  */
 function okMessage(webId: number | string, hasAdvance: boolean, problems: string[]): string {
-  const adv = hasAdvance ? " + เงินเดินทาง/ทางด่วน" : "";
-  const issue = problems.length ? ` (${problems.join(" · ")})` : "";
-  return `เว็บ #${webId}${adv}${issue}`;
+  const parts = [`เว็บ #${webId}`];
+  if (hasAdvance) parts.push("มีเงินเดินทาง/ทางด่วน");
+  if (problems.length) parts.push(`ต้องแก้: ${problems.join(" · ")}`);
+  return `${problems.length ? "⚠️" : "✅"} ${parts.join(" · ")}`;
 }
 
 /**
@@ -173,6 +181,8 @@ export async function runSheetImport(): Promise<SheetImportResult> {
 
       const jobId = (row[C.id] ?? "").trim();
       const res = await importRow(row, jobId, ctx, driverByCode, customerByCode);
+      // ทุกแถวขึ้นต้นด้วยเครื่องหมายสถานะเหมือนกัน: ✅ จบ · ⚠️ ต้องแก้ · ❌ ยังไม่เข้าเว็บ
+      if (!res.ok) res.message = `❌ ${res.message}`;
 
       if (res.ok) {
         imported++;
@@ -222,7 +232,7 @@ async function refreshedMessage(
   const jobId = (row[C.id] ?? "").trim();
   if (!jobId) return null;
   const job = await prisma.job.findUnique({ where: { sheetRef: jobId } });
-  if (!job) return `ไม่พบงานนี้ในเว็บแล้ว (ถูกลบ?) — ถ้าต้องการดึงใหม่ ให้เปลี่ยนสถานะเป็น «${ST.CONFIRMED}»`;
+  if (!job) return `❌ ไม่พบงานนี้ในเว็บแล้ว (ถูกลบ?) — ถ้าต้องการดึงใหม่ ให้เปลี่ยนสถานะเป็น «${ST.CONFIRMED}»`;
   const hasAdvance = (await prisma.travelAdvance.count({ where: { sheetRef: jobId } })) > 0;
   return okMessage(job.id, hasAdvance, openIssues(computeJob(ctx, job)));
 }
