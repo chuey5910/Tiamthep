@@ -199,7 +199,18 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                           "-"
                         )}
                       </td>
-                      <td className={`num font-semibold${bad("revenue")}`}>{baht(calc.revenue)}</td>
+                      <td className={`num font-semibold${bad("revenue")}`}>
+                        {baht(calc.revenue)}
+                        {calc.customerRate != null && (
+                          <div className="whitespace-nowrap text-[10px] font-normal text-slate-400">
+                            {calc.priceUnit === "ต่อกิโลกรัม"
+                              ? `${num(calc.customerRate, 3)} × ${num(calc.billingWeight * 1000, 0)} กก.`
+                              : calc.priceUnit === "ต่อตัน"
+                                ? `${num(calc.customerRate, 2)} × ${num(calc.billingWeight, 3)} ตัน`
+                                : `${num(calc.customerRate, 2)} ${calc.priceUnit}`}
+                          </div>
+                        )}
+                      </td>
                       <td>
                         {calc.issues.length === 0 ? (
                           <Badge tone="ok">ครบ</Badge>

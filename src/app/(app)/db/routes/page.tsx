@@ -1,5 +1,6 @@
 import { SearchFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, PageHeader } from "@/components/ui";
+import { routeKey } from "@/lib/calc";
 import { num } from "@/lib/format";
 import type { SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
@@ -55,6 +56,18 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
   }));
 
   const editing = editId ? rows.find((r) => r.id === editId) : undefined;
+
+  // แถวที่ระบบถือว่าเป็นเส้นทางเดียวกัน (สะกดต่างกันนิดหน่อย เช่น หัวลาก/รถหัวลาก) — ต้องรวมให้เหลือแถวเดียว
+  // ไม่งั้นงานอาจไปจับแถวที่หน่วย/ราคาไม่ใช่ตัวที่ตั้งใจ แล้วเงินผิด
+  const twinIds = new Map<number, number[]>();
+  {
+    const groups = new Map<string, number[]>();
+    for (const r of rows) {
+      const k = routeKey(r.origin, r.destination, r.vehicleType);
+      groups.set(k, [...(groups.get(k) ?? []), r.id]);
+    }
+    for (const ids of groups.values()) if (ids.length > 1) for (const id of ids) twinIds.set(id, ids.filter((x) => x !== id));
+  }
 
   // ตัวเลือกต้นทาง/ปลายทาง/ประเภทรถ = รายการตัวเลือก + ชื่อที่เส้นทางเดิมใช้อยู่
   // เส้นทางที่นำเข้าจากไฟล์อาจใช้ชื่อที่ยังไม่มีในรายการตัวเลือก ถ้าไม่รวมเข้ามา
@@ -158,7 +171,10 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className={r.id === editing?.id ? "bg-brand-50" : undefined}>
-                    <td>{r.origin}</td>
+                    <td>
+                      {r.origin}
+                      <span className="ml-1 text-[10px] text-slate-400">#{r.id}</span>
+                    </td>
                     <td>{r.destination}</td>
                     <td className="text-slate-500">{r.vehicleType}</td>
                     <td className="text-slate-500">{r.priceUnit}</td>
@@ -175,7 +191,14 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
                         </Badge>
                       )}
                     </td>
-                    <td>{r.active ? <Badge tone="ok">ใช้งาน</Badge> : <Badge tone="muted">ปิด</Badge>}</td>
+                    <td>
+                      {r.active ? <Badge tone="ok">ใช้งาน</Badge> : <Badge tone="muted">ปิด</Badge>}
+                      {twinIds.has(r.id) && (
+                        <div className="mt-1">
+                          <Badge tone="warn">ซ้ำกับ #{twinIds.get(r.id)!.join(", #")} — รวมเป็นแถวเดียว</Badge>
+                        </div>
+                      )}
+                    </td>
                     <td className="no-print">
                       <RouteActions id={r.id} backHref={backHref} />
                     </td>

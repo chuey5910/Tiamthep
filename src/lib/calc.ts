@@ -134,7 +134,31 @@ export async function buildContext() {
   const fuelPrices: FuelPricePoint[] = fuelPricesRaw.map((f) => ({ date: f.date, price: f.price }));
 
   const routeById = new Map(routes.map((r) => [r.id, r]));
-  const routeByKey = new Map(routes.map((r) => [routeKey(r.origin, r.destination, r.vehicleType), r]));
+
+  // เส้นทางที่ "ถือว่าเป็นเส้นเดียวกัน" (ต้นทาง+ปลายทาง+ประเภทรถ หลังล้างคำสะกด) แต่มีหลายแถว
+  // เกิดได้จากตอนที่ยังสะกด "หัวลาก"/"รถหัวลาก" คนละแบบ — สองแถวอาจตั้งหน่วย/ราคาไม่เหมือนกัน
+  // ถ้าเลือกมั่วเงินจะผิด จึงเก็บรายการซ้ำไว้ให้ computeJob ขึ้นเตือน และเลือกแถวที่ "ใช้งาน + มีราคา" ก่อน
+  const routesByKey = new Map<string, typeof routes>();
+  for (const r of routes) {
+    const k = routeKey(r.origin, r.destination, r.vehicleType);
+    const list = routesByKey.get(k);
+    if (list) list.push(r);
+    else routesByKey.set(k, [r]);
+  }
+  const priceCount = new Map<number, number>();
+  for (const p of routePrices) priceCount.set(p.routeId, (priceCount.get(p.routeId) ?? 0) + 1);
+  const routeByKey = new Map<string, (typeof routes)[number]>();
+  const routeTwins = new Map<number, number[]>();
+  for (const [k, list] of routesByKey) {
+    const sorted = [...list].sort(
+      (a, b) =>
+        Number(b.active) - Number(a.active) ||
+        (priceCount.get(b.id) ?? 0) - (priceCount.get(a.id) ?? 0) ||
+        a.id - b.id,
+    );
+    routeByKey.set(k, sorted[0]);
+    if (list.length > 1) for (const r of list) routeTwins.set(r.id, list.map((x) => x.id));
+  }
 
   // ราคาต่อเส้นทาง: routeId -> bandId -> ราคา
   const priceByRoute = new Map<number, Map<number, { customerPrice: number | null; outsourcePrice: number | null }>>();
@@ -160,6 +184,7 @@ export async function buildContext() {
     routes,
     routeById,
     routeByKey,
+    routeTwins,
     priceByRoute,
     customers,
     customerById,
@@ -297,12 +322,27 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const billingDate =
     customer?.billingDateBasis === "วันที่ลงสินค้า" ? job.unloadDate ?? job.loadDate : job.loadDate;
 
-  // เส้นทาง: ใช้ที่ผูกไว้กับงาน ถ้าไม่มีก็จับคู่จาก ต้นทาง+ปลายทาง+ประเภทรถ
-  let route = job.routeId != null ? ctx.routeById.get(job.routeId) ?? null : null;
-  if (!route && vehicleType) {
-    route = ctx.routeByKey.get(routeKey(job.origin, job.destination, vehicleType)) ?? null;
+  // เส้นทาง: ใช้ที่ผูกไว้กับงานตอนนำเข้า — แต่ต้องยังตรงกับ ต้นทาง+ปลายทาง+ประเภทรถ ของงานอยู่
+  // ถ้าเส้นทางที่ผูกไว้ถูกแก้ชื่อไปแล้ว หรือมีอีกแถวที่ตรงกว่า ให้ใช้แถวที่ตรงกับงานจริง แล้วบอกให้รู้
+  const jobKey = vehicleType ? routeKey(job.origin, job.destination, vehicleType) : null;
+  const linked = job.routeId != null ? ctx.routeById.get(job.routeId) ?? null : null;
+  const linkedMatches = !!linked && routeKey(linked.origin, linked.destination, linked.vehicleType) === jobKey;
+  const byKey = jobKey ? ctx.routeByKey.get(jobKey) ?? null : null;
+  let route = linkedMatches ? linked : byKey ?? linked;
+  if (linked && !linkedMatches && byKey) {
+    flag(
+      "route",
+      `งานผูกกับเส้นทาง #${linked.id} (${linked.origin} → ${linked.destination} ${linked.vehicleType}) ที่ไม่ตรงกับงานแล้ว — ระบบใช้ #${byKey.id} แทน`,
+    );
   }
   if (!route) flag("route", `ไม่พบเส้นทาง ${job.origin} → ${job.destination} (${vehicleType ?? "ไม่ทราบประเภทรถ"})`);
+  const twins = route ? ctx.routeTwins.get(route.id) : undefined;
+  if (route && twins) {
+    flag(
+      "route",
+      `เส้นทาง ${route.origin} → ${route.destination} มีซ้ำ ${twins.length} แถว (#${twins.join(", #")}) หน่วย/ราคาอาจต่างกัน — รวมให้เหลือแถวเดียวที่หน้าเส้นทาง (ตอนนี้ใช้ #${route.id})`,
+    );
+  }
 
   const driverCode =
     job.driverCode ?? resolveDriver(ctx.pairings, job.headPlate, job.trailerPlate, job.loadDate);
