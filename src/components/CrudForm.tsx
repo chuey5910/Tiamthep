@@ -65,7 +65,7 @@ export function CrudForm({
                 value={raw}
                 disabled={disabled || pending}
               />
-              {f.help && <p className="mt-0.5 text-[11px] text-slate-400">{f.help}</p>}
+              {f.help && <p className="mt-0.5 text-[12px] text-slate-500">– {f.help}</p>}
             </div>
           );
         })}

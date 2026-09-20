@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { PageIcon } from "./PageIcon";
 
 export function PageHeader({
   title,
@@ -13,8 +14,11 @@ export function PageHeader({
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">{subtitle}</p>}
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+          <PageIcon />
+          {title}
+        </h1>
+        {subtitle && <p className="mt-1 max-w-3xl text-[14px] font-medium leading-relaxed text-slate-600">{subtitle}</p>}
       </div>
       {actions && <div className="no-print flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -38,7 +42,10 @@ export function Card({
     <section className={`card ${className}`}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2.5">
-          <h2 className="text-sm font-bold text-slate-800">{title}</h2>
+          <h2 className="text-[15px] font-bold text-slate-900">
+            <span className="mr-1.5 text-brand-600">🔸</span>
+            {title}
+          </h2>
           {actions && <div className="flex gap-2">{actions}</div>}
         </header>
       )}
@@ -68,7 +75,7 @@ export function Stat({
           : "text-slate-900";
   return (
     <div className="card p-4">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="text-[13px] font-semibold text-slate-600">{label}</div>
       <div className={`mt-1 text-2xl font-bold tabular-nums ${toneClass}`}>{value}</div>
       {hint && <div className="mt-0.5 text-[11px] text-slate-400">{hint}</div>}
     </div>
@@ -122,7 +129,7 @@ export function LinkButton({
 /** คำอธิบายวิธีคำนวณ ใต้หัวรายงาน — ให้ผู้ใช้ตรวจสอบตัวเลขเองได้ */
 export function Formula({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[12px] leading-relaxed text-brand-900">
+    <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[13px] font-medium leading-relaxed text-brand-900">
       {children}
     </div>
   );

@@ -50,7 +50,7 @@ export function Shell({
         <div className="flex-1 overflow-y-auto px-2 py-3">
           {groups.map((group) => (
             <div key={group.title} className="mb-3">
-              <div className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              <div className="px-3 pb-1 text-[12px] font-extrabold uppercase tracking-wide text-slate-600">
                 <span className="mr-1">{group.icon}</span>
                 {group.title}
               </div>
@@ -65,10 +65,10 @@ export function Shell({
                     key={item.href}
                     href={item.href}
                     onClick={() => setOpen(false)}
-                    className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
+                    className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-[14px] font-medium transition-colors ${
                       active
-                        ? "bg-brand-50 font-semibold text-brand-700"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        ? "bg-brand-50 font-bold text-brand-700"
+                        : "text-slate-800 hover:bg-slate-50 hover:text-slate-900"
                     }`}
                   >
                     <span>{item.label}</span>

@@ -146,9 +146,9 @@ export async function CrudPage({
       <PageHeader title={resource.title} subtitle={resource.subtitle} />
 
       {resource.notes && resource.notes.length > 0 && (
-        <ul className="mb-4 space-y-1 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-[12px] leading-relaxed text-brand-900">
+        <ul className="mb-4 space-y-1 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-[13px] font-medium leading-relaxed text-brand-900">
           {resource.notes.map((n, i) => (
-            <li key={i}>• {n}</li>
+            <li key={i}>– {n}</li>
           ))}
         </ul>
       )}

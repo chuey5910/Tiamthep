@@ -28,8 +28,8 @@
   --bg: #f3f3f4;
   --surface: #ffffff;
   --border: #e0e0e2;
-  --text: #111114;
-  --muted: #68686e;
+  --text: #0f0f12;
+  --muted: #45454c;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 
@@ -41,8 +41,17 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
+  /* ตัวอักษรเข้มขึ้นทั้งเว็บ — ฟอนต์ไทยน้ำหนักปกติบางไป อ่านบนจอไกลๆ ไม่ชัด */
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
 }
+b, strong, th { font-weight: 700; }
+
+/* ข้อความรอง (สีเทา) ที่ใช้ทั่วเว็บ — เข้มขึ้นกว่าค่ามาตรฐาน ให้ยังอ่านออกชัด */
+.text-slate-400 { color: #5b5b63; }
+.text-slate-500 { color: #45454c; }
+.text-slate-600 { color: #2f2f35; }
+.text-slate-300 { color: #8a8a92; }
 
 /* ── ตาราง ── */
 /* กรอบที่มีตารางเป็นลูกโดยตรง ให้เลื่อนซ้าย-ขวาในตัวเอง
@@ -61,8 +70,9 @@ body {
   top: 0;
   z-index: 1;
   background: #f2f2f3;
-  color: #4a4a50;
-  font-weight: 600;
+  color: #1f1f24;
+  font-weight: 700;
+  font-size: 0.8125rem;
   text-align: left;
   padding: 0.5rem 0.75rem;
   white-space: nowrap;
@@ -103,6 +113,7 @@ body {
   border-radius: 0.5rem;
   padding: 0.45rem 0.6rem;
   font-size: 0.875rem;
+  font-weight: 500;
   background: #fff;
   outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
@@ -117,9 +128,9 @@ body {
 }
 .lbl {
   display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #4a4a50;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1f1f24;
   margin-bottom: 0.25rem;
 }
 
@@ -180,8 +191,8 @@ body {
   align-items: center;
   border-radius: 999px;
   padding: 0.1rem 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 .badge-ok    { background: #ecfdf3; color: #027a48; }
