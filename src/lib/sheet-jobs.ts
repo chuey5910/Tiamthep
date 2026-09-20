@@ -15,7 +15,7 @@
 
 import { prisma } from "./prisma";
 import { parseDate, toInputDate } from "./date";
-import { buildContext, routeKey } from "./calc";
+import { buildContext, computeJob, routeKey } from "./calc";
 import { NO_TRAILER, driverCodeOrNull, trailerOrNull } from "./vehicle-type";
 import { batchWriteValues, clearValues, readValues, sheetConfig, writeValues } from "./google-sheets";
 
@@ -50,6 +50,8 @@ export type SheetImportResult = {
   pendingReview: number; // แถวที่ «ส่งของเสร็จสิ้น» แล้ว แต่ออฟฟิศยังไม่กด «ยืนยัน»
   /** งานที่ปิดไปแล้ว แต่ดึงเงินเดินทาง/ค่าทางด่วนจากชีตมาเพิ่ม/อัปเดตให้ */
   advancesSynced: number;
+  /** แถวที่ปิดงานแล้วและอัปเดตข้อความ «ผลนำเข้าเว็บ» ให้ตรงกับสถานะปัจจุบัน (เช่น คำเตือนเก่าหายไป) */
+  refreshed: number;
   rows: { jobId: string; ok: boolean; message: string }[];
 };
 
@@ -93,6 +95,25 @@ async function syncTravelAdvance(row: string[]): Promise<boolean> {
   return true;
 }
 
+/**
+ * ข้อความ «ผลนำเข้าเว็บ» ของแถวที่นำเข้าสำเร็จ — ใช้สูตรเดียวกันทั้งตอนนำเข้าครั้งแรกและตอนรีเฟรช
+ * ข้อความจึงนิ่ง: ถ้าสถานะในเว็บไม่เปลี่ยน ก็ไม่ต้องเขียนทับชีตซ้ำทุกครั้งที่กดดึงงาน
+ */
+function okMessage(webId: number | string, hasAdvance: boolean, problems: string[]): string {
+  const adv = hasAdvance ? " + เงินเดินทาง/ทางด่วน" : "";
+  const issue = problems.length ? ` (${problems.join(" · ")})` : "";
+  return `เว็บ #${webId}${adv}${issue}`;
+}
+
+/**
+ * ปัญหาที่ยังค้างของงานหนึ่ง เขียนสั้นๆ พอให้ออฟฟิศรู้ว่าต้องไปแก้ตรงไหน
+ * ใช้ข้อความจากเครื่องคำนวณกลาง จึงตรงกับที่เห็นในหน้าบันทึกงานขนส่งเสมอ
+ */
+function openIssues(calc: { routeFound: boolean; issues: string[] }): string[] {
+  if (!calc.routeFound) return ["ยังจับคู่เส้นทางไม่ได้ — ไปเลือกในหน้า บันทึกงานขนส่ง"];
+  return calc.issues.slice(0, 2);
+}
+
 /** ตัวเลขจากชีต — "" คืน null, อ่านไม่ได้ก็คืน null (ให้คนตรวจ ไม่เดา) */
 function numOrNull(s: string): number | null {
   const t = s.replace(/,/g, "").trim();
@@ -108,7 +129,7 @@ function numOrNull(s: string): number | null {
 export async function runSheetImport(): Promise<SheetImportResult> {
   const cfg = sheetConfig();
   if ("error" in cfg) {
-    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, rows: [] };
+    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, rows: [] };
   }
   const { sheetId, keyFile } = cfg;
 
@@ -125,6 +146,7 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     let failed = 0;
     let pendingReview = 0;
     let advancesSynced = 0;
+    let refreshed = 0;
 
     for (let i = 0; i < values.length; i++) {
       const row = values[i];
@@ -136,7 +158,16 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       if (status !== ST.CONFIRMED && status !== ST.FAILED) {
         // งานที่ปิดไปแล้ว ไม่ต้องสร้างงานซ้ำ แต่ยังต้องตามเก็บเงินเดินทาง/ค่าทางด่วน
         // เพราะออฟฟิศมักกรอกเงินตามหลัง และงานเก่าดึงเข้าเว็บตอนที่ยังไม่มีสองคอลัมน์นี้
-        if (status === ST.IMPORTED && (await syncTravelAdvance(row))) advancesSynced++;
+        if (status === ST.IMPORTED) {
+          if (await syncTravelAdvance(row)) advancesSynced++;
+          // และอัปเดตข้อความ «ผลนำเข้าเว็บ» ให้ตรงกับสถานะปัจจุบันของงานในเว็บ
+          // เช่น เพิ่มเส้นทางในเว็บแล้ว คำเตือน "ยังจับคู่เส้นทางไม่ได้" ในชีตต้องหายไปเอง
+          const fresh = await refreshedMessage(row, ctx);
+          if (fresh && fresh !== (row[21] ?? "").trim()) {
+            writes.push({ range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[fresh]] });
+            refreshed++;
+          }
+        }
         continue;
       }
 
@@ -168,14 +199,32 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     // อัปเดตข้อมูลหลักให้ dropdown ในชีตตรงกับเว็บเสมอ
     await pushMasterData(keyFile, sheetId, ctx, drivers);
 
-    return { ok: true, imported, failed, pendingReview, advancesSynced, rows: results };
+    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, rows: results };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "เชื่อมต่อชีตไม่สำเร็จ",
-      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, rows: [],
+      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, rows: [],
     };
   }
+}
+
+/**
+ * ข้อความ «ผลนำเข้าเว็บ» ล่าสุดของแถวที่ปิดงานแล้ว — คืน null ถ้าไม่ต้องแตะ
+ *
+ * ชีตเก็บข้อความไว้ตั้งแต่วันที่ดึงงาน พอแก้ข้อมูลในเว็บแล้ว (เช่น เพิ่มเส้นทางที่ขาด)
+ * คำเตือนเก่าจะค้างอยู่ในชีตตลอดไป ทำให้ออฟฟิศเข้าใจผิดว่ายังมีปัญหา
+ */
+async function refreshedMessage(
+  row: string[],
+  ctx: Awaited<ReturnType<typeof buildContext>>,
+): Promise<string | null> {
+  const jobId = (row[C.id] ?? "").trim();
+  if (!jobId) return null;
+  const job = await prisma.job.findUnique({ where: { sheetRef: jobId } });
+  if (!job) return `ไม่พบงานนี้ในเว็บแล้ว (ถูกลบ?) — ถ้าต้องการดึงใหม่ ให้เปลี่ยนสถานะเป็น «${ST.CONFIRMED}»`;
+  const hasAdvance = (await prisma.travelAdvance.count({ where: { sheetRef: jobId } })) > 0;
+  return okMessage(job.id, hasAdvance, openIssues(computeJob(ctx, job)));
 }
 
 /** ตรวจและบันทึก 1 แถว — คืนข้อความสั้นๆ ไว้เขียนกลับลงชีต */
@@ -257,15 +306,16 @@ async function importRow(
         sheetRef: jobId,
       },
     });
-    const advNote = await saveAdvance();
-    const routeNote = route ? "" : " (ยังจับคู่เส้นทางไม่ได้ — ไปเลือกในหน้า บันทึกงานขนส่ง)";
-    return { ok: true, message: `เว็บ #${job.id}${advNote}${routeNote}` };
+    const hasAdvance = (await saveAdvance()) !== "";
+    const problems = route ? [] : ["ยังจับคู่เส้นทางไม่ได้ — ไปเลือกในหน้า บันทึกงานขนส่ง"];
+    return { ok: true, message: okMessage(job.id, hasAdvance, problems) };
   } catch (e) {
     // รหัสงานนี้เคยนำเข้าแล้ว (unique ชน) — ถือว่าสำเร็จ ไม่ให้เกิดซ้ำ
     if (e instanceof Error && e.message.includes("sheetRef")) {
       const existing = await prisma.job.findUnique({ where: { sheetRef: jobId } });
-      await saveAdvance().catch(() => "");
-      return { ok: true, message: `นำเข้าไว้ก่อนแล้ว (เว็บ #${existing?.id ?? "?"})` };
+      const hasAdv = (await saveAdvance().catch(() => "")) !== "";
+      const problems = existing ? openIssues(computeJob(ctx, existing)) : [];
+      return { ok: true, message: okMessage(existing?.id ?? "?", hasAdv, problems) };
     }
     return { ok: false, message: e instanceof Error ? e.message.slice(0, 200) : "บันทึกไม่สำเร็จ" };
   }

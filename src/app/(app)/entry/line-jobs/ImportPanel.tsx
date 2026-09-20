@@ -52,8 +52,14 @@ export function ImportPanel() {
                 (ดูที่หน้า «เงินเดินทาง / ค่าทางด่วน»)
               </>
             )}
-            {result.imported === 0 && result.failed === 0 && result.advancesSynced === 0 && (
-              <> — ไม่มีแถวสถานะ «ยืนยัน» ค้างอยู่</>
+            {result.refreshed > 0 && (
+              <>
+                {" "}· อัปเดตข้อความ «ผลนำเข้าเว็บ» ในชีตให้ตรงกับปัจจุบัน <b>{result.refreshed}</b> แถว
+                (เช่น คำเตือนเก่าที่แก้ไปแล้วจะหายไป)
+              </>
+            )}
+            {result.imported === 0 && result.failed === 0 && result.advancesSynced === 0 && result.refreshed === 0 && (
+              <> — ไม่มีแถวสถานะ «ยืนยัน» ค้างอยู่ และไม่มีอะไรต้องอัปเดตในชีต</>
             )}
           </div>
 
