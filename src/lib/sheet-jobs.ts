@@ -16,7 +16,7 @@
 import { prisma } from "./prisma";
 import { parseDate, toInputDate } from "./date";
 import { buildContext, routeKey } from "./calc";
-import { NO_TRAILER, trailerOrNull } from "./vehicle-type";
+import { NO_TRAILER, driverCodeOrNull, trailerOrNull } from "./vehicle-type";
 import { batchWriteValues, clearValues, readValues, sheetConfig, writeValues } from "./google-sheets";
 
 // ── โครงชีต — ต้องตรงกับ line-bot/Code.gs (แก้ที่หนึ่งต้องแก้อีกที่หนึ่ง) ──
@@ -75,7 +75,7 @@ async function syncTravelAdvance(row: string[]): Promise<boolean> {
   if (!date) return false;
 
   const plate = (row[C.head] ?? "").trim();
-  const driverCode = (row[C.driver] ?? "").trim().toUpperCase();
+  const driverCode = driverCodeOrNull(row[C.driver]) ?? "";
 
   await prisma.travelAdvance.upsert({
     where: { sheetRef: jobId },
@@ -203,7 +203,8 @@ async function importRow(
     problems.push(`ทะเบียนหาง ${trailerPlate} ไม่มีในเว็บ (หน้า ข้อมูลรถ) — ถ้าเป็นรถเดี่ยวให้เลือก «${NO_TRAILER}»`);
   }
 
-  const driverCode = (row[C.driver] ?? "").trim().toUpperCase() || null;
+  // "รถร่วม" ในช่องรหัสคนขับ = งานรถร่วม ไม่มี พขร. ของบริษัท ไม่ใช่รหัสที่หาไม่เจอ
+  const driverCode = driverCodeOrNull(row[C.driver]);
   if (driverCode && !driverByCode.has(driverCode)) {
     problems.push(`รหัสคนขับ ${driverCode} ไม่มีในเว็บ (หน้า ข้อมูลพนักงานขับรถ)`);
   }

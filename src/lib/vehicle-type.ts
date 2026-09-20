@@ -57,3 +57,15 @@ export function trailerOrNull(input: string | null | undefined): string | null {
   const s = (input ?? "").trim().replace(/\s+/g, " ");
   return NO_TRAILER_WORDS.has(s) ? null : s;
 }
+
+/**
+ * ช่อง "รหัสคนขับ" ในชีตบางแถวกรอกว่า "รถร่วม" แทนรหัส — หมายถึงงานนั้นรถร่วมวิ่ง ไม่มี พขร. ของบริษัท
+ * ถือว่าไม่มีรหัสคนขับ (null) ไม่ใช่รหัสที่หาไม่เจอ ไม่งั้นงานถูกตีกลับทั้งแถวและรายได้หายทั้งก้อน
+ */
+const NO_DRIVER_WORDS = new Set(["", "-", "—", "รถร่วม", "รถรวม", "ไม่มี", "OUTSOURCE"]);
+
+/** รหัสคนขับจากชีต → รหัสตัวใหญ่ หรือ null ถ้าเป็นงานรถร่วม/เว้นว่าง */
+export function driverCodeOrNull(input: string | null | undefined): string | null {
+  const s = (input ?? "").trim().replace(/\s+/g, " ");
+  return NO_DRIVER_WORDS.has(s) || NO_DRIVER_WORDS.has(s.toUpperCase()) ? null : s.toUpperCase();
+}

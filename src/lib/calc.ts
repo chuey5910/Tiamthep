@@ -372,6 +372,15 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
     flag("revenue", `ยังไม่ได้ตั้งราคาลูกค้า ${route.origin} → ${route.destination} (${route.vehicleType}) ที่ช่วงน้ำมัน ${band.label}`);
   }
 
+  // ราคาต่อเที่ยวที่ต่ำผิดปกติ มักแปลว่าหน่วยคิดราคาตั้งผิด (ที่จริงเป็นต่อตัน/ต่อกิโลกรัม)
+  // เงินจะต่ำกว่าจริงหลายเท่าโดยไม่มีใครรู้ จึงต้องทักไว้ให้ไปตรวจ
+  if (priceUnit === "ต่อเที่ยว" && customerRate != null && customerRate < 500 && billingWeight > 0) {
+    flag(
+      "revenue",
+      `ราคา ${customerRate} บาทต่อเที่ยว ต่ำผิดปกติสำหรับงานที่มีน้ำหนัก ${billingWeight} ตัน — ตรวจ «หน่วยคิดราคา» ของเส้นทางนี้ว่าควรเป็นต่อตันหรือต่อกิโลกรัมหรือไม่`,
+    );
+  }
+
   // น้ำหนักในระบบเป็นตัน — ราคาต่อกิโลกรัม (เช่น 0.261) คูณด้วยน้ำหนักเป็นกิโล
   const multiplier = priceMultiplier(priceUnit, billingWeight);
   const revenue = customerRate != null ? round2(customerRate * multiplier) : 0;
