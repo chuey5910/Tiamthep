@@ -54,11 +54,9 @@ export const NAV: NavGroup[] = [
     title: "คลังอะไหล่",
     icon: "🔧",
     items: [
+      { href: "/stock/items", icon: "🧰", label: "คลังอะไหล่ (รับเข้า/เบิกใช้)" },
       { href: "/stock/balance", icon: "📦", label: "สรุปคงเหลือ" },
-      { href: "/stock/items", icon: "🧰", label: "รายการสินค้า" },
       { href: "/stock/units", icon: "🛞", label: "ทะเบียนยาง/แบตเตอรี่" },
-      { href: "/stock/in", icon: "📥", label: "รับเข้าสต็อก" },
-      { href: "/stock/out", icon: "📤", label: "เบิกใช้สต็อก" },
       { href: "/stock/bills", icon: "🧾", label: "ใบวางบิลอู่/ผู้ขาย" },
     ],
   },

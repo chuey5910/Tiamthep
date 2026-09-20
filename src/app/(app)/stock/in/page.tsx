@@ -1,9 +1,6 @@
-import { CrudPage } from "@/components/CrudPage";
-import { RESOURCES } from "@/lib/crud";
-import type { SearchParams } from "@/lib/params";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function Page({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  return <CrudPage resource={RESOURCES["stock-in"]} searchParams={await searchParams} />;
+/** รวมเข้าหน้า «คลังอะไหล่» แล้ว — ลิงก์เก่ายังใช้ได้ ไม่ให้ใครเจอ 404 */
+export default function Page() {
+  redirect("/stock/items");
 }

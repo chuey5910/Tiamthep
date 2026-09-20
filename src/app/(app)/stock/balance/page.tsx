@@ -50,8 +50,7 @@ export default async function StockBalancePage() {
         subtitle="คงเหลือ = รับเข้าสะสม − เบิกออกสะสม · ต้นทุนอะไหล่ที่เบิกไปเข้ารายงานกำไรขาดทุนของรถคันนั้นโดยอัตโนมัติ"
         actions={
           <>
-            <Link href="/stock/in" className="btn btn-ghost">รับเข้าสต็อก</Link>
-            <Link href="/stock/out" className="btn btn-primary">เบิกใช้สต็อก</Link>
+            <Link href="/stock/items" className="btn btn-primary">ไปหน้าคลังอะไหล่ (รับเข้า / เบิกใช้)</Link>
           </>
         }
       />
@@ -71,7 +70,7 @@ export default async function StockBalancePage() {
       <Card title="คงเหลือรายสินค้า" className="mb-4" bodyClass="p-0">
         {rows.length === 0 ? (
           <Empty>
-            ยังไม่มีรายการสินค้า — เพิ่มได้ที่หน้า <b>รายการสินค้า</b>
+            ยังไม่มีรายการสินค้า — เพิ่มได้ที่หน้า <b>คลังอะไหล่</b>
           </Empty>
         ) : (
           <div className="overflow-x-auto">
