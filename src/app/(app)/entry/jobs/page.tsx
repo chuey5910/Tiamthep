@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DateRangeFilter } from "@/components/Filters";
+import { DateRangeFilter, SearchFilter, SelectFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
 import { formatThaiDate, toInputDate } from "@/lib/date";
 import { baht, num } from "@/lib/format";
@@ -16,6 +16,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const editId = typeof sp.edit === "string" ? Number(sp.edit) : null;
   // ?problems=1 = แสดงเฉพาะขาที่ข้อมูลยังไม่ครบ (เหมือนหน้านำเข้าน้ำมัน)
   const onlyProblems = sp.problems === "1";
+  // ตัวกรองเพิ่ม: ค้นข้อความ (ทะเบียน/รอบ/เส้นทาง/พขร./หมายเหตุ) · ลูกค้า · ทะเบียน
+  const q = typeof sp.q === "string" ? sp.q.trim() : "";
+  const customerFilter = typeof sp.customer === "string" ? sp.customer : "";
+  const plateFilter = typeof sp.plate === "string" ? sp.plate.trim() : "";
+  const fold = (v: string | null | undefined) => (v ?? "").toLowerCase().replace(/\s+/g, "");
 
   const [vehiclesRaw, customers, locations, cargoTypes, jobs, ctx] = await Promise.all([
     prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: "asc" } }),
@@ -33,8 +38,22 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const editing = editId ? await prisma.job.findUnique({ where: { id: editId } }) : null;
 
   const customerById = new Map(customers.map((c) => [c.id, c]));
-  const calcs = jobs.map((j) => ({ job: j, calc: computeJob(ctx, j) }));
+  const allCalcs = jobs.map((j) => ({ job: j, calc: computeJob(ctx, j) }));
+
+  // กรองตามลูกค้า / ทะเบียน / คำค้น — ยอดรวมด้านบนคิดจากชุดที่กรองแล้ว
+  // จะได้เอาไปเทียบกับรายงานรายได้แยกตามลูกค้าได้ตรงๆ
+  const fq = fold(q);
+  const calcs = allCalcs.filter(({ job, calc }) => {
+    if (customerFilter && String(job.customerId) !== customerFilter) return false;
+    if (plateFilter && job.headPlate !== plateFilter && job.trailerPlate !== plateFilter) return false;
+    if (fq) {
+      const hay = [job.headPlate, job.trailerPlate, job.tripCode, job.origin, job.destination, job.note, calc.driverCode, customerById.get(job.customerId)?.code, customerById.get(job.customerId)?.name];
+      if (!hay.some((v) => fold(v).includes(fq))) return false;
+    }
+    return true;
+  });
   const shown = onlyProblems ? calcs.filter((x) => x.calc.issues.length > 0) : calcs;
+  const filtering = !!(q || customerFilter || plateFilter);
 
   const totals = {
     legs: calcs.length,
@@ -43,6 +62,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     kpi: calcs.reduce((a, x) => a + (x.calc.kpiLitres ?? 0), 0),
     issues: calcs.filter((x) => x.calc.issues.length > 0).length,
   };
+
+  // ลิงก์สลับ ทุกขา/เฉพาะที่ต้องแก้ ต้องพาตัวกรองอื่นติดไปด้วย
+  const keep = new URLSearchParams({ from: fromStr, to: toStr });
+  if (q) keep.set("q", q);
+  if (customerFilter) keep.set("customer", customerFilter);
+  if (plateFilter) keep.set("plate", plateFilter);
+  const baseQs = keep.toString();
 
   // ขาที่ยังไม่มีคู่ในรอบเดียวกัน — เสนอปุ่มสร้างขากลับให้
   const legsPerTrip = new Map<string, number>();
@@ -98,6 +124,27 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
       <DateRangeFilter from={fromStr} to={toStr} />
 
+      <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
+        <SearchFilter value={q} placeholder="ทะเบียน รอบ เส้นทาง พขร. หมายเหตุ…" />
+        <SelectFilter
+          name="customer"
+          label="ลูกค้า"
+          value={customerFilter}
+          width="w-64"
+          options={[{ value: "", label: "— ทุกลูกค้า —" }, ...customers.map((c) => opt(String(c.id), `${c.code} — ${c.name}`))]}
+        />
+        <SelectFilter
+          name="plate"
+          label="ทะเบียน"
+          value={plateFilter}
+          width="w-44"
+          options={[{ value: "", label: "— ทุกคัน —" }, ...vehiclesRaw.map((v) => opt(v.plate, v.plate))]}
+        />
+        <span className="pb-2 text-[12px] text-slate-500">
+          {filtering ? `พบ ${calcs.length} จาก ${allCalcs.length} ขาในช่วงนี้` : `${allCalcs.length} ขาในช่วงนี้`}
+        </span>
+      </div>
+
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="จำนวนขาในช่วงนี้" value={totals.legs} hint="ขา" />
         <Stat label="รายได้รวม" value={baht(totals.revenue)} hint="บาท" />
@@ -112,13 +159,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
       <div className="no-print mb-2 flex flex-wrap items-center gap-2">
         <Link
-          href={`?from=${fromStr}&to=${toStr}`}
+          href={`?${baseQs}`}
           className={`btn px-3 py-1 text-[12px] ${onlyProblems ? "btn-ghost" : "btn-primary"}`}
         >
           ทุกขา ({calcs.length})
         </Link>
         <Link
-          href={`?from=${fromStr}&to=${toStr}&problems=1`}
+          href={`?${baseQs}&problems=1`}
           className={`btn px-3 py-1 text-[12px] ${onlyProblems ? "btn-primary" : "btn-ghost"}`}
         >
           เฉพาะขาที่ต้องแก้ ({totals.issues})
@@ -132,7 +179,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
       <Card bodyClass="p-0">
         {shown.length === 0 ? (
-          <Empty>{onlyProblems ? "ไม่มีขาที่ต้องแก้ในช่วงนี้ — ข้อมูลครบทุกขา" : "ยังไม่มีงานในช่วงวันที่นี้"}</Empty>
+          <Empty>{onlyProblems ? "ไม่มีขาที่ต้องแก้ในช่วงนี้ — ข้อมูลครบทุกขา" : filtering ? "ไม่พบงานตามเงื่อนไขที่กรองในช่วงวันที่นี้" : "ยังไม่มีงานในช่วงวันที่นี้"}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="tbl">
