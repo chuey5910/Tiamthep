@@ -1,6 +1,7 @@
 import { SearchFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, PageHeader } from "@/components/ui";
 import { routeKey } from "@/lib/calc";
+import { compareThaiFirst } from "@/lib/sort";
 import { num } from "@/lib/format";
 import type { SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
@@ -12,11 +13,10 @@ export const dynamic = "force-dynamic";
 // เพราะจุดประสงค์ของช่องค้นหาคือดูว่าเส้นทางนี้มีแล้วหรือยัง สะกดไว้แบบไหน
 const fold = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/\s+/g, "");
 
-/** รวมชื่อจากรายการตัวเลือกกับชื่อที่เส้นทางใช้อยู่จริง — เรียงตามรายการตัวเลือกก่อน ที่เหลือต่อท้ายตามตัวอักษร */
+/** รวมชื่อจากรายการตัวเลือกกับชื่อที่เส้นทางใช้อยู่จริง แล้วเรียงตามตัวอักษร (ไทยก่อน อังกฤษทีหลัง) */
 function unionOptions(lookup: string[], inUse: string[]) {
-  const seen = new Set(lookup);
-  const extra = [...new Set(inUse.filter((v) => v && !seen.has(v)))].sort((a, b) => a.localeCompare(b, "th"));
-  return [...lookup, ...extra].map((v) => ({ value: v, label: v }));
+  const all = [...new Set([...lookup, ...inUse.filter(Boolean)])].sort(compareThaiFirst);
+  return all.map((v) => ({ value: v, label: v }));
 }
 
 export default async function RoutesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -36,6 +36,14 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
     prisma.lookup.findMany({ where: { kind: "location" }, orderBy: [{ sort: "asc" }, { value: "asc" }] }),
     prisma.lookup.findMany({ where: { kind: "vehicleType" }, orderBy: [{ sort: "asc" }, { value: "asc" }] }),
   ]);
+
+  // ตารางเรียงตามตัวอักษรไทยก่อน (ฐานข้อมูลเรียงตามรหัสตัวอักษร ชื่อไทยจะไปกองท้าย)
+  routes.sort(
+    (a, b) =>
+      compareThaiFirst(a.origin, b.origin) ||
+      compareThaiFirst(a.destination, b.destination) ||
+      compareThaiFirst(a.vehicleType, b.vehicleType),
+  );
 
   const rows: RouteRow[] = routes.map((r) => ({
     id: r.id,

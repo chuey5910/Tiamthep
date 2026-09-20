@@ -6,6 +6,7 @@ import { baht, num } from "@/lib/format";
 import { readRange, type SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
 import { buildContext, computeJob } from "@/lib/calc";
+import { sortOptionsThaiFirst } from "@/lib/sort";
 import { JobForm, JobRowActions, type JobInitial } from "./JobForm";
 
 export const dynamic = "force-dynamic";
@@ -116,8 +117,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
             .filter((v) => v.vehicleType.includes("หาง"))
             .map((v) => opt(v.plate, `${v.plate} (${v.vehicleType})`))}
           customers={customers.map((c) => opt(String(c.id), `${c.code} — ${c.name}`))}
-          locations={locations.map((l) => opt(l.value, l.value))}
-          cargoTypes={cargoTypes.map((c) => opt(c.value, c.value))}
+          locations={sortOptionsThaiFirst(locations.map((l) => opt(l.value, l.value)))}
+          cargoTypes={sortOptionsThaiFirst(cargoTypes.map((c) => opt(c.value, c.value)))}
           initial={initial}
         />
       </Card>

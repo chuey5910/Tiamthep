@@ -6,6 +6,7 @@
  */
 
 import { prisma } from "./prisma";
+import { sortOptionsThaiFirst } from "./sort";
 
 export type FieldType = "text" | "number" | "date" | "select" | "textarea" | "checkbox";
 
@@ -508,7 +509,7 @@ export async function loadOptions(resource: Resource): Promise<Record<string, Op
           where: { kind: src.lookupKind },
           orderBy: [{ sort: "asc" }, { value: "asc" }],
         });
-        out[f.name] = rows.map((r) => ({ value: r.value, label: r.value }));
+        out[f.name] = sortOptionsThaiFirst(rows.map((r) => ({ value: r.value, label: r.value })));
         break;
       }
       case "vehicles": {
