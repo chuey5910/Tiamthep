@@ -151,10 +151,11 @@ export async function exportAllowanceExcel(
     XLSX.utils.book_append_sheet(wb, ws2, "รายละเอียดรายขา");
 
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    // ชื่อไฟล์ต้องเป็นอักษรอังกฤษ — เบราว์เซอร์ตัดชื่อไฟล์ภาษาไทยทิ้ง แล้วได้ไฟล์ชื่อ "download" ที่เปิดไม่ออก
     const who = driverCode ? `-${driverCode}` : "";
     return {
       ok: true,
-      filename: `เบี้ยเลี้ยง-${year + 543}-${String(month).padStart(2, "0")}-งวด${period}${who}.xlsx`,
+      filename: `allowance-${year + 543}${String(month).padStart(2, "0")}-p${period}${who}.xlsx`,
       base64: buf.toString("base64"),
     };
   } catch (e) {

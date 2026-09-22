@@ -128,10 +128,14 @@ export function AllowanceTable({
       const url = URL.createObjectURL(
         new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
       );
+      // ต้องแปะปุ่มลงหน้าเว็บก่อนกด ไม่งั้นเบราว์เซอร์ไม่ใช้ชื่อไฟล์ที่ตั้งไว้ (ได้ไฟล์ชื่อ "download")
       const a = document.createElement("a");
       a.href = url;
       a.download = res.filename;
+      a.style.display = "none";
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       URL.revokeObjectURL(url);
     });
   };

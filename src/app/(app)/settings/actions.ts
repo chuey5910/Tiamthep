@@ -12,6 +12,9 @@ export async function saveSettings(form: FormData): Promise<{ ok: boolean; error
     { key: "companyTaxId", value: String(form.get("companyTaxId") ?? "").trim() },
     { key: "fuelBuybackRate", value: String(form.get("fuelBuybackRate") ?? "").trim() },
     { key: "docAlertDays", value: String(form.get("docAlertDays") ?? "").trim() },
+    { key: "billingDueDay", value: String(form.get("billingDueDay") ?? "").trim() },
+    { key: "vatRate", value: String(form.get("vatRate") ?? "").trim() },
+    { key: "whtRate", value: String(form.get("whtRate") ?? "").trim() },
   ];
 
   if (!entries[0].value) return { ok: false, error: "กรุณากรอกชื่อบริษัท" };
@@ -21,6 +24,16 @@ export async function saveSettings(form: FormData): Promise<{ ok: boolean; error
 
   const days = Number(entries[3].value);
   if (!Number.isInteger(days) || days < 0) return { ok: false, error: "จำนวนวันแจ้งเตือนต้องเป็นจำนวนเต็มไม่ติดลบ" };
+
+  const dueDay = Number(entries[4].value);
+  if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+    return { ok: false, error: "วันครบกำหนดวางบิลต้องเป็นวันที่ 1 ถึง 31" };
+  }
+
+  for (const [i, label] of [[5, "VAT"], [6, "หักภาษี ณ ที่จ่าย"]] as [number, string][]) {
+    const n = Number(entries[i].value);
+    if (!Number.isFinite(n) || n < 0 || n > 100) return { ok: false, error: `อัตรา${label} ต้องอยู่ระหว่าง 0 ถึง 100` };
+  }
 
   await prisma.$transaction(
     entries.map((e) =>

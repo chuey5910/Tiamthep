@@ -61,6 +61,29 @@ export function SettingsForm({ values }: { values: Record<string, string> }) {
         </div>
       </div>
 
+      <h3 className="mt-5 mb-2 text-[14px] font-bold text-slate-900">
+        <span className="mr-1.5 text-brand-600">🔸</span>วางบิลลูกค้า
+      </h3>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div>
+          <label className="lbl">วันครบกำหนดวางบิล (วันที่ของเดือน)</label>
+          <input type="number" name="billingDueDay" className="inp" defaultValue={values.billingDueDay ?? "25"} required />
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            – ค่ากลางของทุกราย · ลูกค้ารายไหนต่าง ตั้งเฉพาะรายนั้นที่หน้าข้อมูลลูกค้า
+          </p>
+        </div>
+        <div>
+          <label className="lbl">ภาษีมูลค่าเพิ่ม VAT (%)</label>
+          <input type="number" step="0.01" name="vatRate" className="inp" defaultValue={values.vatRate ?? "7"} required />
+          <p className="mt-0.5 text-[11px] text-slate-400">– ใส่ 0 ถ้าบริษัทไม่ได้จดทะเบียน VAT</p>
+        </div>
+        <div>
+          <label className="lbl">หักภาษี ณ ที่จ่าย (%)</label>
+          <input type="number" step="0.01" name="whtRate" className="inp" defaultValue={values.whtRate ?? "1"} required />
+          <p className="mt-0.5 text-[11px] text-slate-400">– ค่าขนส่งตามกฎหมายคือ 1%</p>
+        </div>
+      </div>
+
       {error && (
         <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">{error}</p>
       )}

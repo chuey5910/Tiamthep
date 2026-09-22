@@ -118,6 +118,9 @@ model Customer {
   creditDays Int     @default(30)
   /// ข้อความอธิบายวันที่รับวางบิล/ออกเช็ค เช่น "ทุกวันที่ 5 และวันที่ 20"
   billingDay String?
+  /// วันครบกำหนดวางบิลของลูกค้ารายนี้ (1-31) — ไม่กรอก = ใช้ค่ากลางในหน้าตั้งค่าระบบ
+  /// แยกจาก billingDay ที่เป็นข้อความอิสระ เพราะระบบต้องเอาไปเทียบวันจริง ห้ามเดาจากข้อความ
+  billingDueDay Int?
 
   /// เกณฑ์ราคาน้ำมันที่ใช้คิดค่าบรรทุกให้ลูกค้ารายนี้
   fuelBasisId Int?
@@ -128,8 +131,73 @@ model Customer {
   /// วันที่ที่ใช้เรียกเก็บเงิน: "วันที่ขึ้นสินค้า" | "วันที่ลงสินค้า"
   billingDateBasis String @default("วันที่ขึ้นสินค้า")
 
+  /// อัตรา VAT / หัก ณ ที่จ่าย เฉพาะลูกค้ารายนี้ (%) — ไม่กรอก = ใช้ค่ากลางในหน้าตั้งค่าระบบ
+  /// กรอก 0 = ไม่คิดภาษีนั้นกับลูกค้ารายนี้
+  vatRate Float?
+  whtRate Float?
+
   active Boolean @default(true)
   jobs   Job[]
+  billings CustomerBilling[]
+}
+
+/// ใบวางบิลลูกค้า — 1 ใบ = ขาที่เจ้าหน้าที่ติ๊กเลือกไว้ชุดหนึ่ง
+///
+/// ลูกค้ารายเดียวอาจแยกวางบิลหลายใบในเดือนเดียว (เช่น แยกตามปลายทาง)
+/// ใบจึงต้องจำว่าตัวเองมีขาไหนบ้าง — เก็บใน CustomerBillingLine
+///
+/// ระบบไม่รู้เองว่าวางบิลไปหรือยัง ต้องมีคนกดบันทึก แถวนี้คือหลักฐานว่าใครกดเมื่อไหร่
+model CustomerBilling {
+  id         Int      @id @default(autoincrement())
+  /// เลขที่ใบวางบิล ระบบรันให้เอง เช่น INV-256909-001
+  invoiceNo  String   @unique
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// ช่วงวันที่ของขาที่อยู่ในใบนี้ (วันแรก-วันสุดท้าย) ใช้แสดงบนหัวบิล
+  periodFrom DateTime
+  periodTo   DateTime
+  /// วันที่วางบิลจริง
+  billedAt   DateTime
+  /// วันครบกำหนดชำระ = วันที่วางบิล + เครดิตของลูกค้า
+  dueAt      DateTime?
+
+  /// ยอด ณ ตอนกดออกบิล — เก็บไว้เทียบย้อนหลัง ว่าตอนวางบิลยอดเท่าไหร่
+  legs      Int   @default(0)
+  /// ค่าบรรทุกรวมก่อนภาษี
+  amount    Float @default(0)
+  vatRate   Float @default(0)
+  vatAmount Float @default(0)
+  whtRate   Float @default(0)
+  whtAmount Float @default(0)
+  /// ยอดรับสุทธิ = amount + vatAmount − whtAmount
+  netAmount Float @default(0)
+
+  /// ชื่อผู้กดบันทึก
+  billedBy  String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  lines CustomerBillingLine[]
+
+  @@index([customerId, billedAt])
+  @@index([billedAt])
+}
+
+/// ขา 1 ขาที่อยู่ในใบวางบิลใบหนึ่ง
+///
+/// jobId เป็น unique — 1 ขาอยู่ได้ใบเดียวเท่านั้น จึงวางบิลซ้ำไม่ได้เด็ดขาด
+/// ลบใบทิ้งเมื่อไหร่ ขาในใบนั้นกลับมาเป็น "ยังไม่วางบิล" ให้เลือกใหม่ได้ทันที
+model CustomerBillingLine {
+  id        Int             @id @default(autoincrement())
+  billingId Int
+  billing   CustomerBilling @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  jobId     Int             @unique
+  job       Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  /// ค่าบรรทุกของขานี้ ณ ตอนออกบิล
+  amount    Float           @default(0)
+
+  @@index([billingId])
 }
 
 /// สูตรคำนวณราคาน้ำมันอ้างอิงของลูกค้าแต่ละราย — ออกแบบให้เพิ่มสูตรใหม่ได้เอง
@@ -259,6 +327,9 @@ model Job {
 
   /// รหัสงานจากชีตสั่งงานไลน์ (เช่น TT260728-01) — unique กันดึงงานเดิมเข้าซ้ำ
   sheetRef String? @unique
+
+  /// อยู่ในใบวางบิลใบไหน (ไม่มี = ยังไม่ได้วางบิล)
+  billingLine CustomerBillingLine?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
