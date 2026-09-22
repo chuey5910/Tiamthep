@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
 import { SelectFilter } from "@/components/Filters";
 import { ACTION_LABEL, requireAdmin } from "@/lib/auth";
-import { formatThaiDate } from "@/lib/date";
+import { formatThaiDateTime } from "@/lib/date";
 import { readInt, readString, type SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
 
@@ -136,8 +136,8 @@ export default async function LoginLogPage({ searchParams }: { searchParams: Pro
                 {logs.map((l) => (
                   <tr key={l.id}>
                     <td className="whitespace-nowrap">
-                      {formatThaiDate(l.at)}{" "}
-                      <span className="text-slate-400">{l.at.toISOString().slice(11, 19)}</span>
+                      {/* เวลาไทย (UTC+7) — เดิมโชว์เวลา UTC ทำให้ดูย้อนหลังแล้วเข้าใจผิดว่าคนละช่วงเวลา */}
+                      {formatThaiDateTime(l.at, true)}
                     </td>
                     <td>
                       <Badge tone={l.action === "LOGIN" ? "info" : l.action === "REGISTER" ? "warn" : "muted"}>

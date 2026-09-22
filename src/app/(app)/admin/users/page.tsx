@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
-import { formatThaiDate } from "@/lib/date";
+import { formatThaiDateTime } from "@/lib/date";
 import { ROLE_LABEL, STATUS_LABEL, lockRemainingMinutes, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AddUserForm } from "./AddUserForm";
@@ -11,7 +11,7 @@ export const metadata = { title: "จัดการผู้ใช้งาน"
 
 function when(d: Date | null): string {
   if (!d) return "-";
-  return `${formatThaiDate(d)} ${d.toISOString().slice(11, 16)} น.`;
+  return `${formatThaiDateTime(d)} น.`;
 }
 
 export default async function UsersPage() {

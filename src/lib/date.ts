@@ -101,6 +101,37 @@ export function formatThaiDate(d: Date | null | undefined): string {
   return `${d.getUTCDate()} ${TH_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear() + 543}`;
 }
 
+/**
+ * เวลาไทย (UTC+7) — เวลาที่บันทึกจริงอย่างเวลาเข้าระบบต้องแสดงตามเวลาไทยเสมอ
+ *
+ * ไทยไม่มีการปรับเวลาตามฤดูกาล จึงบวก 7 ชั่วโมงตายตัวได้ — ไม่ต้องพึ่งค่า TZ ของเครื่อง
+ * จึงตรงกันทุกที่ ไม่ว่าจะเปิดจากเครื่องไหนหรือรันในกล่อง Docker ที่ตั้งเวลาไว้แบบใด
+ *
+ * (ต่างจาก formatThaiDate ที่ใช้กับ "วันที่ล้วน" เช่น วันที่ทำงาน ซึ่งเก็บเป็นเที่ยงคืน UTC อยู่แล้ว)
+ */
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function bangkok(d: Date): Date {
+  return new Date(d.getTime() + BANGKOK_OFFSET_MS);
+}
+
+/** วันที่ + เวลาไทย เช่น "22 ก.ย. 2569 11:44" (withSeconds = ใส่วินาทีด้วย) */
+export function formatThaiDateTime(d: Date | null | undefined, withSeconds = false): string {
+  if (!d) return "";
+  const b = bangkok(d);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const time = `${two(b.getUTCHours())}:${two(b.getUTCMinutes())}${withSeconds ? `:${two(b.getUTCSeconds())}` : ""}`;
+  return `${b.getUTCDate()} ${TH_MONTHS[b.getUTCMonth()]} ${b.getUTCFullYear() + 543} ${time}`;
+}
+
+/** เฉพาะเวลาไทย เช่น "11:44:58" */
+export function formatThaiTime(d: Date | null | undefined, withSeconds = true): string {
+  if (!d) return "";
+  const b = bangkok(d);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${two(b.getUTCHours())}:${two(b.getUTCMinutes())}${withSeconds ? `:${two(b.getUTCSeconds())}` : ""}`;
+}
+
 /** อายุรถ/ระยะเวลา เป็นข้อความ "X ปี Y เดือน" */
 export function formatAge(from: Date | null | undefined, to: Date = new Date()): string {
   if (!from) return "";
