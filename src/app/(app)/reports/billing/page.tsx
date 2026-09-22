@@ -95,8 +95,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         priceUnit: l.priceUnit,
         rate: l.rate,
         amount: l.amount,
+        vehicleType: l.vehicleType,
         issues: l.issues,
-        fixHref: l.fixHref,
+        fix: l.fix,
+        missingRoute: l.missingRoute,
         invoiceNo: l.invoiceNo,
       }))
     : [];

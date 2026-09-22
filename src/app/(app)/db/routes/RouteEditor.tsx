@@ -27,15 +27,20 @@ function withCurrent(options: Option[], current: string | undefined): Option[] {
   return [{ value: current, label: `${current} (ชื่อเดิมของแถวนี้)` }, ...options];
 }
 
+/** ค่าที่เติมให้ล่วงหน้าตอนถูกส่งมาจากหน้าอื่น (เช่น ปุ่ม «เพิ่มเส้นทาง» ในหน้าวางบิล) */
+export type RoutePrefill = { origin: string; destination: string; vehicleType: string };
+
 export function RouteForm({
   locations,
   vehicleTypes,
   initial,
+  prefill,
   backHref = "?",
 }: {
   locations: Option[];
   vehicleTypes: Option[];
   initial?: RouteRow;
+  prefill?: RoutePrefill;
   backHref?: string;
 }) {
   const router = useRouter();
@@ -43,13 +48,15 @@ export function RouteForm({
   const [pending, start] = useTransition();
   const editing = !!initial;
 
-  const originOptions = withCurrent(locations, initial?.origin);
-  const destinationOptions = withCurrent(locations, initial?.destination);
-  const vehicleTypeOptions = withCurrent(vehicleTypes, initial?.vehicleType);
+  // ถูกส่งมาจากหน้าอื่นพร้อมชื่อครบแล้ว — เติมให้เลย ไม่ต้องมานั่งหาชื่อซ้ำ
+  const start3 = initial ?? prefill;
+  const originOptions = withCurrent(locations, start3?.origin);
+  const destinationOptions = withCurrent(locations, start3?.destination);
+  const vehicleTypeOptions = withCurrent(vehicleTypes, start3?.vehicleType);
 
   return (
     <form
-      key={initial?.id ?? "new"}
+      key={initial?.id ?? (prefill ? `${prefill.origin}|${prefill.destination}|${prefill.vehicleType}` : "new")}
       action={(form) => {
         setError(null);
         start(async () => {
@@ -60,6 +67,12 @@ export function RouteForm({
         });
       }}
     >
+      {!editing && prefill && (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-900">
+          ⚠️ เส้นทางนี้<b>ยังไม่มีในระบบ</b> — ระบบเติม ต้นทาง · ปลายทาง · ประเภทรถ ให้แล้วจากงานที่ยังวางบิลไม่ได้
+          <br />– เหลือกรอก ระยะทาง · เบี้ยเลี้ยง แล้วกด «เพิ่มเส้นทาง» จากนั้นกดปุ่ม «ตั้งราคา» ที่ท้ายแถวเพื่อใส่ราคา
+        </p>
+      )}
       {editing && (
         <p className="mb-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[12px] text-brand-900">
           กำลังแก้ไขเส้นทาง <b>#{initial.id}</b> — ทุกช่องแสดงค่าเดิมของแถวนี้ แก้เฉพาะช่องที่ต้องการแล้วกด «บันทึกการแก้ไข»
@@ -69,7 +82,7 @@ export function RouteForm({
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
         <div>
           <label className="lbl">ต้นทาง <span className="text-red-500">*</span></label>
-          <select name="origin" className="inp" defaultValue={initial?.origin ?? ""} required>
+          <select name="origin" className="inp" defaultValue={start3?.origin ?? ""} required>
             <option value="">— เลือก —</option>
             {originOptions.map((l) => (
               <option key={l.value} value={l.value}>{l.label}</option>
@@ -78,7 +91,7 @@ export function RouteForm({
         </div>
         <div>
           <label className="lbl">ปลายทาง <span className="text-red-500">*</span></label>
-          <select name="destination" className="inp" defaultValue={initial?.destination ?? ""} required>
+          <select name="destination" className="inp" defaultValue={start3?.destination ?? ""} required>
             <option value="">— เลือก —</option>
             {destinationOptions.map((l) => (
               <option key={l.value} value={l.value}>{l.label}</option>
@@ -87,7 +100,7 @@ export function RouteForm({
         </div>
         <div>
           <label className="lbl">ประเภทรถ <span className="text-red-500">*</span></label>
-          <select name="vehicleType" className="inp" defaultValue={initial?.vehicleType ?? ""} required>
+          <select name="vehicleType" className="inp" defaultValue={start3?.vehicleType ?? ""} required>
             <option value="">— เลือก —</option>
             {vehicleTypeOptions.map((v) => (
               <option key={v.value} value={v.value}>{v.label}</option>
@@ -148,7 +161,13 @@ export function RouteForm({
         <button className="btn btn-primary" disabled={pending}>
           {pending ? "กำลังบันทึก…" : editing ? "บันทึกการแก้ไข" : "+ เพิ่มเส้นทาง"}
         </button>
-        {editing && (
+        {!editing && prefill && (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-900">
+          ⚠️ เส้นทางนี้<b>ยังไม่มีในระบบ</b> — ระบบเติม ต้นทาง · ปลายทาง · ประเภทรถ ให้แล้วจากงานที่ยังวางบิลไม่ได้
+          <br />– เหลือกรอก ระยะทาง · เบี้ยเลี้ยง แล้วกด «เพิ่มเส้นทาง» จากนั้นกดปุ่ม «ตั้งราคา» ที่ท้ายแถวเพื่อใส่ราคา
+        </p>
+      )}
+      {editing && (
           <button type="button" className="btn btn-ghost" onClick={() => router.push(backHref)}>
             ยกเลิก
           </button>

@@ -120,10 +120,14 @@ export type BillingLine = {
   rate: number | null;
   /** ค่าบรรทุกของขานี้ */
   amount: number;
+  /** ประเภทรถของคันที่วิ่งขานี้ (null = ไม่พบทะเบียนในฐานข้อมูลรถ) */
+  vehicleType: string | null;
   /** ปัญหาที่ต้องแก้ก่อนวางบิล — มีปัญหา = ติ๊กเลือกไม่ได้ */
   issues: string[];
-  /** ลิงก์ไปแก้ต้นเหตุของปัญหา */
-  fixHref: string | null;
+  /** ปุ่มพาไปแก้ต้นเหตุ — พาไปถึงแถวที่ต้องแก้ ไม่ใช่แค่หน้ารวม */
+  fix: { href: string; label: string } | null;
+  /** เส้นทางที่ยังไม่มีในฐานข้อมูล — ใช้สร้างรวดเดียวหลายเส้น */
+  missingRoute: { origin: string; destination: string; vehicleType: string } | null;
   /** วางบิลไปแล้วในใบไหน (null = ยังไม่วางบิล) */
   invoiceNo: string | null;
 };
@@ -162,14 +166,41 @@ function rateOf(priceUnit: string, amount: number, weight: number, rate: number 
   return divisor > 0 ? round2(amount / divisor) : null;
 }
 
-/** ปัญหาของขานี้ควรไปแก้ที่หน้าไหน */
-function fixHrefFor(issues: string[], jobId: number, routeId: number | null): string | null {
+/**
+ * ปุ่ม "แก้ไข" ต้องพาไปถึงแถวที่ต้องแก้จริง ไม่ใช่แค่หน้ารวมแล้วให้ไปหาเอง
+ * ตัดสินจาก "ข้อมูล" ไม่ใช่จากข้อความเตือน — ข้อความเปลี่ยนเมื่อไหร่ลิงก์ก็ไม่พัง
+ */
+function fixTargetFor(args: {
+  jobId: number;
+  issues: string[];
+  origin: string;
+  destination: string;
+  vehicleType: string | null;
+  plate: string;
+  routeId: number | null;
+  routeFound: boolean;
+  hasTwins: boolean;
+  rateMissing: boolean;
+}): { href: string; label: string } | null {
+  const { jobId, issues, origin, destination, vehicleType, plate, routeId, routeFound, hasTwins, rateMissing } = args;
   if (issues.length === 0) return null;
-  const aboutRoute = issues.some(
-    (m) => m.includes("ยังไม่ได้ตั้งราคา") || m.includes("ไม่พบเส้นทาง") || m.includes("หน่วย") || m.includes("ซ้ำ"),
-  );
-  if (aboutRoute) return routeId != null ? `/db/routes?edit=${routeId}` : "/db/routes";
-  return `/entry/jobs?edit=${jobId}`;
+
+  // ไม่รู้ประเภทรถ = ทะเบียนยังไม่มีในฐานข้อมูลรถ ต้องไปเพิ่มที่นั่นก่อน
+  if (!vehicleType) return { href: `/db/vehicles?edit=${encodeURIComponent(plate)}`, label: "เพิ่มทะเบียนรถ" };
+
+  // เส้นทางซ้ำ — ค้นให้เห็นทุกแถวที่ซ้ำกันทีเดียว จะได้รวมได้
+  if (hasTwins) return { href: `/db/routes?q=${encodeURIComponent(origin)}`, label: "รวมเส้นทางซ้ำ" };
+
+  // ยังไม่มีเส้นทางนี้ — เปิดฟอร์มเพิ่มเส้นทางที่เติมชื่อให้แล้ว ไม่ต้องพิมพ์เอง
+  if (!routeFound) {
+    const qs = new URLSearchParams({ new: "1", origin, destination, vehicleType });
+    return { href: `/db/routes?${qs}`, label: "เพิ่มเส้นทาง" };
+  }
+
+  // มีเส้นทางแล้วแต่ยังไม่มีราคา — เปิดตารางราคาของเส้นนั้นเลย
+  if (rateMissing && routeId != null) return { href: `/db/routes?route=${routeId}`, label: "ตั้งราคา" };
+
+  return { href: `/entry/jobs?edit=${jobId}`, label: "แก้ข้อมูลงาน" };
 }
 
 /** รายการขาทั้งหมดของลูกค้ารายหนึ่งในช่วงที่เลือก (เรียงตามวันที่) */
@@ -185,6 +216,8 @@ export function billingLines(
   for (const j of d.billedJobs) {
     if (j.customerId !== customerId) continue;
     const c = d.calcs.get(j.id)!;
+    const hasTwins = c.routeId != null && d.ctx.routeTwins.has(c.routeId);
+    const rateMissing = c.customerRate == null;
     lines.push({
       jobId: j.id,
       date: c.billingDate,
@@ -198,8 +231,24 @@ export function billingLines(
       priceUnit: c.priceUnit,
       rate: rateOf(c.priceUnit, c.revenue, c.billingWeight, c.customerRate),
       amount: c.revenue,
+      vehicleType: c.vehicleType,
       issues: c.issues,
-      fixHref: fixHrefFor(c.issues, j.id, c.routeId),
+      fix: fixTargetFor({
+        jobId: j.id,
+        issues: c.issues,
+        origin: j.origin,
+        destination: j.destination,
+        vehicleType: c.vehicleType,
+        plate: j.headPlate.trim(),
+        routeId: c.routeId,
+        routeFound: c.routeFound,
+        hasTwins,
+        rateMissing,
+      }),
+      missingRoute:
+        !c.routeFound && c.vehicleType
+          ? { origin: j.origin, destination: j.destination, vehicleType: c.vehicleType }
+          : null,
       invoiceNo: invoiceByJob.get(j.id) ?? null,
     });
   }

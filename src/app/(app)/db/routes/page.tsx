@@ -5,7 +5,7 @@ import { compareThaiFirst } from "@/lib/sort";
 import { num } from "@/lib/format";
 import type { SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
-import { PriceMatrix, RouteActions, RouteForm, type RouteRow } from "./RouteEditor";
+import { PriceMatrix, RouteActions, RouteForm, type RoutePrefill, type RouteRow } from "./RouteEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,12 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
   const editId = typeof sp.edit === "string" ? Number(sp.edit) : null;
   const priceRouteId = typeof sp.route === "string" ? Number(sp.route) : null;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
+  // ถูกส่งมาจากหน้าวางบิล พร้อมชื่อเส้นทางที่ยังไม่มีในระบบ — เติมให้ในฟอร์มเพิ่มเส้นทางเลย
+  const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string).trim() : "");
+  const prefill: RoutePrefill | undefined =
+    sp.new === "1" && one("origin") && one("destination") && one("vehicleType")
+      ? { origin: one("origin"), destination: one("destination"), vehicleType: one("vehicleType") }
+      : undefined;
   // ลิงก์แก้ไข/ตั้งราคา/ยกเลิก ต้องพาคำค้นติดไปด้วย กลับมาแล้วตารางยังกรองเหมือนเดิม
   const backHref = q ? `?q=${encodeURIComponent(q)}` : "?";
 
@@ -140,11 +146,19 @@ export default async function RoutesPage({ searchParams }: { searchParams: Promi
         title={
           editing
             ? `แก้ไขเส้นทาง: ${editing.origin} → ${editing.destination} (${editing.vehicleType})`
-            : "เพิ่มเส้นทางใหม่"
+            : prefill
+              ? `เพิ่มเส้นทาง: ${prefill.origin} → ${prefill.destination} (${prefill.vehicleType})`
+              : "เพิ่มเส้นทางใหม่"
         }
-        className="mb-4 no-print"
+        className={`mb-4 no-print${prefill && !editing ? " border-amber-300" : ""}`}
       >
-        <RouteForm locations={locationOptions} vehicleTypes={vehicleTypeOptions} initial={editing} backHref={backHref} />
+        <RouteForm
+          locations={locationOptions}
+          vehicleTypes={vehicleTypeOptions}
+          initial={editing}
+          prefill={editing ? undefined : prefill}
+          backHref={backHref}
+        />
       </Card>
 
       {/* ค้นหาก่อนเพิ่ม — จะได้รู้ว่าเส้นทางนี้มีแล้วหรือยัง และสะกดชื่อไว้แบบไหน */}

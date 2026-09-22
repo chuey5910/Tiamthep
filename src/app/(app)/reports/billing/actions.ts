@@ -6,6 +6,7 @@ import { requireAuth, requireWrite } from "@/lib/auth";
 import { buildContext, computeJob } from "@/lib/calc";
 import { billingTotals, cleanRate, nextInvoiceNo, rateLabel, taxDefaults } from "@/lib/billing";
 import { addDays, formatThaiDate, startOfDay } from "@/lib/date";
+import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
 
 export type ActionResult = { ok: true; invoiceNo?: string } | { ok: false; error: string };
@@ -215,5 +216,54 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "สร้างไฟล์ไม่สำเร็จ" };
+  }
+}
+
+/**
+ * สร้างเส้นทางที่ยังไม่มีในระบบทีเดียวหลายเส้น
+ *
+ * ลูกค้ารายเดียวมักมีปลายทางหลายสิบที่ — กดเพิ่มทีละเส้นแล้วพิมพ์ชื่อซ้ำทุกรอบช้าเกินไป
+ * ระบบสร้างให้เฉพาะ "โครง" (ต้นทาง ปลายทาง ประเภทรถ หน่วยคิดราคา)
+ * ราคายังต้องไปตั้งเอง — ระบบไม่เดาราคาแทนคนเด็ดขาด
+ */
+export async function createMissingRoutes(
+  items: { origin: string; destination: string; vehicleType: string; priceUnit: string }[],
+): Promise<{ ok: true; created: number; skipped: number } | { ok: false; error: string }> {
+  await requireWrite();
+  try {
+    const clean = items
+      .map((r) => ({
+        origin: r.origin.trim(),
+        destination: r.destination.trim(),
+        vehicleType: r.vehicleType.trim(),
+        priceUnit: PRICE_UNITS.includes(r.priceUnit as (typeof PRICE_UNITS)[number]) ? r.priceUnit : "ต่อเที่ยว",
+      }))
+      .filter((r) => r.origin && r.destination && r.vehicleType);
+    if (clean.length === 0) return { ok: false, error: "ยังไม่ได้เลือกเส้นทางที่จะสร้าง" };
+
+    // มีอยู่แล้วก็ข้ามไป ไม่ถือว่าผิด — กดซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
+    const created = await prisma.$transaction(async (tx) => {
+      let n = 0;
+      for (const r of clean) {
+        const existing = await tx.route.findUnique({
+          where: {
+            origin_destination_vehicleType: {
+              origin: r.origin,
+              destination: r.destination,
+              vehicleType: r.vehicleType,
+            },
+          },
+        });
+        if (existing) continue;
+        await tx.route.create({ data: { ...r, allowance: 0 } });
+        n++;
+      }
+      return n;
+    });
+
+    revalidatePath("/", "layout");
+    return { ok: true, created, skipped: clean.length - created };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "สร้างเส้นทางไม่สำเร็จ" };
   }
 }

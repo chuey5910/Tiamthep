@@ -7,7 +7,8 @@ import { Badge, Card, Empty } from "@/components/ui";
 import { billingTotals, rateLabel } from "@/lib/billing";
 import { baht, money, num } from "@/lib/format";
 import { compareThaiFirst } from "@/lib/sort";
-import { cancelInvoice, createInvoice, exportBillingExcel } from "./actions";
+import { PRICE_UNITS } from "@/lib/price-unit";
+import { cancelInvoice, createInvoice, createMissingRoutes, exportBillingExcel } from "./actions";
 
 export type CustomerView = {
   customerId: number;
@@ -37,8 +38,10 @@ export type LineView = {
   priceUnit: string;
   rate: number | null;
   amount: number;
+  vehicleType: string | null;
   issues: string[];
-  fixHref: string | null;
+  fix: { href: string; label: string } | null;
+  missingRoute: { origin: string; destination: string; vehicleType: string } | null;
   invoiceNo: string | null;
 };
 
@@ -98,6 +101,9 @@ export function BillingHub({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  /** เส้นทางที่ขาด: คีย์ที่ติ๊กไว้ และหน่วยคิดราคาที่เลือกให้แต่ละเส้น */
+  const [pickedRoutes, setPickedRoutes] = useState<Set<string>>(new Set());
+  const [routeUnits, setRouteUnits] = useState<Record<string, string>>({});
 
   const originOptions = useMemo(
     () => [...new Set(lines.map((l) => l.origin))].sort(compareThaiFirst),
@@ -146,6 +152,47 @@ export function BillingHub({
   const chosenIds = chosenLines.map((l) => l.jobId);
   /** ขาที่ติ๊กได้ "ในมุมมองที่กรองอยู่ตอนนี้" — ปุ่มเลือกทั้งหมดต้องทำงานกับสิ่งที่ตาเห็น */
   const openInView = shown.filter(selectable);
+
+  // เส้นทางที่ยังไม่มีในระบบ รวมให้เหลือเส้นละแถว พร้อมนับว่ามีกี่ขาค้างอยู่เพราะเส้นนี้
+  const missingRoutes = useMemo(() => {
+    const m = new Map<string, { origin: string; destination: string; vehicleType: string; legs: number }>();
+    for (const l of lines) {
+      if (!l.missingRoute) continue;
+      const k = `${l.missingRoute.origin}|${l.missingRoute.destination}|${l.missingRoute.vehicleType}`;
+      const cur = m.get(k);
+      if (cur) cur.legs += 1;
+      else m.set(k, { ...l.missingRoute, legs: 1 });
+    }
+    return [...m.entries()]
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => b.legs - a.legs || compareThaiFirst(a.destination, b.destination));
+  }, [lines]);
+
+  const addRoutes = () => {
+    const items = missingRoutes
+      .filter((r) => pickedRoutes.has(r.key))
+      .map((r) => ({
+        origin: r.origin,
+        destination: r.destination,
+        vehicleType: r.vehicleType,
+        priceUnit: routeUnits[r.key] ?? "ต่อเที่ยว",
+      }));
+    setError(null);
+    setDone(null);
+    start(async () => {
+      const res = await createMissingRoutes(items);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setPickedRoutes(new Set());
+      setDone(
+        `สร้างเส้นทางแล้ว ${res.created} เส้น${res.skipped ? ` (ข้าม ${res.skipped} เส้นที่มีอยู่แล้ว)` : ""} — ` +
+          "ขั้นต่อไปต้องไปตั้งราคาของแต่ละเส้น กดปุ่ม «ตั้งราคา» ที่ท้ายแถวในหน้าเส้นทาง",
+      );
+      router.refresh();
+    });
+  };
 
   const toggle = (jobId: number) =>
     setChosen((prev) => {
@@ -419,6 +466,92 @@ export function BillingHub({
           <Empty>ไม่มีขาที่ตรงกับต้นทาง/ปลายทางที่กรองไว้ — กดล้างตัวกรองเส้นทางเพื่อดูทั้งหมด</Empty>
         ) : (
           <>
+            {missingRoutes.length > 0 && (
+              <div className="no-print mx-3 mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                <div className="text-[14px] font-bold text-amber-900">
+                  ⚠️ มี {missingRoutes.length} เส้นทางที่ยังไม่มีในฐานข้อมูล — ขาที่วิ่งเส้นนี้วางบิลไม่ได้
+                </div>
+                <p className="mt-0.5 text-[12px] font-medium text-amber-900">
+                  – ติ๊กเลือกแล้วกดสร้างทีเดียว ไม่ต้องไปพิมพ์ชื่อทีละเส้น · ระบบสร้างให้แค่โครง{" "}
+                  <b>ราคายังต้องไปตั้งเอง</b> (ระบบไม่เดาราคาแทน)
+                </p>
+                <div className="mt-2 overflow-x-auto rounded-lg border border-amber-200 bg-white">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th className="w-10">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={missingRoutes.length > 0 && pickedRoutes.size >= missingRoutes.length}
+                            onChange={(e) =>
+                              setPickedRoutes(e.target.checked ? new Set(missingRoutes.map((r) => r.key)) : new Set())
+                            }
+                          />
+                        </th>
+                        <th>ต้นทาง</th>
+                        <th>ปลายทาง</th>
+                        <th>ประเภทรถ</th>
+                        <th className="num">ขาที่ค้าง</th>
+                        <th>หน่วยคิดราคา</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {missingRoutes.map((r) => (
+                        <tr key={r.key}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={pickedRoutes.has(r.key)}
+                              onChange={() =>
+                                setPickedRoutes((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(r.key)) next.delete(r.key);
+                                  else next.add(r.key);
+                                  return next;
+                                })
+                              }
+                            />
+                          </td>
+                          <td>{r.origin}</td>
+                          <td>{r.destination}</td>
+                          <td className="text-slate-500">{r.vehicleType}</td>
+                          <td className="num font-bold">{r.legs}</td>
+                          <td>
+                            <select
+                              className="inp w-36 py-1 text-[13px]"
+                              value={routeUnits[r.key] ?? "ต่อเที่ยว"}
+                              onChange={(e) => setRouteUnits((prev) => ({ ...prev, [r.key]: e.target.value }))}
+                            >
+                              {PRICE_UNITS.map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={pending || pickedRoutes.size === 0}
+                    onClick={addRoutes}
+                  >
+                    {pending ? "กำลังสร้าง…" : `+ สร้างเส้นทางที่เลือก (${pickedRoutes.size} เส้น)`}
+                  </button>
+                  <a href="/db/routes" target="_blank" rel="noopener" className="btn btn-ghost">
+                    เปิดหน้าเส้นทางเพื่อตั้งราคา ↗
+                  </a>
+                </div>
+              </div>
+            )}
+
             <div className="no-print mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[13px] font-bold text-brand-900">
               <span>
                 ☑ เลือกไว้ <span className="text-[16px]">{chosenIds.length}</span> จาก {lines.length} ขา · ยอด{" "}
@@ -706,9 +839,15 @@ function GroupRows({
                   <span title={l.issues.join(" · ")}>
                     <Badge tone="error">{shortIssue(l.issues[0])}</Badge>
                   </span>{" "}
-                  {l.fixHref && (
-                    <a href={l.fixHref} className="btn btn-primary px-2 py-1 text-[12px]">
-                      แก้ไข →
+                  {l.fix && (
+                    <a
+                      href={l.fix.href}
+                      target="_blank"
+                      rel="noopener"
+                      title={`${l.issues.join(" · ")} — เปิดในแท็บใหม่`}
+                      className="btn btn-primary px-2 py-1 text-[12px]"
+                    >
+                      {l.fix.label} ↗
                     </a>
                   )}
                 </>
