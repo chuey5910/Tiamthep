@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { DateRangeFilter } from "@/components/Filters";
 import { Badge, Card, Empty } from "@/components/ui";
 import { billingTotals, rateLabel } from "@/lib/billing";
 import { baht, money, num } from "@/lib/format";
@@ -92,38 +93,59 @@ export function BillingHub({
 }) {
   const router = useRouter();
   const [chosen, setChosen] = useState<Set<number>>(new Set());
+  const [origin, setOrigin] = useState("");
   const [dest, setDest] = useState("");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  // จัดกลุ่มตามปลายทาง — บริษัทเดียวอาจแยกวางบิลตามปลายทาง
-  const groups = useMemo(() => {
-    const m = new Map<string, LineView[]>();
-    for (const l of lines) {
-      if (dest && l.destination !== dest) continue;
-      const list = m.get(l.destination);
-      if (list) list.push(l);
-      else m.set(l.destination, [l]);
-    }
-    return [...m.entries()].sort((a, b) => compareThaiFirst(a[0], b[0]));
-  }, [lines, dest]);
-
+  const originOptions = useMemo(
+    () => [...new Set(lines.map((l) => l.origin))].sort(compareThaiFirst),
+    [lines],
+  );
   const destOptions = useMemo(
     () => [...new Set(lines.map((l) => l.destination))].sort(compareThaiFirst),
     [lines],
   );
 
+  // เปลี่ยนลูกค้าหรือช่วงวันที่แล้ว ตัวกรองเดิมอาจไม่มีในรายการใหม่ — ถือว่า "ทุกที่" ไปเลย
+  // ไม่งั้นตารางจะว่างเปล่าโดยไม่มีอะไรบอกว่าเพราะตัวกรองค้างอยู่
+  const activeOrigin = originOptions.includes(origin) ? origin : "";
+  const activeDest = destOptions.includes(dest) ? dest : "";
+
+  const shown = useMemo(
+    () =>
+      lines.filter(
+        (l) => (!activeOrigin || l.origin === activeOrigin) && (!activeDest || l.destination === activeDest),
+      ),
+    [lines, activeOrigin, activeDest],
+  );
+
+  // จัดกลุ่มตามปลายทาง — บริษัทเดียวอาจแยกวางบิลตามปลายทาง
+  const groups = useMemo(() => {
+    const m = new Map<string, LineView[]>();
+    for (const l of shown) {
+      const list = m.get(l.destination);
+      if (list) list.push(l);
+      else m.set(l.destination, [l]);
+    }
+    return [...m.entries()].sort((a, b) => compareThaiFirst(a[0], b[0]));
+  }, [shown]);
+
   // ลำดับที่แสดงในตาราง — นับจากรายการทั้งหมดของลูกค้า ไม่ใช่ในกลุ่ม จะได้อ้างอิงตรงกันเสมอ
   const seqOf = useMemo(() => new Map(lines.map((l, i) => [l.jobId, i + 1])), [lines]);
 
+  // ขาที่ติ๊กไว้ของลูกค้า/ช่วงก่อนหน้า ต้องไม่ติดมาด้วย ไม่งั้นยอดจะเพี้ยน
   const chosenLines = lines.filter((l) => chosen.has(l.jobId));
   const totals = billingTotals(
     chosenLines.map((l) => l.amount),
     picked?.vatRate ?? 0,
     picked?.whtRate ?? 0,
   );
-  const openCount = lines.filter(selectable).length;
+  /** เฉพาะขาที่ยังอยู่ในรายการจริง — ใช้กับทุกปุ่ม จะได้ไม่พาขาเก่าติดไปด้วย */
+  const chosenIds = chosenLines.map((l) => l.jobId);
+  /** ขาที่ติ๊กได้ "ในมุมมองที่กรองอยู่ตอนนี้" — ปุ่มเลือกทั้งหมดต้องทำงานกับสิ่งที่ตาเห็น */
+  const openInView = shown.filter(selectable);
 
   const toggle = (jobId: number) =>
     setChosen((prev) => {
@@ -148,7 +170,7 @@ export function BillingHub({
     setError(null);
     setDone(null);
     start(async () => {
-      const res = await createInvoice(picked.customerId, [...chosen]);
+      const res = await createInvoice(picked.customerId, chosenIds);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -163,7 +185,7 @@ export function BillingHub({
     if (!picked) return;
     setError(null);
     start(async () => {
-      const res = await exportBillingExcel(picked.customerId, [...chosen]);
+      const res = await exportBillingExcel(picked.customerId, chosenIds);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -337,41 +359,78 @@ export function BillingHub({
         className="print:[&>header]:hidden"
         bodyClass=""
       >
-        <div className="no-print flex flex-wrap items-end gap-3 p-3">
+        {/* ทุกตัวเลือกของการวางบิลอยู่แถวเดียวกัน — ลูกค้า · ช่วงวันที่ · ต้นทาง · ปลายทาง */}
+        <div className="no-print flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
           {customerFilter}
-          {picked && destOptions.length > 1 && (
-            <div>
-              <label className="lbl">ปลายทาง</label>
-              <select className="inp w-56" value={dest} onChange={(e) => setDest(e.target.value)}>
-                <option value="">— ทุกปลายทาง —</option>
-                {destOptions.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <DateRangeFilter from={fromStr} to={toStr} inline />
         </div>
+        {picked && (originOptions.length > 1 || destOptions.length > 1) && (
+          <div className="no-print flex flex-wrap items-end gap-3 p-3">
+            {originOptions.length > 1 && (
+              <div>
+                <label className="lbl">ต้นทาง</label>
+                <select className="inp w-56" value={activeOrigin} onChange={(e) => setOrigin(e.target.value)}>
+                  <option value="">— ทุกต้นทาง ({originOptions.length} ที่) —</option>
+                  {originOptions.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {destOptions.length > 1 && (
+              <div>
+                <label className="lbl">ปลายทาง</label>
+                <select className="inp w-56" value={activeDest} onChange={(e) => setDest(e.target.value)}>
+                  <option value="">— ทุกปลายทาง ({destOptions.length} ที่) —</option>
+                  {destOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {(activeOrigin || activeDest) && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setOrigin("");
+                  setDest("");
+                }}
+              >
+                ล้างตัวกรองเส้นทาง
+              </button>
+            )}
+            <span className="pb-2 text-[12px] text-slate-500">
+              – กรองแล้วเห็น {shown.length} จาก {lines.length} ขา · ลูกค้ารายนี้วิ่ง {originOptions.length} ต้นทาง{" "}
+              {destOptions.length} ปลายทาง
+            </span>
+          </div>
+        )}
 
         {!picked ? (
           <Empty>เลือกลูกค้าที่จะวางบิลจากช่องด้านบน หรือกดปุ่ม «เปิดรายการ» ที่แถวของลูกค้ารายนั้น</Empty>
         ) : lines.length === 0 ? (
           <Empty>ลูกค้ารายนี้ไม่มีงานที่เรียกเก็บเงินในช่วงวันที่ที่เลือก</Empty>
+        ) : shown.length === 0 ? (
+          <Empty>ไม่มีขาที่ตรงกับต้นทาง/ปลายทางที่กรองไว้ — กดล้างตัวกรองเส้นทางเพื่อดูทั้งหมด</Empty>
         ) : (
           <>
             <div className="no-print mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[13px] font-bold text-brand-900">
               <span>
-                ☑ เลือกไว้ <span className="text-[16px]">{chosen.size}</span> จาก {lines.length} ขา · ยอด{" "}
+                ☑ เลือกไว้ <span className="text-[16px]">{chosenIds.length}</span> จาก {lines.length} ขา · ยอด{" "}
                 <span className="text-[16px]">{money(totals.amount)}</span> บาท
               </span>
               <span className="flex-1" />
               <button
                 type="button"
                 className="btn btn-ghost px-2 py-1 text-[12px]"
-                onClick={() => setMany(lines.filter(selectable).map((l) => l.jobId), true)}
+                onClick={() => setMany(openInView.map((l) => l.jobId), true)}
               >
-                เลือกทั้งหมดที่ยังไม่วางบิล ({openCount})
+                {activeOrigin || activeDest ? "เลือกทั้งหมดที่กรองอยู่" : "เลือกทั้งหมดที่ยังไม่วางบิล"} ({openInView.length})
               </button>
               <button
                 type="button"
@@ -380,16 +439,16 @@ export function BillingHub({
               >
                 ล้างที่เลือก
               </button>
-              <button type="button" className="btn btn-primary" disabled={pending || chosen.size === 0} onClick={issue}>
-                {pending ? "กำลังบันทึก…" : `🧾 ออกใบวางบิลจากที่เลือก (${chosen.size} ขา)`}
+              <button type="button" className="btn btn-primary" disabled={pending || chosenIds.length === 0} onClick={issue}>
+                {pending ? "กำลังบันทึก…" : `🧾 ออกใบวางบิลจากที่เลือก (${chosenIds.length} ขา)`}
               </button>
             </div>
 
             <div className="no-print flex flex-wrap items-center gap-2 px-3 pb-3">
-              <button type="button" className="btn btn-primary" disabled={pending || chosen.size === 0} onClick={download}>
+              <button type="button" className="btn btn-primary" disabled={pending || chosenIds.length === 0} onClick={download}>
                 ⬇ Export Excel
               </button>
-              <button type="button" className="btn btn-primary" data-print disabled={chosen.size === 0}>
+              <button type="button" className="btn btn-primary" data-print disabled={chosenIds.length === 0}>
                 📄 Export PDF / พิมพ์
               </button>
               <span className="text-[12px] text-slate-500">
@@ -407,7 +466,7 @@ export function BillingHub({
                 เลขประจำตัวผู้เสียภาษี: {picked.taxId ?? "-"} · สาขา: {picked.branch ?? "-"} · เครดิต{" "}
                 {picked.creditDays} วัน
                 <br />
-                งานช่วง {range} · รวม {chosen.size} ขา · คิดเงินตาม{picked.weightBasis}
+                งานช่วง {range} · รวม {chosenIds.length} ขา · คิดเงินตาม{picked.weightBasis}
               </div>
             </div>
 
@@ -419,8 +478,8 @@ export function BillingHub({
                       <input
                         type="checkbox"
                         className="h-4 w-4"
-                        checked={openCount > 0 && chosen.size >= openCount}
-                        onChange={(e) => setMany(lines.filter(selectable).map((l) => l.jobId), e.target.checked)}
+                        checked={openInView.length > 0 && openInView.every((l) => chosen.has(l.jobId))}
+                        onChange={(e) => setMany(openInView.map((l) => l.jobId), e.target.checked)}
                       />
                     </th>
                     <th>ลำดับ</th>
@@ -462,7 +521,7 @@ export function BillingHub({
                   <tr>
                     <td className="no-print" />
                     <td colSpan={5}>
-                      รวมที่เลือก {chosen.size} ขา (จากทั้งหมด {lines.length} ขา)
+                      รวมที่เลือก {chosenIds.length} ขา (จากทั้งหมด {lines.length} ขา)
                     </td>
                     <td className="num">
                       {picked.weightBasis === "น้ำหนักต้นทาง"

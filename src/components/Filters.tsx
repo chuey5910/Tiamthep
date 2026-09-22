@@ -22,8 +22,13 @@ function useSetParams() {
   return { set, pending, params };
 }
 
-/** ตัวกรองช่วงวันที่ พร้อมปุ่มลัดเลือกทั้งเดือน */
-export function DateRangeFilter({ from, to }: { from: string; to: string }) {
+/**
+ * ตัวกรองช่วงวันที่ พร้อมปุ่มลัดเลือกทั้งเดือน
+ *
+ * inline = ไม่ต้องมีกรอบการ์ดของตัวเอง ใช้เมื่อต้องวางเรียงกับตัวกรองอื่น
+ * (เช่น หน้าวางบิล ที่ ลูกค้า + ช่วงวันที่ + ปลายทาง ต้องอยู่แถวเดียวกัน)
+ */
+export function DateRangeFilter({ from, to, inline = false }: { from: string; to: string; inline?: boolean }) {
   const { set, pending } = useSetParams();
 
   const shiftMonth = (delta: number) => {
@@ -42,8 +47,8 @@ export function DateRangeFilter({ from, to }: { from: string; to: string }) {
     set({ from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) });
   };
 
-  return (
-    <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
+  const inner = (
+    <>
       <div>
         <label className="lbl">ตั้งแต่วันที่</label>
         <input type="date" className="inp w-40" value={from} onChange={(e) => set({ from: e.target.value })} />
@@ -63,9 +68,13 @@ export function DateRangeFilter({ from, to }: { from: string; to: string }) {
           เดือนถัดไป ▶
         </button>
       </div>
-      {pending && <span className="text-xs text-slate-400">กำลังคำนวณ…</span>}
-    </div>
+      {pending && <span className="pb-2 text-xs text-slate-400">กำลังคำนวณ…</span>}
+    </>
   );
+
+  if (inline) return inner;
+
+  return <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">{inner}</div>;
 }
 
 /** ตัวกรองแบบเลือกเดือน/ปี ใช้กับรายงานที่ดูเป็นรายเดือน */

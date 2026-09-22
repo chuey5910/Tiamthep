@@ -1,4 +1,4 @@
-import { DateRangeFilter, SelectFilter } from "@/components/Filters";
+import { SelectFilter } from "@/components/Filters";
 import { Formula, PageHeader, Stat } from "@/components/ui";
 import {
   billingCustomers,
@@ -142,8 +142,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         title="วางบิลลูกค้า"
         subtitle="เลือกขาที่จะวางบิล ออกเป็นใบวางบิล และติดตามว่ารายไหนยังมีขาค้างวางบิล"
       />
-
-      <DateRangeFilter from={fromStr} to={toStr} />
 
       <Formula>
         <b>ครบกำหนดวางบิล</b> = วันที่ {defaults.dueDay} ของเดือน (ตั้งค่ากลางที่หน้าตั้งค่าระบบ ·
