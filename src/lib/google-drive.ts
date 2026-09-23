@@ -47,9 +47,21 @@ function driveError(status: number, raw: string): string {
   return `Google ตอบกลับ ${status}: ${raw.slice(0, 200)}`;
 }
 
+/**
+ * ตัดสิ่งที่ติดมาตอนก๊อปวางออกจากรหัสโฟลเดอร์
+ * คนส่วนใหญ่ก๊อปทั้งลิงก์มาวาง — เอาเฉพาะรหัสให้เอง ดีกว่าปล่อยให้พังแล้วงงว่าทำไม
+ *   https://drive.google.com/drive/folders/1AbC...?usp=sharing  →  1AbC...
+ */
+export function cleanFolderId(raw: string): string {
+  let v = raw.trim().replace(/^[<"'\s]+|[>"'\s]+$/g, "");
+  const inUrl = v.match(/\/folders\/([^/?#]+)/) ?? v.match(/[?&]id=([^&#]+)/);
+  if (inUrl) v = inUrl[1];
+  return v.split(/[?#]/)[0];
+}
+
 export function driveConfig(): { keyFile: string; folderId: string } | { error: string } {
   const keyFile = (process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? "").trim();
-  const folderId = (process.env.BACKUP_DRIVE_FOLDER_ID ?? "").trim();
+  const folderId = cleanFolderId(process.env.BACKUP_DRIVE_FOLDER_ID ?? "");
   if (!keyFile) return { error: "ยังไม่ได้ตั้ง GOOGLE_SERVICE_ACCOUNT_FILE ใน .env" };
   if (!folderId) return { error: "ยังไม่ได้ตั้ง BACKUP_DRIVE_FOLDER_ID ใน .env" };
   return { keyFile, folderId };
