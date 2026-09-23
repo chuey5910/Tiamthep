@@ -1280,11 +1280,30 @@ function onEdit(e) {
       }
     }
 
-    // เติมรหัสงาน + สถานะเริ่มต้น เมื่อแถวเริ่มมีข้อมูลวันที่
-    var dateVal = sh.getRange(row, JC.DATE).getValue();
-    if (dateVal && !sh.getRange(row, JC.ID).getValue()) {
-      sh.getRange(row, JC.ID).setValue(nextJobId_(sh, dateVal));
-      if (!sh.getRange(row, JC.STATUS).getValue()) sh.getRange(row, JC.STATUS).setValue(ST.NEW);
+    // ── เติมรหัสงาน + สถานะเริ่มต้น (รองรับการวางหลายแถวพร้อมกัน) ──
+    // สำคัญ: ถ้าออฟฟิศ "ก๊อปแถวเดิมมาวาง" รหัสงานจะติดมาด้วย กลายเป็นรหัสซ้ำ
+    // เว็บรับรหัสละ 1 ขา แถวที่เกินจึงเข้าเว็บไม่ได้และหายจากใบวางบิล
+    // จึงต้องตรวจรหัสซ้ำแล้วตั้งรหัสใหม่ให้ตรงนี้ ก่อนที่ข้อมูลจะไหลต่อ
+    var renamed = [];
+    for (var r = row; r < row + e.range.getNumRows(); r++) {
+      if (r < 2) continue;
+      var dateVal = sh.getRange(r, JC.DATE).getValue();
+      if (!dateVal) continue;
+      var idCell = sh.getRange(r, JC.ID);
+      var curId = String(idCell.getValue()).trim();
+      if (!curId) {
+        idCell.setValue(nextJobId_(sh, dateVal));
+      } else if (jobIdRowCount_(sh, curId) > 1) {
+        var fresh = nextJobId_(sh, dateVal);
+        idCell.setValue(fresh);
+        renamed.push(curId + " → " + fresh);
+      }
+      if (!sh.getRange(r, JC.STATUS).getValue()) sh.getRange(r, JC.STATUS).setValue(ST.NEW);
+    }
+    if (renamed.length) {
+      SpreadsheetApp.getActiveSpreadsheet().toast(
+        "แถวที่วางมามีรหัสงานซ้ำกับแถวเดิม ระบบตั้งรหัสใหม่ให้แล้ว:\n" + renamed.join("\n"),
+        "🔢 ตั้งรหัสงานใหม่", 8);
     }
     // เติมชื่อคนขับ + ทะเบียนรถประจำตัวเขา จากรหัสที่เลือก
     if (e.range.getColumn() === JC.DRIVER) {
@@ -1316,6 +1335,17 @@ function vehicleOfDriver_(code) {
     }
   }
   return null;
+}
+
+/** มีกี่แถวในชีตที่ใช้รหัสงานนี้ — ใช้ตรวจรหัสซ้ำตอนก๊อปแถวมาวาง */
+function jobIdRowCount_(sheet, jobId) {
+  var last = sheet.getLastRow();
+  if (last < 2) return 0;
+  var n = 0;
+  sheet.getRange(2, JC.ID, last - 1, 1).getValues().forEach(function (r) {
+    if (String(r[0]).trim() === jobId) n++;
+  });
+  return n;
 }
 
 /** รหัสงานรูปแบบ TTยymmdd-ลำดับ เช่น TT260728-03 */

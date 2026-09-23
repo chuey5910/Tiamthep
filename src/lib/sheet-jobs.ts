@@ -52,8 +52,33 @@ export type SheetImportResult = {
   advancesSynced: number;
   /** แถวที่ปิดงานแล้วและอัปเดตข้อความ «ผลนำเข้าเว็บ» ให้ตรงกับสถานะปัจจุบัน (เช่น คำเตือนเก่าหายไป) */
   refreshed: number;
+  /** รหัสงานที่ซ้ำกันในชีต — เว็บรับได้รหัสละ 1 ขา ที่เหลือจึงหายไปเงียบๆ ถ้าไม่ดัก */
+  duplicates: DuplicateJobId[];
   rows: { jobId: string; ok: boolean; message: string }[];
 };
+
+/** รหัสงานหนึ่งที่มีหลายแถวในชีต */
+export type DuplicateJobId = {
+  jobId: string;
+  /** เลขแถวจริงในชีต (แถว 1 เป็นหัวตาราง) */
+  rows: number[];
+  /** มีงานรหัสนี้ในเว็บกี่ขา — ได้มากสุด 1 เพราะรหัสงานเป็น unique */
+  inWeb: number;
+  /** ขาที่หายไป = จำนวนแถวในชีต − ขาที่เข้าเว็บ */
+  missing: number;
+};
+
+/**
+ * ข้อความเตือนรหัสงานซ้ำ — บอกให้ครบว่า ซ้ำกี่แถว แถวไหน หายไปกี่ขา และต้องแก้ยังไง
+ * ต้องดักตั้งแต่ก่อนนำเข้า ไม่งั้นแถวที่เกินจะชนกุญแจ unique แล้วถูกกลืนไปเงียบๆ
+ */
+function duplicateMessage(d: DuplicateJobId, alreadyClosed: boolean): string {
+  const where = `แถว ${d.rows.join(", ")}`;
+  const head = `รหัสงาน ${d.jobId} ซ้ำ ${d.rows.length} แถว (${where})`;
+  const state = `เว็บรับได้รหัสละ 1 ขา — เข้าเว็บแล้ว ${d.inWeb} ขา ขาดอีก ${d.missing} ขา`;
+  const fix = "แก้: ตั้งรหัสงานใหม่ที่ไม่ซ้ำให้แถวที่เกิน แล้วตั้งสถานะเป็น «ยืนยัน» · ถ้าเป็นแถวที่กรอกซ้ำ ให้ลบแถวเกินทิ้ง";
+  return `${alreadyClosed ? "⚠️" : "❌"} ${head} · ${state} · ${fix}`;
+}
 
 /**
  * ดึงเงินเดินทาง (คอลัมน์ U) และค่าทางด่วน (คอลัมน์ T) จากชีตลงเว็บ
@@ -148,7 +173,7 @@ function numOrNull(s: string): number | null {
 export async function runSheetImport(): Promise<SheetImportResult> {
   const cfg = sheetConfig();
   if ("error" in cfg) {
-    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, rows: [] };
+    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], rows: [] };
   }
   const { sheetId, keyFile } = cfg;
 
@@ -159,8 +184,25 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     const driverByCode = new Map(drivers.map((d) => [d.code.toUpperCase(), d]));
     const customerByCode = new Map(ctx.customers.map((c) => [c.code.trim().toUpperCase(), c]));
 
+    // ── ตรวจรหัสงานซ้ำ "ก่อน" นำเข้า ──
+    // รหัสงานเป็นกุญแจ unique ในเว็บ ถ้าชีตมีหลายแถวใช้รหัสเดียวกัน แถวแรกเข้าได้
+    // ที่เหลือจะชนกุญแจแล้วถูกกลืนไปเงียบๆ กลายเป็นขาที่หายไปจากใบวางบิลโดยไม่มีใครรู้
+    const rowsById = new Map<string, number[]>();
+    for (let i = 0; i < values.length; i++) {
+      const id = (values[i][C.id] ?? "").trim();
+      if (id) rowsById.set(id, [...(rowsById.get(id) ?? []), i + 2]);
+    }
+    const duplicates: DuplicateJobId[] = [];
+    for (const [jobId, rowNos] of rowsById) {
+      if (rowNos.length < 2) continue;
+      const inWeb = await prisma.job.count({ where: { sheetRef: jobId } });
+      duplicates.push({ jobId, rows: rowNos, inWeb, missing: rowNos.length - inWeb });
+    }
+    const dupById = new Map(duplicates.map((d) => [d.jobId, d]));
+
     const results: SheetImportResult["rows"] = [];
     const writes: { range: string; values: string[][] }[] = [];
+    const dupReported = new Set<string>();
     let imported = 0;
     let failed = 0;
     let pendingReview = 0;
@@ -172,6 +214,29 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       const rowNo = i + 2; // แถวจริงในชีต (ข้อมูลเริ่มแถว 2)
       const status = (row[C.status] ?? "").trim();
       if (status === "ส่งของเสร็จสิ้น") pendingReview++;
+
+      // รหัสซ้ำ — ไม่นำเข้าเด็ดขาด และเขียนเตือนกลับลงชีตทุกแถวที่ซ้ำ
+      // ระบบไม่เดาว่าแถวไหนคือขาจริง ต้องให้คนตั้งรหัสใหม่เอง
+      const dup = dupById.get((row[C.id] ?? "").trim());
+      if (dup) {
+        const closed = status === ST.IMPORTED;
+        const msg = duplicateMessage(dup, closed);
+        if ((row[21] ?? "").trim() !== msg) {
+          writes.push({ range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[msg]] });
+          // แถวที่ปิดงานแล้วไม่แตะสถานะ (แถวหนึ่งในนั้นคือขาที่อยู่ในเว็บจริง)
+          if (!closed) writes.push({ range: `${JOBS_TAB}!${STATUS_COL}${rowNo}`, values: [[ST.FAILED]] });
+        }
+        if (closed) {
+          if (await syncTravelAdvance(row)) advancesSynced++;
+          await syncTickets(row);
+        }
+        // รายงานรหัสละครั้ง ไม่ใช่แถวละครั้ง — ตารางผลลัพธ์จะได้อ่านง่าย
+        if (!dupReported.has(dup.jobId)) {
+          dupReported.add(dup.jobId);
+          results.push({ jobId: dup.jobId, ok: false, message: msg.replace(/^[⚠️❌]\s*/u, "") });
+        }
+        continue;
+      }
       // แถว «นำเข้าไม่ผ่าน» ลองใหม่ให้ทุกครั้ง — ออฟฟิศแก้ช่องที่ผิดแล้ว (เช่น เติมรหัสลูกค้า)
       // มักลืมเปลี่ยนสถานะกลับเป็น «ยืนยัน» งานเลยค้างอยู่อย่างนั้น ทั้งที่แก้เสร็จแล้ว
       if (status !== ST.CONFIRMED && status !== ST.FAILED) {
@@ -222,12 +287,12 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     // อัปเดตข้อมูลหลักให้ dropdown ในชีตตรงกับเว็บเสมอ
     await pushMasterData(keyFile, sheetId, ctx, drivers);
 
-    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, rows: results };
+    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, duplicates, rows: results };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "เชื่อมต่อชีตไม่สำเร็จ",
-      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, rows: [],
+      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], rows: [],
     };
   }
 }
@@ -271,6 +336,26 @@ async function refreshedMessage(
   if (!job) return `❌ ไม่พบงานนี้ในเว็บแล้ว (ถูกลบ?) — ถ้าต้องการดึงใหม่ ให้เปลี่ยนสถานะเป็น «${ST.CONFIRMED}»`;
   const hasAdvance = (await prisma.travelAdvance.count({ where: { sheetRef: jobId } })) > 0;
   return okMessage(job.id, hasAdvance, openIssues(computeJob(ctx, job)));
+}
+
+/**
+ * งานในเว็บกับแถวในชีต "คนละขา" หรือเปล่า — คืนข้อความบอกช่องที่ต่าง (null = ตรงกันหมด)
+ *
+ * ใช้ตอนรหัสงานชนกัน: ถ้าข้อมูลตรงกันหมดแปลว่าเป็นแถวเดิมที่ดึงซ้ำ (ปล่อยผ่านได้)
+ * แต่ถ้าต่าง แปลว่าเป็นอีกขาหนึ่งที่บังเอิญใช้รหัสเดียวกัน ถ้าปล่อยผ่านขานั้นจะหายไปเลย
+ */
+function differentLeg(
+  job: { loadDate: Date; headPlate: string; origin: string; destination: string; weightOrigin: number | null; weightDest: number | null },
+  sheet: { loadDate: Date; headPlate: string; origin: string; destination: string; weightOrigin: number | null; weightDest: number | null },
+): string | null {
+  const diffs: string[] = [];
+  if (job.loadDate.getTime() !== sheet.loadDate.getTime()) diffs.push("วันที่");
+  if (job.headPlate.trim() !== sheet.headPlate.trim()) diffs.push("ทะเบียนรถ");
+  if (job.origin.trim() !== sheet.origin.trim()) diffs.push("ต้นทาง");
+  if (job.destination.trim() !== sheet.destination.trim()) diffs.push("ปลายทาง");
+  if ((job.weightOrigin ?? null) !== sheet.weightOrigin) diffs.push("น้ำหนักต้นทาง");
+  if ((job.weightDest ?? null) !== sheet.weightDest) diffs.push("น้ำหนักปลายทาง");
+  return diffs.length ? `ต่างกันที่ ${diffs.join(", ")}` : null;
 }
 
 /** ตรวจและบันทึก 1 แถว — คืนข้อความสั้นๆ ไว้เขียนกลับลงชีต */
@@ -354,9 +439,26 @@ async function importRow(
     const problems = route ? [] : ["ยังจับคู่เส้นทางไม่ได้ — ไปเลือกในหน้า บันทึกงานขนส่ง"];
     return { ok: true, message: okMessage(job.id, hasAdvance, problems) };
   } catch (e) {
-    // รหัสงานนี้เคยนำเข้าแล้ว (unique ชน) — ถือว่าสำเร็จ ไม่ให้เกิดซ้ำ
+    // รหัสงานนี้มีในเว็บแล้ว (unique ชน) — ต้องแยกให้ออกว่าเป็นแถวเดิมที่ดึงซ้ำ หรือคนละขาที่ใช้รหัสชนกัน
     if (e instanceof Error && e.message.includes("sheetRef")) {
       const existing = await prisma.job.findUnique({ where: { sheetRef: jobId } });
+      if (existing) {
+        const diff = differentLeg(existing, {
+          loadDate: date,
+          headPlate,
+          origin,
+          destination,
+          weightOrigin: numOrNull(row[C.wOrigin] ?? ""),
+          weightDest: numOrNull(row[C.wDest] ?? ""),
+        });
+        // ข้อมูลไม่ตรงกับงานที่อยู่ในเว็บ = เป็นคนละขาแต่ใช้รหัสเดียวกัน ห้ามกลืนเงียบๆ
+        if (diff) {
+          return {
+            ok: false,
+            message: `รหัสงาน ${jobId} มีอยู่ในเว็บแล้ว (งาน #${existing.id}) แต่ข้อมูลไม่ตรงกัน — ${diff} · เป็นคนละขา ให้ตั้งรหัสงานใหม่ที่ไม่ซ้ำ แล้วตั้งสถานะเป็น «${ST.CONFIRMED}»`,
+          };
+        }
+      }
       const hasAdv = (await saveAdvance().catch(() => "")) !== "";
       const problems = existing ? openIssues(computeJob(ctx, existing)) : [];
       return { ok: true, message: okMessage(existing?.id ?? "?", hasAdv, problems) };

@@ -35,6 +35,49 @@ export function ImportPanel() {
 
       {result?.ok && (
         <div className="mt-4 space-y-3">
+          {/* รหัสงานซ้ำ = ขาหายจากใบวางบิล ต้องเด่นที่สุดในหน้า */}
+          {result.duplicates.length > 0 && (
+            <div className="rounded-lg border-2 border-red-400">
+              <div className="border-b border-red-300 bg-red-50 px-3 py-2 text-[14px] font-bold text-red-900">
+                ❌ พบรหัสงานซ้ำในชีต {result.duplicates.length} รหัส — ขาที่หายไป{" "}
+                {result.duplicates.reduce((a, d) => a + d.missing, 0)} ขา
+                <div className="mt-0.5 text-[12px] font-medium">
+                  – เว็บรับได้รหัสละ 1 ขา · แถวที่ใช้รหัสซ้ำกันจึงเข้าเว็บไม่ได้ และวางบิลไม่ได้
+                  <br />– ระบบไม่เดาให้ว่าแถวไหนคือขาจริง ต้องไปตั้งรหัสงานใหม่ในชีตเอง
+                </div>
+              </div>
+              <div className="max-h-80 overflow-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>รหัสงานที่ซ้ำ</th>
+                      <th>แถวในชีต</th>
+                      <th className="num">ในชีต</th>
+                      <th className="num">เข้าเว็บแล้ว</th>
+                      <th className="num">ขาด</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.duplicates.map((d) => (
+                      <tr key={d.jobId} className="bg-red-50">
+                        <td className="font-mono text-[12px] font-bold text-red-700">{d.jobId}</td>
+                        <td className="text-[12px] text-red-700">แถว {d.rows.join(", ")}</td>
+                        <td className="num text-red-700">{d.rows.length}</td>
+                        <td className="num text-red-700">{d.inWeb}</td>
+                        <td className="num font-bold text-red-700">{d.missing}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="border-t border-red-300 px-3 py-2 text-[12px] leading-relaxed text-red-900">
+                <b>วิธีแก้ในชีต:</b> เปิดแท็บ «งาน» ไปที่แถวที่ระบุ → แถวแรกเก็บรหัสเดิมไว้ ·
+                แถวที่เหลือตั้งรหัสใหม่ให้ไม่ซ้ำ (เช่น ต่อท้ายเป็น -41, -42) → เปลี่ยนสถานะเป็น «ยืนยัน» → กดดึงงานอีกครั้ง
+                <br />
+                ถ้าแถวที่เกินคือการกรอกซ้ำจริง (ไม่ได้วิ่งจริง) ให้ลบแถวนั้นทิ้ง แล้วกดดึงงานใหม่ คำเตือนจะหายไปเอง
+              </p>
+            </div>
+          )}
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-900">
             นำเข้าสำเร็จ <b>{result.imported}</b> งาน
             {result.failed > 0 && (
@@ -90,8 +133,8 @@ export function ImportPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {failedRows.map((r) => (
-                        <tr key={r.jobId}>
+                      {failedRows.map((r, i) => (
+                        <tr key={`${r.jobId}-${i}`}>
                           <td className="bg-red-50 font-mono text-[12px] font-semibold text-red-700">{r.jobId}</td>
                           <td className="text-[12px] leading-relaxed text-red-700">✕ {r.message}</td>
                         </tr>
