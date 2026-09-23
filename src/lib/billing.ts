@@ -154,6 +154,8 @@ export type BillingLine = {
   date: Date;
   plate: string;
   trailerPlate: string | null;
+  /** เลขที่ตั๋วชั่งต้นทาง — ลูกค้าใช้อ้างอิงตอนตรวจบิล */
+  ticketOrigin: string | null;
   origin: string;
   destination: string;
   /** น้ำหนักต้นทาง / ปลายทาง (ตัน) — แสดงทั้งคู่ให้ตรวจทานได้ */
@@ -269,6 +271,7 @@ export function billingLines(
       date: c.billingDate,
       plate: j.headPlate.trim(),
       trailerPlate: j.trailerPlate?.trim() || null,
+      ticketOrigin: j.ticketOrigin ?? null,
       origin: j.origin,
       destination: j.destination,
       weightOrigin: j.weightOrigin,

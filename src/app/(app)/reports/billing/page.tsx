@@ -87,6 +87,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         jobId: l.jobId,
         date: formatThaiDate(l.date),
         plate: l.trailerPlate ? `${l.plate} + ${l.trailerPlate}` : l.plate,
+        ticketOrigin: l.ticketOrigin,
         origin: l.origin,
         destination: l.destination,
         weightOrigin: l.weightOrigin,

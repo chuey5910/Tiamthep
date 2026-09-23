@@ -156,6 +156,7 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
       "ลำดับ",
       "วันที่",
       "ทะเบียนรถ",
+      "เลขที่ตั๋วต้นทาง",
       "ต้นทาง",
       "ปลายทาง",
       "น้ำหนักต้นทาง (ตัน)",
@@ -167,6 +168,7 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
       i + 1,
       formatThaiDate(r.calc.billingDate),
       r.job.headPlate.trim(),
+      r.job.ticketOrigin ?? "",
       r.job.origin,
       r.job.destination,
       r.job.weightOrigin ?? "",
@@ -190,17 +192,17 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
       head,
       ...body,
       [],
-      ["", "", "", "", "", "", "", "ค่าบรรทุกรวม", totals.amount],
-      ["", "", "", "", "", "", "", `ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`, totals.vatAmount],
-      ["", "", "", "", "", "", "", "รวมทั้งสิ้น", totals.grandTotal],
-      ["", "", "", "", "", "", "", `หัก ภาษี ณ ที่จ่าย ${totals.whtRate}%`, -totals.whtAmount],
-      ["", "", "", "", "", "", "", "ยอดรับสุทธิ", totals.netAmount],
+      ["", "", "", "", "", "", "", "", "ค่าบรรทุกรวม", totals.amount],
+      ["", "", "", "", "", "", "", "", `ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`, totals.vatAmount],
+      ["", "", "", "", "", "", "", "", "รวมทั้งสิ้น", totals.grandTotal],
+      ["", "", "", "", "", "", "", "", `หัก ภาษี ณ ที่จ่าย ${totals.whtRate}%`, -totals.whtAmount],
+      ["", "", "", "", "", "", "", "", "ยอดรับสุทธิ", totals.netAmount],
     ];
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(sheet);
     ws["!cols"] = [
-      { wch: 7 }, { wch: 14 }, { wch: 13 }, { wch: 26 }, { wch: 26 },
+      { wch: 7 }, { wch: 14 }, { wch: 13 }, { wch: 16 }, { wch: 26 }, { wch: 26 },
       { wch: 19 }, { wch: 20 }, { wch: 14 }, { wch: 16 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, "ใบวางบิล");

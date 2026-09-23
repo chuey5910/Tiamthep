@@ -32,6 +32,7 @@ export const NAV: NavGroup[] = [
       { href: "/reports/drivers", icon: "👷", label: "กำไรขาดทุนราย พขร." },
       { href: "/reports/revenue", icon: "💰", label: "รายงานรายได้" },
       { href: "/reports/billing", icon: "🧾", label: "วางบิลลูกค้า" },
+      { href: "/reports/billing-history", icon: "📑", label: "รายงานการวางบิล" },
       { href: "/reports/expenses", icon: "📉", label: "รายงานค่าใช้จ่าย" },
       { href: "/reports/allowance", icon: "🍱", label: "สรุปเบี้ยเลี้ยง พขร." },
       { href: "/reports/fuel-bonus", icon: "🎁", label: "เงินพิเศษค่าน้ำมัน" },

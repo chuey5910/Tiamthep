@@ -122,6 +122,17 @@ function openIssues(calc: { routeFound: boolean; issues: string[] }): string[] {
   return calc.issues.slice(0, 2);
 }
 
+/**
+ * เลขที่ตั๋วชั่งน้ำหนักของแถวนั้น — ต้นทาง (คอลัมน์ N) และปลายทาง (คอลัมน์ Q)
+ * ลูกค้าใช้เลขนี้อ้างอิงตอนตรวจใบวางบิล จึงต้องมีช่องของตัวเอง
+ */
+function ticketsOf(row: string[]): { ticketOrigin: string | null; ticketDest: string | null } {
+  return {
+    ticketOrigin: (row[C.ticketNoOrigin] ?? "").trim() || null,
+    ticketDest: (row[C.ticketNoDest] ?? "").trim() || null,
+  };
+}
+
 /** ตัวเลขจากชีต — "" คืน null, อ่านไม่ได้ก็คืน null (ให้คนตรวจ ไม่เดา) */
 function numOrNull(s: string): number | null {
   const t = s.replace(/,/g, "").trim();
@@ -168,6 +179,8 @@ export async function runSheetImport(): Promise<SheetImportResult> {
         // เพราะออฟฟิศมักกรอกเงินตามหลัง และงานเก่าดึงเข้าเว็บตอนที่ยังไม่มีสองคอลัมน์นี้
         if (status === ST.IMPORTED) {
           if (await syncTravelAdvance(row)) advancesSynced++;
+          // งานเก่าที่ดึงเข้าเว็บตอนที่ยังไม่มีช่องเลขตั๋ว ต้องตามเติมให้ ไม่งั้นใบวางบิลจะว่าง
+          await syncTickets(row);
           // และอัปเดตข้อความ «ผลนำเข้าเว็บ» ให้ตรงกับสถานะปัจจุบันของงานในเว็บ
           // เช่น เพิ่มเส้นทางในเว็บแล้ว คำเตือน "ยังจับคู่เส้นทางไม่ได้" ในชีตต้องหายไปเอง
           const fresh = await refreshedMessage(row, ctx);
@@ -217,6 +230,29 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, rows: [],
     };
   }
+}
+
+/**
+ * เติมเลขที่ตั๋วให้งานที่ดึงเข้าเว็บไปแล้ว — แก้เลขในชีตแล้วดึงใหม่ เว็บตามให้
+ * เขียนเฉพาะตอนที่ค่าต่างจากเดิม จะได้ไม่ไปกวนฐานข้อมูลทุกรอบที่กดดึงงาน
+ */
+async function syncTickets(row: string[]): Promise<void> {
+  const jobId = (row[C.id] ?? "").trim();
+  if (!jobId) return;
+  const { ticketOrigin, ticketDest } = ticketsOf(row);
+  if (!ticketOrigin && !ticketDest) return;
+
+  const job = await prisma.job.findUnique({
+    where: { sheetRef: jobId },
+    select: { id: true, ticketOrigin: true, ticketDest: true },
+  });
+  if (!job) return;
+  if (job.ticketOrigin === ticketOrigin && job.ticketDest === ticketDest) return;
+
+  await prisma.job.update({
+    where: { id: job.id },
+    data: { ticketOrigin, ticketDest },
+  });
 }
 
 /**
@@ -285,13 +321,9 @@ async function importRow(
   const route = ctx.routeByKey.get(routeKey(origin, destination, vehicle.vehicleType)) ?? null;
   const tripCode = `${headPlate}-${toInputDate(date).split("-").reverse().join("")}`;
 
-  const ticketO = (row[C.ticketNoOrigin] ?? "").trim();
-  const ticketD = (row[C.ticketNoDest] ?? "").trim();
-  const note = [
-    ticketO ? `ตั๋วต้นทาง ${ticketO}` : "",
-    ticketD ? `ตั๋วปลายทาง ${ticketD}` : "",
-    (row[C.note] ?? "").trim(),
-  ].filter(Boolean).join(" · ") || null;
+  // เลขตั๋วเก็บเป็นช่องของตัวเอง (ไม่ปนในหมายเหตุ) เพราะใบวางบิลต้องอ้างอิงเลขนี้
+  const { ticketOrigin, ticketDest } = ticketsOf(row);
+  const note = (row[C.note] ?? "").trim() || null;
 
   // เงินเดินทาง (คอลัมน์ U) / ค่าทางด่วน (คอลัมน์ T) → หน้า «เงินเดินทาง / ค่าทางด่วน» ของเว็บ
   const saveAdvance = async () => ((await syncTravelAdvance(row)) ? " + เงินเดินทาง/ทางด่วน" : "");
@@ -311,6 +343,8 @@ async function importRow(
         weightOrigin: numOrNull(row[C.wOrigin] ?? ""),
         weightDest: numOrNull(row[C.wDest] ?? ""),
         cargoType: (row[C.cargo] ?? "").trim() || null,
+        ticketOrigin,
+        ticketDest,
         routeId: route?.id ?? null,
         note,
         sheetRef: jobId,

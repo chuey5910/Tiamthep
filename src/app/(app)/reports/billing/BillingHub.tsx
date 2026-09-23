@@ -30,6 +30,7 @@ export type LineView = {
   jobId: number;
   date: string;
   plate: string;
+  ticketOrigin: string | null;
   origin: string;
   destination: string;
   weightOrigin: number | null;
@@ -628,6 +629,7 @@ export function BillingHub({
                     <th>ลำดับ</th>
                     <th>วันที่</th>
                     <th>ทะเบียนรถ</th>
+                    <th>เลขที่ตั๋วต้นทาง</th>
                     <th>ต้นทาง</th>
                     <th>ปลายทาง</th>
                     <th className="num">น้ำหนักต้นทาง</th>
@@ -664,7 +666,7 @@ export function BillingHub({
                 <tfoot>
                   <tr>
                     <td className="no-print" />
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       รวมที่เลือก {chosenIds.length} ขา (จากทั้งหมด {lines.length} ขา)
                     </td>
                     <td className="num">
@@ -692,6 +694,7 @@ export function BillingHub({
                   <th>ลำดับ</th>
                   <th>วันที่</th>
                   <th>ทะเบียนรถ</th>
+                  <th>เลขที่ตั๋วต้นทาง</th>
                   <th>ต้นทาง</th>
                   <th>ปลายทาง</th>
                   <th className="num">น้ำหนักต้นทาง</th>
@@ -706,6 +709,7 @@ export function BillingHub({
                     <td>{i + 1}</td>
                     <td className="whitespace-nowrap">{l.date}</td>
                     <td className="whitespace-nowrap">{l.plate}</td>
+                    <td className="whitespace-nowrap">{l.ticketOrigin ?? "-"}</td>
                     <td>{l.origin}</td>
                     <td>{l.destination}</td>
                     <td className="num">{l.weightOrigin != null ? num(l.weightOrigin, 3) : "-"}</td>
@@ -717,7 +721,7 @@ export function BillingHub({
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={5}>รวม {totals.legs} ขา</td>
+                  <td colSpan={6}>รวม {totals.legs} ขา</td>
                   <td className="num">{num(chosenLines.reduce((a, l) => a + (l.weightOrigin ?? 0), 0), 3)}</td>
                   <td className="num">{num(chosenLines.reduce((a, l) => a + (l.weightDest ?? 0), 0), 3)}</td>
                   <td className="num">—</td>
@@ -812,7 +816,7 @@ function GroupRows({
             onChange={(e) => onToggleGroup(e.target.checked)}
           />
         </td>
-        <td colSpan={10} className="text-[13px] font-bold">
+        <td colSpan={11} className="text-[13px] font-bold">
           ปลายทาง {destination} — {rows.length} ขา · ยังไม่วางบิล {open} ขา
           {chosenAmount > 0 && <> · เลือกแล้ว {money(chosenAmount)} บาท</>}
         </td>
@@ -837,6 +841,7 @@ function GroupRows({
             <td>{seqOf.get(l.jobId)}</td>
             <td className="whitespace-nowrap">{l.date}</td>
             <td className="whitespace-nowrap">{l.plate}</td>
+            <td className="whitespace-nowrap font-mono text-[12px]">{l.ticketOrigin ?? "-"}</td>
             <td>{l.origin}</td>
             <td>{l.destination}</td>
             <td className={`num ${l.weightBasis === "น้ำหนักต้นทาง" ? "font-bold" : "text-slate-500"}`}>

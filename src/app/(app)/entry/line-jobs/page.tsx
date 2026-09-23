@@ -63,6 +63,7 @@ export default async function LineJobsPage() {
                   <th>รหัสงานในชีต</th>
                   <th>วันที่</th>
                   <th>ทะเบียน</th>
+                  <th>เลขที่ตั๋วต้นทาง</th>
                   <th>พขร.</th>
                   <th>ลูกค้า</th>
                   <th>เส้นทาง</th>
@@ -77,6 +78,9 @@ export default async function LineJobsPage() {
                     <td className="font-mono text-[12px]">{j.sheetRef}</td>
                     <td className="whitespace-nowrap">{formatThaiDate(j.loadDate)}</td>
                     <td className="font-medium">{j.headPlate}</td>
+                    <td className="font-mono text-[12px]">
+                      {j.ticketOrigin ?? <span className="text-amber-700">ยังไม่มี</span>}
+                    </td>
                     <td>{j.driverCode ?? "-"}</td>
                     <td>{j.customer.code}</td>
                     <td>
