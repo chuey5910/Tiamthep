@@ -35,8 +35,24 @@ function driveError(status: number, raw: string): string {
         : "เปิดที่ Google Cloud Console → APIs & Services → เปิดใช้ Google Drive API",
     ].join(" — ");
   }
+  // service account ไม่มีพื้นที่เก็บของตัวเอง — อัปเข้าโฟลเดอร์ใน My Drive ของคนอื่นไม่ได้
+  // ต้องเป็น "ไดรฟ์ที่แชร์" (Shared Drive) ซึ่งพื้นที่เป็นขององค์กร ไม่ใช่ของคนอัป
+  if (/storageQuotaExceeded|storage quota/i.test(raw)) {
+    return [
+      "service account ไม่มีพื้นที่เก็บของตัวเอง จึงอัปเข้าโฟลเดอร์ใน My Drive ไม่ได้",
+      "ย้ายโฟลเดอร์สำรองไปไว้ใน «ไดรฟ์ที่แชร์» (Shared Drive) แล้วเพิ่ม service account เป็นผู้จัดการเนื้อหา",
+      "แล้วเอา id ของโฟลเดอร์ในไดรฟ์ที่แชร์มาใส่ BACKUP_DRIVE_FOLDER_ID",
+    ].join(" — ");
+  }
   if (status === 403) {
-    return "service account ไม่มีสิทธิ์ในโฟลเดอร์ — แชร์โฟลเดอร์ใน Drive ให้อีเมลของ service account สิทธิ์ Editor";
+    const reason = raw.match(/"reason":\s*"([^"]+)"/)?.[1];
+    const message = raw.match(/"message":\s*"([^"]+)"/)?.[1];
+    return [
+      "service account ไม่มีสิทธิ์เขียนในโฟลเดอร์ — แชร์โฟลเดอร์ใน Drive ให้อีเมลของ service account สิทธิ์ Editor",
+      reason || message ? `Google บอกว่า: ${reason ?? ""}${reason && message ? " · " : ""}${message ?? ""}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | ");
   }
   if (status === 404) {
     return "ไม่พบโฟลเดอร์ตาม BACKUP_DRIVE_FOLDER_ID — ตรวจ id ในลิงก์โฟลเดอร์ และต้องแชร์ให้ service account ก่อน";

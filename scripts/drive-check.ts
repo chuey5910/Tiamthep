@@ -4,12 +4,15 @@
  * เรียกใช้บน NAS:
  *   sudo docker exec -t tiamthep-backup npx tsx scripts/drive-check.ts
  *
- * ไม่แตะไฟล์สำรองและไม่เขียนอะไรลง Drive — อ่านอย่างเดียว กดกี่รอบก็ได้
+ * ไม่แตะไฟล์สำรองที่มีอยู่ กดกี่รอบก็ได้
+ * ขั้นสุดท้ายอัปไฟล์ทดสอบเล็กๆ ขึ้นไปแล้วลบทิ้ง — เพราะ "อ่านได้" ไม่ได้แปลว่า "อัปได้"
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadServiceAccount, getAccessToken, SCOPE_DRIVE } from "../src/lib/google-auth";
-import { cleanFolderId, listBackups } from "../src/lib/google-drive";
+import { cleanFolderId, listBackups, uploadToDrive } from "../src/lib/google-drive";
 import { loadEnv } from "./load-env";
 
 loadEnv();
@@ -119,6 +122,26 @@ async function main(): Promise<number> {
   } catch (e) {
     console.log(`⚠️ เปิดโฟลเดอร์ได้ แต่อ่านรายการไฟล์ไม่ได้ — ${e instanceof Error ? e.message : "ไม่ทราบสาเหตุ"}`);
     return 1;
+  }
+
+  // 6) ทดสอบ "เขียน" จริง — อ่านได้ไม่ได้แปลว่าอัปได้
+  //    (แชร์เป็นผู้อ่าน หรือโฟลเดอร์อยู่ใน My Drive ซึ่ง service account ไม่มีพื้นที่ จะพังตรงนี้)
+  console.log("\n▶ ทดสอบอัปไฟล์จริง (ไฟล์ทดสอบเล็กๆ แล้วลบทิ้ง)...");
+  const testPath = join(tmpdir(), `tiamthep-drive-test-${Date.now()}.txt`);
+  writeFileSync(testPath, "ทดสอบการอัปโหลดของระบบสำรองข้อมูลเทียมเทพ\n");
+  try {
+    const up = await uploadToDrive(keyFile, folderId, testPath);
+    console.log("✅ อัปไฟล์ขึ้น Drive ได้จริง");
+    const del = await fetch(`${FILES_API}/${up.id}?${SHARED}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    console.log(del.ok || del.status === 404 ? "✅ ลบไฟล์ทดสอบเรียบร้อย" : `⚠️ ลบไฟล์ทดสอบไม่สำเร็จ — ไปลบ ${up.name} ใน Drive เองด้วย`);
+  } catch (e) {
+    console.log(`❌ อัปไฟล์ไม่สำเร็จ — ${e instanceof Error ? e.message : "ไม่ทราบสาเหตุ"}`);
+    return 1;
+  } finally {
+    if (existsSync(testPath)) unlinkSync(testPath);
   }
 
   console.log("\n✅ พร้อมใช้งาน — สั่งสำรองจริงได้ด้วย");
