@@ -39,7 +39,7 @@
 - แก้โครงคอลัมน์ในชีต ต้องแก้ทั้ง `src/lib/sheet-jobs.ts` และ `line-bot/Code.gs` ให้ตรงกัน
 - สำรองข้อมูลอัตโนมัติ 00:00 และ 12:15 (กล่อง `tiamthep-backup` รัน `scripts/backup-daemon.ts`)
   เก็บในเครื่อง 30 วัน แล้วแจ้งผลเข้าไลน์ถึงผู้ดูแลทุกรอบ
-  **สำเนานอกบ้านใช้แอปซิงก์ของ NAS** ซิงก์ `/volume1/docker/tiamthep/backup` ขึ้น Google Drive
+  **สำเนานอกบ้านใช้แอปซิงก์ของ NAS** ซิงก์ `/volume1/docker/tiamthep/data/backup` ขึ้น Google Drive
   ด้วยบัญชีเจ้าของ — ไม่ใช่ service account เพราะ service account ไม่มีพื้นที่เก็บของตัวเอง
   จึงอัปเข้า My Drive ไม่ได้ (ต้องมี Google Workspace ถึงจะใช้ไดรฟ์ที่แชร์ได้)
   โค้ดอัป Drive ยังอยู่ ใช้ได้ทันทีถ้าวันหนึ่งย้ายไปไดรฟ์ที่แชร์ — แค่ตั้ง `BACKUP_DRIVE_FOLDER_ID`
