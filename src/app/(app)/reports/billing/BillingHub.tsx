@@ -54,7 +54,6 @@ export type InvoiceView = {
   period: string;
   legs: number;
   amount: number;
-  netAmount: number;
   billedBy: string | null;
   legsInRange: number;
 };
@@ -68,8 +67,6 @@ export type PickedCustomer = {
   branch: string | null;
   creditDays: number;
   weightBasis: string;
-  vatRate: number;
-  whtRate: number;
 };
 
 /** ขาที่ติ๊กได้ = ยังไม่วางบิล และข้อมูลครบ */
@@ -144,11 +141,7 @@ export function BillingHub({
 
   // ขาที่ติ๊กไว้ของลูกค้า/ช่วงก่อนหน้า ต้องไม่ติดมาด้วย ไม่งั้นยอดจะเพี้ยน
   const chosenLines = lines.filter((l) => chosen.has(l.jobId));
-  const totals = billingTotals(
-    chosenLines.map((l) => l.amount),
-    picked?.vatRate ?? 0,
-    picked?.whtRate ?? 0,
-  );
+  const totals = billingTotals(chosenLines.map((l) => l.amount));
 
   // ยอดที่พิมพ์ในบิลของขาที่เลือก — เกลี่ยเศษสตางค์ให้บวกทุกบรรทัดได้เท่ายอดรวมพอดี
   const shownAmount = useMemo(() => {
@@ -378,7 +371,6 @@ export function BillingHub({
                   <th>ช่วงงาน</th>
                   <th className="num">ขา</th>
                   <th className="num">ค่าบรรทุก</th>
-                  <th className="num">ยอดรับสุทธิ</th>
                   <th>ผู้บันทึก</th>
                   <th className="no-print"></th>
                 </tr>
@@ -391,8 +383,7 @@ export function BillingHub({
                     <td className="whitespace-nowrap">{inv.dueAt || "-"}</td>
                     <td className="whitespace-nowrap">{inv.period}</td>
                     <td className="num">{inv.legs}</td>
-                    <td className="num">{money(inv.amount)}</td>
-                    <td className="num font-bold">{money(inv.netAmount)}</td>
+                    <td className="num font-bold">{money(inv.amount)}</td>
                     <td>{inv.billedBy ?? "-"}</td>
                     <td className="no-print">
                       <button
@@ -730,19 +721,12 @@ export function BillingHub({
               </tfoot>
             </table>
 
-            {/* ยอดท้ายบิลจบที่ «รวมทั้งสิ้น» — ภาษีหัก ณ ที่จ่ายเป็นเรื่องตอนลูกค้าจ่ายเงิน
-                ไม่ใช่ของใบวางบิล (ยอดหลังหักยังดูได้ที่หน้า รายงานการวางบิล) */}
+            {/* ท้ายบิลมีบรรทัดเดียว — ค่าบรรทุกรวม ไม่มี VAT ไม่มีหัก ณ ที่จ่าย */}
             <div className="print-keep p-4">
               <dl className="ml-auto w-full max-w-sm text-[14px]">
-                <Row label={`ค่าบรรทุกรวม (${totals.legs} ขา)`} value={money(totals.amount)} />
-                {/* ลูกค้าที่ไม่คิด VAT ไม่ต้องเห็นบรรทัด "ภาษีมูลค่าเพิ่ม 0%" ที่เป็นศูนย์เปล่าๆ
-                    ตั้งอัตราไว้เมื่อไหร่ บรรทัดนี้จะกลับมาเอง */}
-                {totals.vatRate > 0 && (
-                  <Row label={`ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`} value={money(totals.vatAmount)} />
-                )}
-                <div className="mt-2 flex justify-between gap-3 rounded-lg bg-brand-50 px-3 py-2">
-                  <dt className="text-[14px] font-bold text-brand-900">รวมทั้งสิ้น</dt>
-                  <dd className="text-[16px] font-extrabold text-brand-900">{money(totals.grandTotal)}</dd>
+                <div className="flex justify-between gap-3 rounded-lg bg-brand-50 px-3 py-2">
+                  <dt className="text-[14px] font-bold text-brand-900">ค่าบรรทุกรวม ({totals.legs} ขา)</dt>
+                  <dd className="text-[16px] font-extrabold text-brand-900">{money(totals.amount)}</dd>
                 </div>
               </dl>
               <div className="hidden pt-8 text-[12px] print:flex print:justify-between">

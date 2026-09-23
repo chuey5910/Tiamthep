@@ -72,16 +72,6 @@ export function SettingsForm({ values }: { values: Record<string, string> }) {
             – ค่ากลางของทุกราย · ลูกค้ารายไหนต่าง ตั้งเฉพาะรายนั้นที่หน้าข้อมูลลูกค้า
           </p>
         </div>
-        <div>
-          <label className="lbl">ภาษีมูลค่าเพิ่ม VAT (%)</label>
-          <input type="number" step="0.01" name="vatRate" className="inp" defaultValue={values.vatRate ?? "7"} required />
-          <p className="mt-0.5 text-[11px] text-slate-400">– ใส่ 0 ถ้าบริษัทไม่ได้จดทะเบียน VAT</p>
-        </div>
-        <div>
-          <label className="lbl">หักภาษี ณ ที่จ่าย (%)</label>
-          <input type="number" step="0.01" name="whtRate" className="inp" defaultValue={values.whtRate ?? "1"} required />
-          <p className="mt-0.5 text-[11px] text-slate-400">– ค่าขนส่งตามกฎหมายคือ 1%</p>
-        </div>
       </div>
 
       {error && (

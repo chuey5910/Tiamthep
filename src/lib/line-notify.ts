@@ -15,15 +15,33 @@ const PUSH_API = "https://api.line.me/v2/bot/message/push";
 
 export type NotifyResult = { sent: number; skipped?: string; errors: string[] };
 
-export function lineAdminConfig(): { token: string; admins: string[] } | { error: string } {
+/** userId ของไลน์ = ตัว U แล้วตามด้วยเลขฐานสิบหก 32 ตัว — อย่างอื่นส่งไปก็ถูกปฏิเสธ */
+const USER_ID = /^U[0-9a-f]{32}$/i;
+
+/**
+ * ตัดสัญลักษณ์ที่ติดมาตอนก๊อปวางออก — วงเล็บแหลม <> ที่ลอกมาจากไฟล์ตัวอย่าง
+ * เครื่องหมายคำพูด และช่องว่าง ถ้าไม่ตัด ไลน์จะตอบ 400 The property 'to' is invalid
+ */
+function cleanUserId(raw: string): string {
+  return raw.trim().replace(/^[<"'\s]+|[>"'\s]+$/g, "");
+}
+
+export function lineAdminConfig():
+  | { token: string; admins: string[]; bad: string[] }
+  | { error: string } {
   const token = (process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "").trim();
-  const admins = (process.env.LINE_ADMIN_USER_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const all = (process.env.LINE_ADMIN_USER_IDS ?? "").split(",").map(cleanUserId).filter(Boolean);
+  const admins = all.filter((id) => USER_ID.test(id));
+  const bad = all.filter((id) => !USER_ID.test(id));
+
   if (!token) return { error: "ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN ใน .env" };
-  if (admins.length === 0) return { error: "ยังไม่ได้ตั้ง LINE_ADMIN_USER_IDS ใน .env" };
-  return { token, admins };
+  if (all.length === 0) return { error: "ยังไม่ได้ตั้ง LINE_ADMIN_USER_IDS ใน .env" };
+  if (admins.length === 0) {
+    return {
+      error: `LINE_ADMIN_USER_IDS ไม่ถูกรูปแบบ (${bad.join(" · ")}) — ต้องเป็นตัว U ตามด้วยตัวอักษร/ตัวเลข 32 ตัว ใส่หลายคนคั่นด้วยจุลภาค ไม่ต้องมีวงเล็บหรือเครื่องหมายคำพูด`,
+    };
+  }
+  return { token, admins, bad };
 }
 
 /** ส่งข้อความถึงผู้ดูแลทุกคน — ส่งคนหนึ่งไม่ผ่าน ก็ยังส่งคนที่เหลือต่อ */
@@ -31,7 +49,8 @@ export async function notifyAdmins(text: string): Promise<NotifyResult> {
   const cfg = lineAdminConfig();
   if ("error" in cfg) return { sent: 0, skipped: cfg.error, errors: [] };
 
-  const errors: string[] = [];
+  // id ที่ผิดรูปแบบต้องบอกให้รู้ ไม่ใช่เงียบหายไปทั้งที่ตั้งใจจะแจ้งคนนั้น
+  const errors: string[] = cfg.bad.map((id) => `${id} → ไม่ใช่ userId ของไลน์ (ต้องเป็น U ตามด้วยอีก 32 ตัว)`);
   let sent = 0;
   for (const to of cfg.admins) {
     try {

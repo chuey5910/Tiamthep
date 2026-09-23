@@ -172,7 +172,6 @@ export const RESOURCES: Record<string, Resource> = {
       "'เกณฑ์น้ำหนักคิดราคา' บอกว่าจะเก็บเงินตามน้ำหนักต้นทางหรือปลายทาง",
       "'วันที่เรียกเก็บเงิน' บอกว่าจะนับงานเข้าเดือนไหน ตามวันขึ้นหรือวันลงสินค้า",
       "'วันครบกำหนดวางบิล' คือตัวเลขที่ระบบใช้เตือนในหน้าวางบิลลูกค้า — เว้นว่างไว้จะใช้ค่ากลางในหน้าตั้งค่าระบบ",
-      "'VAT / หัก ณ ที่จ่าย' เว้นว่าง = ใช้ค่ากลาง · ใส่ 0 = ไม่คิดภาษีนั้นกับลูกค้ารายนี้",
     ],
     fields: [
       { name: "code", label: "รหัส / ชื่อย่อ", type: "text", required: true, span: 1 },
@@ -182,8 +181,6 @@ export const RESOURCES: Record<string, Resource> = {
       { name: "creditDays", label: "เครดิต (วัน)", type: "number", format: "num", span: 1 },
       { name: "billingDay", label: "วันที่รับวางบิล / ออกเช็ค (บันทึกช่วยจำ)", type: "text", span: 1, placeholder: "ทุกวันที่ 5 และวันที่ 20" },
       { name: "billingDueDay", label: "วันครบกำหนดวางบิล (1-31)", type: "number", format: "num", span: 1, help: "เว้นว่าง = ใช้ค่ากลางในหน้าตั้งค่าระบบ · ตัวเลขนี้คือตัวที่ระบบใช้เตือนว่าเลยกำหนดแล้ว" },
-      { name: "vatRate", label: "VAT ของรายนี้ (%)", type: "number", step: "0.01", format: "num", span: 1, hideInTable: true, help: "เว้นว่าง = ใช้ค่ากลาง · ใส่ 0 = ไม่คิด VAT" },
-      { name: "whtRate", label: "หัก ณ ที่จ่ายของรายนี้ (%)", type: "number", step: "0.01", format: "num", span: 1, hideInTable: true, help: "เว้นว่าง = ใช้ค่ากลาง · ใส่ 0 = ไม่หัก" },
       { name: "fuelBasisId", label: "เกณฑ์ราคาน้ำมัน", type: "select", options: { kind: "fuelBasis" }, allowEmpty: true, span: 2 },
       { name: "weightBasis", label: "เกณฑ์น้ำหนักคิดราคา", type: "select", options: { kind: "static", values: ["น้ำหนักปลายทาง", "น้ำหนักต้นทาง"] }, span: 1 },
       { name: "billingDateBasis", label: "วันที่เรียกเก็บเงิน", type: "select", options: { kind: "static", values: ["วันที่ขึ้นสินค้า", "วันที่ลงสินค้า"] }, span: 1 },

@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireWrite } from "@/lib/auth";
 import { buildContext, computeJob } from "@/lib/calc";
-import { allocateSatang, billingTotals, cleanRate, nextInvoiceNo, rateLabel, taxDefaults } from "@/lib/billing";
+import { allocateSatang, billingTotals, nextInvoiceNo, rateLabel } from "@/lib/billing";
 import { addDays, formatThaiDate, startOfDay } from "@/lib/date";
 import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
@@ -13,21 +13,15 @@ export type ActionResult = { ok: true; invoiceNo?: string } | { ok: false; error
 export type ExcelFile = { ok: true; filename: string; base64: string } | { ok: false; error: string };
 
 /**
- * คำนวณค่าบรรทุกของขาที่เลือก + อัตราภาษีของลูกค้ารายนั้น
+ * คำนวณค่าบรรทุกของขาที่เลือก
  * ใช้ตัวคำนวณกลางตัวเดียวกับรายงาน ยอดจึงตรงกับที่เห็นบนหน้าจอเสมอ
  */
 async function priceSelectedJobs(customerId: number, jobIds: number[]) {
   const jobs = await prisma.job.findMany({ where: { id: { in: jobIds } } });
   const ctx = await buildContext();
-  const settings = new Map((await prisma.setting.findMany()).map((s) => [s.key, s.value]));
-  const defaults = taxDefaults(settings);
   const customer = ctx.customerById.get(customerId);
-
   const rows = jobs.map((j) => ({ job: j, calc: computeJob(ctx, j) }));
-  const vatRate = cleanRate(customer?.vatRate ?? null, defaults.vatRate);
-  const whtRate = cleanRate(customer?.whtRate ?? null, defaults.whtRate);
-
-  return { ctx, customer, rows, vatRate, whtRate };
+  return { ctx, customer, rows };
 }
 
 /**
@@ -45,7 +39,7 @@ export async function createInvoice(customerId: number, jobIds: number[]): Promi
     const ids = [...new Set(jobIds)].filter((n) => Number.isInteger(n));
     if (ids.length === 0) return { ok: false, error: "ยังไม่ได้เลือกขาที่จะวางบิล" };
 
-    const { customer, rows, vatRate, whtRate } = await priceSelectedJobs(customerId, ids);
+    const { customer, rows } = await priceSelectedJobs(customerId, ids);
     if (!customer) return { ok: false, error: "ไม่พบลูกค้ารายนี้ในฐานข้อมูล" };
     if (rows.length !== ids.length) return { ok: false, error: "มีขาที่เลือกไว้ถูกลบไปแล้ว — กดโหลดหน้าใหม่แล้วลองอีกครั้ง" };
 
@@ -75,7 +69,7 @@ export async function createInvoice(customerId: number, jobIds: number[]): Promi
     const periodFrom = new Date(Math.min(...dates));
     const periodTo = new Date(Math.max(...dates));
     const billedAt = startOfDay(new Date());
-    const totals = billingTotals(rows.map((r) => r.calc.revenue), vatRate, whtRate);
+    const totals = billingTotals(rows.map((r) => r.calc.revenue));
     // ยอดรายขาที่เก็บลงบิล = ยอดที่เกลี่ยเศษสตางค์แล้ว บวกทุกบรรทัดได้เท่ายอดรวมเป๊ะ
     const lineAmounts = allocateSatang(rows.map((r) => r.calc.revenue));
 
@@ -97,11 +91,12 @@ export async function createInvoice(customerId: number, jobIds: number[]): Promi
           dueAt: addDays(billedAt, customer.creditDays ?? 0),
           legs: totals.legs,
           amount: totals.amount,
-          vatRate: totals.vatRate,
-          vatAmount: totals.vatAmount,
-          whtRate: totals.whtRate,
-          whtAmount: totals.whtAmount,
-          netAmount: totals.netAmount,
+          // ใบวางบิลคิดแค่ค่าบรรทุก — ช่องภาษีที่ยังอยู่ในตารางเก็บ 0 ไว้ ของเก่าไม่ถูกแตะ
+          vatRate: 0,
+          vatAmount: 0,
+          whtRate: 0,
+          whtAmount: 0,
+          netAmount: totals.amount,
           billedBy: user.name,
           lines: {
             create: rows.map((r, i) => ({ jobId: r.job.id, amount: lineAmounts[i] })),
@@ -140,11 +135,11 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
     const ids = [...new Set(jobIds)].filter((n) => Number.isInteger(n));
     if (ids.length === 0) return { ok: false, error: "ยังไม่ได้เลือกขาที่จะออกไฟล์" };
 
-    const { customer, rows, vatRate, whtRate } = await priceSelectedJobs(customerId, ids);
+    const { customer, rows } = await priceSelectedJobs(customerId, ids);
     if (!customer) return { ok: false, error: "ไม่พบลูกค้ารายนี้ในฐานข้อมูล" };
 
     rows.sort((a, b) => a.calc.billingDate.getTime() - b.calc.billingDate.getTime() || a.job.id - b.job.id);
-    const totals = billingTotals(rows.map((r) => r.calc.revenue), vatRate, whtRate);
+    const totals = billingTotals(rows.map((r) => r.calc.revenue));
     const lineAmounts = allocateSatang(rows.map((r) => r.calc.revenue));
 
     const settings = new Map((await prisma.setting.findMany()).map((s) => [s.key, s.value]));
@@ -192,13 +187,8 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
       head,
       ...body,
       [],
-      // จบที่ "รวมทั้งสิ้น" เหมือนใบที่พิมพ์ — หัก ณ ที่จ่ายเป็นเรื่องตอนลูกค้าจ่ายเงิน ไม่ใช่ของใบวางบิล
-      ["", "", "", "", "", "", "", "", "ค่าบรรทุกรวม", totals.amount],
-      // ลูกค้าที่ไม่คิด VAT ไม่ต้องมีบรรทัดศูนย์ — เหมือนใบที่พิมพ์
-      ...(totals.vatRate > 0
-        ? [["", "", "", "", "", "", "", "", `ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`, totals.vatAmount]]
-        : []),
-      ["", "", "", "", "", "", "", "", "รวมทั้งสิ้น", totals.grandTotal],
+      // ท้ายไฟล์เหมือนใบที่พิมพ์ — มีแค่ค่าบรรทุกรวม ไม่มีภาษี
+      ["", "", "", "", "", "", "", "", `ค่าบรรทุกรวม (${totals.legs} ขา)`, totals.amount],
     ];
 
     const wb = XLSX.utils.book_new();

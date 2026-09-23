@@ -55,11 +55,6 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
       periodTo: b.periodTo.toISOString().slice(0, 10),
       legs: b._count.lines,
       amount: b.amount,
-      vatRate: b.vatRate,
-      vatAmount: b.vatAmount,
-      whtRate: b.whtRate,
-      whtAmount: b.whtAmount,
-      netAmount: b.netAmount,
       billedBy: b.billedBy,
     };
   });
@@ -68,10 +63,9 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
     (a, r) => ({
       legs: a.legs + r.legs,
       amount: a.amount + r.amount,
-      netAmount: a.netAmount + r.netAmount,
       overdue: a.overdue + (r.daysLeft != null && r.daysLeft < 0 ? 1 : 0),
     }),
-    { legs: 0, amount: 0, netAmount: 0, overdue: 0 },
+    { legs: 0, amount: 0, overdue: 0 },
   );
 
   // ตัวเลือกลูกค้า = ทุกรายในฐานข้อมูล (ไม่ใช่เฉพาะที่มีบิลในเดือนนี้ จะได้ค้นย้อนหลังได้)
@@ -128,13 +122,12 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
         <Formula>
           <b>นับตามวันที่วางบิล</b> ไม่ใช่วันที่วิ่งงาน — ใบที่ออกเดือนนี้อาจมีงานของเดือนก่อนรวมอยู่ (ดูได้ที่ช่อง «ช่วงงาน»)
           <br />
-          <b>เลือกเดือนเป็น «ทั้งปี»</b> เพื่อดูทั้งปีรวดเดียว · กดที่แถวใดก็ได้เพื่อดูรายละเอียดยอดและภาษีของใบนั้น
+          <b>เลือกเดือนเป็น «ทั้งปี»</b> เพื่อดูทั้งปีรวดเดียว · กดปุ่ม «ดูยอด» ที่แถวไหนก็ได้เพื่อดูรายละเอียดของใบนั้น
         </Formula>
 
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label="ใบวางบิล" value={rows.length} hint={`ใบ · ${t.legs} ขา`} />
-          <Stat label="ค่าบรรทุกรวม" value={baht(t.amount)} hint="บาท (ก่อน VAT)" />
-          <Stat label="ยอดรับสุทธิรวม" value={baht(t.netAmount)} hint="บาท (หลัง VAT และหัก ณ ที่จ่าย)" tone="good" />
+          <Stat label="ค่าบรรทุกรวม" value={baht(t.amount)} hint="บาท (ยอดที่วางบิลไป)" tone="good" />
           <Stat
             label="เลยกำหนดชำระ"
             value={t.overdue}
@@ -162,7 +155,7 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
 
       {rows.length > 0 && (
         <p className="no-print mt-3 text-[12px] text-slate-500">
-          – รวม {rows.length} ใบ · ค่าบรรทุก {money(t.amount)} บาท · ยอดรับสุทธิ {money(t.netAmount)} บาท{" "}
+          – รวม {rows.length} ใบ · ค่าบรรทุก {money(t.amount)} บาท{" "}
           {t.overdue > 0 && <Badge tone="error">เลยกำหนดชำระ {t.overdue} ใบ</Badge>}
         </p>
       )}

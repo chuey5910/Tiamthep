@@ -16,21 +16,11 @@ import type { PeriodData } from "./reports";
 
 /** ค่ากลางเมื่อยังไม่ได้ตั้งในหน้าตั้งค่าระบบ — ตามธรรมเนียมของบริษัทคือวันที่ 25 */
 export const DEFAULT_BILLING_DUE_DAY = 25;
-export const DEFAULT_VAT_RATE = 7;
-export const DEFAULT_WHT_RATE = 1;
 
 /** ทำให้เป็นวันที่ใช้ได้จริง (1-31) ไม่งั้นคืนค่าสำรอง */
 export function cleanDueDay(value: unknown, fallback = DEFAULT_BILLING_DUE_DAY): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1 || n > 31) return fallback;
-  return n;
-}
-
-/** ทำให้เป็นอัตราภาษีที่ใช้ได้จริง (0-100) ไม่งั้นคืนค่าสำรอง */
-export function cleanRate(value: unknown, fallback: number): number {
-  if (value == null || value === "") return fallback;
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0 || n > 100) return fallback;
   return n;
 }
 
@@ -44,48 +34,27 @@ export function dueDateOf(periodTo: Date, dueDay: number): Date {
   return utcDate(y, m, Math.min(dueDay, daysInMonth(y, m)));
 }
 
-/** อัตราภาษีกลางของบริษัท (อ่านจากตาราง Setting) */
-export type TaxDefaults = { vatRate: number; whtRate: number; dueDay: number };
+/** ค่ากลางของการวางบิล (อ่านจากตาราง Setting) */
+export type BillingDefaults = { dueDay: number };
 
-export function taxDefaults(settings: Map<string, string>): TaxDefaults {
-  return {
-    vatRate: cleanRate(settings.get("vatRate"), DEFAULT_VAT_RATE),
-    whtRate: cleanRate(settings.get("whtRate"), DEFAULT_WHT_RATE),
-    dueDay: cleanDueDay(settings.get("billingDueDay")),
-  };
+export function billingDefaults(settings: Map<string, string>): BillingDefaults {
+  return { dueDay: cleanDueDay(settings.get("billingDueDay")) };
 }
 
 /**
  * สรุปยอดท้ายบิล — สูตรเดียวใช้ทั้งหน้าจอ Excel และใบที่พิมพ์ ตัวเลขจึงตรงกันเสมอ
  * amounts ที่ส่งเข้ามาต้องเป็นค่า "เต็มความละเอียด" (ยังไม่ปัด) — ปัดครั้งเดียวที่นี่
+ *
+ * ใบวางบิลของที่นี่คิดแค่ค่าบรรทุก ไม่มี VAT และไม่มีหัก ณ ที่จ่าย
+ * (ยอดภาษีเป็นเรื่องของฝั่งบัญชีตอนรับเงิน ไม่ใช่ของใบที่ส่งลูกค้า)
  */
 export type BillingTotals = {
   legs: number;
   amount: number;
-  vatRate: number;
-  vatAmount: number;
-  /** ค่าบรรทุก + VAT */
-  grandTotal: number;
-  whtRate: number;
-  whtAmount: number;
-  /** ยอดรับสุทธิ = ค่าบรรทุก + VAT − หัก ณ ที่จ่าย */
-  netAmount: number;
 };
 
-export function billingTotals(amounts: number[], vatRate: number, whtRate: number): BillingTotals {
-  const amount = round2(amounts.reduce((a, b) => a + b, 0));
-  const vatAmount = round2((amount * vatRate) / 100);
-  const whtAmount = round2((amount * whtRate) / 100);
-  return {
-    legs: amounts.length,
-    amount,
-    vatRate,
-    vatAmount,
-    grandTotal: round2(amount + vatAmount),
-    whtRate,
-    whtAmount,
-    netAmount: round2(amount + vatAmount - whtAmount),
-  };
+export function billingTotals(amounts: number[]): BillingTotals {
+  return { legs: amounts.length, amount: round2(amounts.reduce((a, b) => a + b, 0)) };
 }
 
 /**
@@ -142,7 +111,6 @@ export type BillingRecord = {
   dueAt: Date | null;
   legs: number;
   amount: number;
-  netAmount: number;
   billedBy: string | null;
   jobIds: number[];
 };
@@ -313,7 +281,7 @@ export function billingLines(
 export function billingCustomers(
   d: PeriodData,
   invoiceByJob: Map<number, string>,
-  defaults: TaxDefaults,
+  defaults: BillingDefaults,
   today: Date = new Date(),
 ): BillingCustomerRow[] {
   const rows = new Map<number, BillingCustomerRow & { invoiceSet: Set<string> }>();

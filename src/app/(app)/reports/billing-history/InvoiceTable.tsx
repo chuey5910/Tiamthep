@@ -19,11 +19,6 @@ export type InvoiceRow = {
   periodTo: string;
   legs: number;
   amount: number;
-  vatRate: number;
-  vatAmount: number;
-  whtRate: number;
-  whtAmount: number;
-  netAmount: number;
   billedBy: string | null;
 };
 
@@ -50,9 +45,6 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
               <th>ช่วงงาน</th>
               <th className="num">ขา</th>
               <th className="num">ค่าบรรทุก</th>
-              <th className="num">VAT</th>
-              <th className="num">หัก ณ ที่จ่าย</th>
-              <th className="num">ยอดรับสุทธิ</th>
               <th>ครบกำหนดชำระ</th>
               <th>ผู้บันทึก</th>
               <th className="no-print"></th>
@@ -68,10 +60,7 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                 <td className="whitespace-nowrap">{r.billedAt}</td>
                 <td className="whitespace-nowrap text-slate-600">{r.period}</td>
                 <td className="num">{r.legs}</td>
-                <td className="num">{money(r.amount)}</td>
-                <td className="num text-slate-600">{r.vatAmount ? money(r.vatAmount) : "-"}</td>
-                <td className="num text-red-600">{r.whtAmount ? `-${money(r.whtAmount)}` : "-"}</td>
-                <td className="num font-bold">{money(r.netAmount)}</td>
+                <td className="num font-bold">{money(r.amount)}</td>
                 <td className="whitespace-nowrap">
                   {r.dueAt || "-"} <DueBadge daysLeft={r.daysLeft} />
                 </td>
@@ -117,13 +106,9 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                 <Line label="จำนวนขา" value={`${open.legs} ขา`} />
                 <Line label="ผู้บันทึก" value={open.billedBy ?? "-"} />
                 <div className="my-2 border-t border-[var(--border)]" />
-                <Line label="ค่าบรรทุกรวม" value={money(open.amount)} />
-                <Line label={`ภาษีมูลค่าเพิ่ม ${open.vatRate}%`} value={money(open.vatAmount)} />
-                <Line label="รวมทั้งสิ้น" value={money(open.amount + open.vatAmount)} bold />
-                <Line label={`หัก ภาษี ณ ที่จ่าย ${open.whtRate}%`} value={`-${money(open.whtAmount)}`} red />
                 <div className="mt-2 flex justify-between gap-3 rounded-lg bg-brand-50 px-3 py-2">
-                  <dt className="text-[14px] font-bold text-brand-900">ยอดรับสุทธิ</dt>
-                  <dd className="text-[16px] font-extrabold text-brand-900">{money(open.netAmount)}</dd>
+                  <dt className="text-[14px] font-bold text-brand-900">ค่าบรรทุกรวม</dt>
+                  <dd className="text-[16px] font-extrabold text-brand-900">{money(open.amount)}</dd>
                 </div>
                 <div className="mt-3 flex justify-between gap-3">
                   <dt className="text-[13px] text-slate-600">ครบกำหนดชำระ</dt>
@@ -143,11 +128,11 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
   );
 }
 
-function Line({ label, value, bold, red }: { label: string; value: string; bold?: boolean; red?: boolean }) {
+function Line({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3 border-b border-dashed border-[var(--border)] py-1.5">
-      <dt className={`text-[13px] ${bold ? "font-bold text-slate-900" : "text-slate-600"}`}>{label}</dt>
-      <dd className={`text-[13px] font-bold ${red ? "text-red-600" : "text-slate-900"}`}>{value}</dd>
+      <dt className="text-[13px] text-slate-600">{label}</dt>
+      <dd className="text-[13px] font-bold text-slate-900">{value}</dd>
     </div>
   );
 }

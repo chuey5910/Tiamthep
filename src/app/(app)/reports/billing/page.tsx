@@ -2,10 +2,9 @@ import { SelectFilter } from "@/components/Filters";
 import { Formula, PageHeader, Stat } from "@/components/ui";
 import {
   billingCustomers,
+  billingDefaults,
   billingLines,
-  cleanRate,
   dueDateOf,
-  taxDefaults,
   type BillingRecord,
 } from "@/lib/billing";
 import { daysUntil, formatThaiDate } from "@/lib/date";
@@ -27,7 +26,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     loadPeriod({ from, to }),
     prisma.setting.findMany(),
   ]);
-  const defaults = taxDefaults(new Map(settingRows.map((s) => [s.key, s.value])));
+  const defaults = billingDefaults(new Map(settingRows.map((s) => [s.key, s.value])));
 
   // ขาในช่วงนี้ถูกวางบิลไปแล้วในใบไหนบ้าง — 1 ขาอยู่ได้ใบเดียว
   const jobIds = data.billedJobs.map((j) => j.id);
@@ -59,7 +58,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           dueAt: l.billing.dueAt,
           legs: l.billing.legs,
           amount: l.billing.amount,
-          netAmount: l.billing.netAmount,
           billedBy: l.billing.billedBy,
           jobIds: [l.jobId],
         });
@@ -73,7 +71,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         period: `${formatThaiDate(b.periodFrom)} – ${formatThaiDate(b.periodTo)}`,
         legs: b.legs,
         amount: b.amount,
-        netAmount: b.netAmount,
         billedBy: b.billedBy,
         legsInRange: b.jobIds.length,
       });
@@ -186,8 +183,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 branch: customerRecord?.branch ?? null,
                 creditDays: customerRecord?.creditDays ?? 0,
                 weightBasis: customerRecord?.weightBasis ?? "น้ำหนักปลายทาง",
-                vatRate: cleanRate(customerRecord?.vatRate ?? null, defaults.vatRate),
-                whtRate: cleanRate(customerRecord?.whtRate ?? null, defaults.whtRate),
               }
             : null
         }

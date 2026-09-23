@@ -21,6 +21,32 @@ const SHARED = "supportsAllDrives=true&includeItemsFromAllDrives=true";
 
 export type DriveFile = { id: string; name: string; createdTime: string; size?: string };
 
+/**
+ * แปลข้อความผิดพลาดดิบของ Google ให้เป็นภาษาคนพร้อมบอกวิธีแก้
+ * (ข้อความดิบเป็น JSON ยาวหลายบรรทัด อ่านในไลน์แล้วไม่รู้ว่าต้องไปทำอะไรต่อ)
+ */
+function driveError(status: number, raw: string): string {
+  const project = raw.match(/project (\d+)/)?.[1];
+  if (status === 403 && /has not been used in project|SERVICE_DISABLED|accessNotConfigured/.test(raw)) {
+    return [
+      "ยังไม่ได้เปิดใช้ Google Drive API ในโปรเจกต์ของ service account",
+      project
+        ? `เปิดที่ https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=${project} → กด ENABLE แล้วรอ 2–3 นาที`
+        : "เปิดที่ Google Cloud Console → APIs & Services → เปิดใช้ Google Drive API",
+    ].join(" — ");
+  }
+  if (status === 403) {
+    return "service account ไม่มีสิทธิ์ในโฟลเดอร์ — แชร์โฟลเดอร์ใน Drive ให้อีเมลของ service account สิทธิ์ Editor";
+  }
+  if (status === 404) {
+    return "ไม่พบโฟลเดอร์ตาม BACKUP_DRIVE_FOLDER_ID — ตรวจ id ในลิงก์โฟลเดอร์ และต้องแชร์ให้ service account ก่อน";
+  }
+  if (status === 401) {
+    return "ไฟล์กุญแจ service account ใช้ไม่ได้ — ตรวจ GOOGLE_SERVICE_ACCOUNT_FILE ว่าชี้ไปที่ไฟล์ .json ที่ถูกต้อง";
+  }
+  return `Google ตอบกลับ ${status}: ${raw.slice(0, 200)}`;
+}
+
 export function driveConfig(): { keyFile: string; folderId: string } | { error: string } {
   const keyFile = (process.env.GOOGLE_SERVICE_ACCOUNT_FILE ?? "").trim();
   const folderId = (process.env.BACKUP_DRIVE_FOLDER_ID ?? "").trim();
@@ -50,7 +76,7 @@ export async function uploadToDrive(keyFile: string, folderId: string, filePath:
     body: JSON.stringify({ name, parents: [folderId] }),
   });
   if (!startRes.ok) {
-    throw new Error(`เริ่มอัปโหลดไม่สำเร็จ (${startRes.status}): ${(await startRes.text()).slice(0, 300)}`);
+    throw new Error(driveError(startRes.status, await startRes.text()));
   }
   const uploadUrl = startRes.headers.get("location");
   if (!uploadUrl) throw new Error("Google ไม่ได้ส่ง URL สำหรับอัปโหลดกลับมา");
@@ -64,7 +90,7 @@ export async function uploadToDrive(keyFile: string, folderId: string, filePath:
     duplex: "half",
   });
   if (!putRes.ok) {
-    throw new Error(`อัปโหลดไฟล์ไม่สำเร็จ (${putRes.status}): ${(await putRes.text()).slice(0, 300)}`);
+    throw new Error(driveError(putRes.status, await putRes.text()));
   }
   const file = (await putRes.json()) as DriveFile;
   return { ...file, size: String(size) };
@@ -82,7 +108,7 @@ export async function listBackups(keyFile: string, folderId: string): Promise<Dr
   const res = await fetch(`${FILES_API}?${params}&${SHARED}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`อ่านรายการไฟล์ใน Drive ไม่สำเร็จ (${res.status})`);
+  if (!res.ok) throw new Error(driveError(res.status, await res.text()));
   return ((await res.json()) as { files?: DriveFile[] }).files ?? [];
 }
 
