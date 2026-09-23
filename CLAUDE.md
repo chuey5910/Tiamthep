@@ -35,4 +35,6 @@
 - เครื่องจริงรันบน NAS ที่บ้าน: `/volume1/docker/tiamthep/app` · อัปเดตด้วย `sudo bash scripts/nas/tiamthep.sh update`
 - ชีตสั่งงาน + ไลน์บอทอยู่บน Google (`line-bot/Code.gs`) — **ต้องมีเว็บเครื่องเดียวที่เชื่อมชีต** ไม่งั้นแย่งกันเขียนสถานะ
 - แก้โครงคอลัมน์ในชีต ต้องแก้ทั้ง `src/lib/sheet-jobs.ts` และ `line-bot/Code.gs` ให้ตรงกัน
+- สำรองข้อมูลอัตโนมัติ 00:00 และ 12:15 (กล่อง `tiamthep-backup` รัน `scripts/backup-daemon.ts`)
+  เก็บทั้งในเครื่องและบน Google Drive 30 วัน แล้วแจ้งผลเข้าไลน์ถึงผู้ดูแลทุกรอบ
 - ทุกการแก้ต้องผ่าน `npx tsc --noEmit` และทดสอบในเบราว์เซอร์จริงก่อน push

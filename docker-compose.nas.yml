@@ -74,39 +74,29 @@ services:
       - ../data/backup:/app/backup
 
   backup:
-    image: postgres:16-alpine
+    # ใช้อิมเมจเดียวกับเว็บ — ในนั้นมีทั้ง pg_dump 16, Node และกุญแจ Google ครบ
+    # จึงทำได้จบในกล่องเดียว: ดัมป์ → บีบอัด → อัปขึ้น Drive → แจ้งไลน์ผู้ดูแล
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    image: tiamthep-web:latest
     container_name: tiamthep-backup
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - ../secrets/.env
     environment:
-      PGHOST: db
-      PGUSER: ${POSTGRES_USER:-tiamthep}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?ต้องตั้ง POSTGRES_PASSWORD ใน secrets/.env ก่อน}
-      PGDATABASE: ${POSTGRES_DB:-tiamthep}
       TZ: Asia/Bangkok
+      # ที่เก็บไฟล์สำรอง "ในกล่อง" — ผูกกับ ../data/backup ของ NAS ข้างล่าง
+      BACKUP_DIR: /app/backup
+    # ต้องต่อเน็ตได้ (Google Drive + LINE) — DNS ของ Docker บาง NAS แปลงชื่อไม่ได้
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
-      - ../data/backup:/backup
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        echo "ตัวสำรองข้อมูลเริ่มทำงาน — สำรองทุกวันเวลา 02:00 เก็บย้อนหลัง 30 วัน"
-        while true; do
-          now=$$(date +%H%M)
-          if [ "$$now" = "0200" ]; then
-            base="/backup/tiamthep-$$(date +%Y%m%d-%H%M%S).sql"
-            # ไม่ pipe เข้า gzip ตรงๆ เพราะ busybox sh ไม่มี pipefail
-            # ถ้า pg_dump พังแต่ gzip สำเร็จ จะได้ไฟล์เปล่าที่ดูเหมือนสำเร็จ
-            if pg_dump --clean --if-exists --file "$$base" && [ -s "$$base" ]; then
-              gzip -f "$$base"
-              echo "สำรองข้อมูลแล้ว: $$base.gz ($$(du -h $$base.gz | cut -f1))"
-              find /backup -name 'tiamthep-*.sql.gz' -mtime +30 -delete
-            else
-              echo "สำรองข้อมูลไม่สำเร็จ — ไม่ได้เก็บไฟล์เปล่าไว้"
-              rm -f "$$base" "$$base.gz"
-            fi
-            sleep 3600
-          fi
-          sleep 50
-        done
+      - ../data/backup:/app/backup
+      - ../secrets:/secrets:ro
+    command: ["npx", "tsx", "scripts/backup-daemon.ts"]

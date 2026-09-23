@@ -6,7 +6,7 @@
 #   bash scripts/nas/tiamthep.sh update   ดึงโค้ดล่าสุด สร้างใหม่ แล้วเปิดต่อ
 #   bash scripts/nas/tiamthep.sh status   ดูว่ากล่องไหนทำงานอยู่
 #   bash scripts/nas/tiamthep.sh logs     ดูข้อความล่าสุด (ออกด้วย Ctrl+C)
-#   bash scripts/nas/tiamthep.sh backup   สำรองข้อมูลเดี๋ยวนี้
+#   bash scripts/nas/tiamthep.sh backup   สำรองข้อมูลเดี๋ยวนี้ (+ อัปขึ้น Google Drive)
 #   bash scripts/nas/tiamthep.sh restore ไฟล์.sql.gz   กู้ข้อมูลจากไฟล์สำรอง
 #   bash scripts/nas/tiamthep.sh psql     เปิดหน้าจอสั่งงานฐานข้อมูลโดยตรง
 #   bash scripts/nas/tiamthep.sh run ...  สั่งคำสั่งของระบบ เช่น run npm run list:users
@@ -87,11 +87,9 @@ case "$cmd" in
     ;;
 
   backup)
-    ts=$(date +%Y%m%d-%H%M%S)
-    out="/backup/tiamthep-$ts.sql"
-    # เขียนไฟล์ก่อน แล้วค่อยตรวจว่าได้ข้อมูลจริง จึงบีบอัด — กันได้ไฟล์เปล่าที่ดูเหมือนสำเร็จ
-    $COMPOSE exec -T backup sh -c "pg_dump --clean --if-exists --file $out && [ -s $out ] && gzip -f $out"
-    echo "✅ สำรองข้อมูลแล้ว: ../data/backup/tiamthep-$ts.sql.gz"
+    # เรียกตัวเดียวกับที่ตัวตั้งเวลาใช้ — ดัมป์ + บีบอัด + อัปขึ้น Drive + แจ้งไลน์ถ้าพัง
+    # (แจ้งไลน์ตอนสำเร็จเฉพาะรอบอัตโนมัติ สั่งเองไม่ต้องกวนผู้ดูแลทุกครั้ง)
+    $COMPOSE exec -T backup npx tsx scripts/backup-run.ts
     ;;
 
   restore)

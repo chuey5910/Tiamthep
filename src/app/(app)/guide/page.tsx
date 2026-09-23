@@ -133,6 +133,34 @@ export default function GuidePage() {
         </ol>
       </Card>
 
+      <Card title="ระบบสำรองข้อมูล" className="mb-4">
+        <dl className="space-y-3 text-[13px] leading-relaxed">
+          <div>
+            <dt className="font-semibold text-slate-800">สำรองอัตโนมัติวันละ 2 รอบ</dt>
+            <dd className="text-slate-600">
+              เวลา <b>00:00</b> และ <b>12:15</b> ทุกวัน — เก็บไว้ทั้งในเครื่อง NAS และสำเนาบน{" "}
+              <b>Google Drive</b> ย้อนหลัง 30 วัน
+              <br />
+              NAS ปิดอยู่ตอนถึงเวลา พอเปิดเครื่องใหม่ระบบจะสำรองให้ทันที ไม่ปล่อยให้ขาดรอบ
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-800">แจ้งผลเข้าไลน์ทุกครั้ง</dt>
+            <dd className="text-slate-600">
+              ผู้ดูแลจะได้ข้อความจากบอทจ่ายงานทุกรอบ บอกว่าสำเร็จไหม ไฟล์ขนาดเท่าไหร่ ขึ้น Drive แล้วหรือยัง
+              <br />
+              <b>ถ้าไม่ได้รับข้อความตามเวลา แปลว่ามีอะไรผิดปกติ</b> ให้ตรวจที่ NAS ทันที
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-slate-800">ข้อมูลไม่หายแม้ลบโปรแกรมทิ้ง</dt>
+            <dd className="text-slate-600">
+              ฐานข้อมูลจริงอยู่คนละโฟลเดอร์กับโค้ด — ลบโฟลเดอร์โปรแกรมแล้วติดตั้งใหม่ได้ ข้อมูลยังอยู่ครบ
+            </dd>
+          </div>
+        </dl>
+      </Card>
+
       <Card title="ผู้ใช้งานและสิทธิ์" className="mb-4">
         <dl className="space-y-3 text-[13px] leading-relaxed">
           <div>
