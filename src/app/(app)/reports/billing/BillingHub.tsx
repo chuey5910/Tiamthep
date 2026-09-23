@@ -729,9 +729,16 @@ export function BillingHub({
                   <dd className="text-[16px] font-extrabold text-brand-900">{money(totals.amount)}</dd>
                 </div>
               </dl>
-              <div className="hidden pt-8 text-[12px] print:flex print:justify-between">
-                <div>ผู้วางบิล ..................................................</div>
-                <div>ผู้รับวางบิล .................................................. วันที่ ................................</div>
+              {/* ช่องเซ็น — กระดาษแนวตั้งกว้าง 17 ซม. วางสองช่องเรียงกัน ชื่อบนวันที่ล่าง */}
+              <div className="hidden pt-10 text-[11px] print:grid print:grid-cols-2 print:gap-10">
+                <div>
+                  <div>ผู้วางบิล ........................................</div>
+                  <div className="pt-5">วันที่ ........................................</div>
+                </div>
+                <div>
+                  <div>ผู้รับวางบิล ........................................</div>
+                  <div className="pt-5">วันที่ ........................................</div>
+                </div>
               </div>
             </div>
           </>
