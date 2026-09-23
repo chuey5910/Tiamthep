@@ -219,4 +219,53 @@ b, strong, th { font-weight: 700; }
     margin-bottom: 1rem;
     border-bottom: 2px solid #111114;
   }
+
+  /* ── กระดาษ ──
+     ใบวางบิลมี 10 คอลัมน์ พิมพ์แนวตั้งยังไงก็ตกขอบ จึงใช้ A4 แนวนอน
+     ขอบ 8 มม. พอให้เครื่องพิมพ์ส่วนใหญ่พิมพ์ได้ครบโดยไม่กินเนื้อหา */
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  /* ตารางตอนพิมพ์ต้องอยู่ในความกว้างกระดาษเสมอ ห้ามมีแถบเลื่อน */
+  :where(div, section):has(> .tbl) {
+    overflow: visible !important;
+  }
+  .tbl {
+    font-size: 10.5px;
+    table-layout: auto;
+    width: 100% !important;
+  }
+  .tbl thead th {
+    position: static;   /* sticky ทำให้หัวตารางลอยผิดที่ตอนพิมพ์ */
+    font-size: 10px;
+    padding: 3px 5px;
+  }
+  .tbl tbody td,
+  .tbl tfoot td {
+    padding: 3px 5px;
+  }
+  /* ชื่อสถานที่ยาวๆ ต้องตัดขึ้นบรรทัดใหม่ได้ ไม่งั้นดันตารางล้นขอบ */
+  .tbl td,
+  .tbl th {
+    white-space: normal !important;
+    word-break: break-word;
+  }
+  /* เลขเงินและวันที่ห้ามตัดกลางคัน อ่านผิดได้ */
+  .tbl .num,
+  .tbl td:first-child {
+    white-space: nowrap !important;
+  }
+
+  /* ขึ้นหน้าใหม่แล้วต้องมีหัวตารางซ้ำ และห้ามผ่ากลางแถว */
+  .tbl thead { display: table-header-group; }
+  .tbl tfoot { display: table-footer-group; }
+  .tbl tr { break-inside: avoid; page-break-inside: avoid; }
+
+  /* สรุปยอดท้ายบิลต้องอยู่หน้าเดียวกันทั้งก้อน ไม่ถูกผ่า */
+  .print-keep { break-inside: avoid; page-break-inside: avoid; }
+
+  /* พื้นหลังสีของแถว/ป้าย ต้องพิมพ์ออกมาด้วย ไม่งั้นแถวที่ต้องสังเกตจะกลายเป็นขาว */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

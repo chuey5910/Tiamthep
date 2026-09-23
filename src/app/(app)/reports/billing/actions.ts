@@ -192,11 +192,13 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
       head,
       ...body,
       [],
+      // จบที่ "รวมทั้งสิ้น" เหมือนใบที่พิมพ์ — หัก ณ ที่จ่ายเป็นเรื่องตอนลูกค้าจ่ายเงิน ไม่ใช่ของใบวางบิล
       ["", "", "", "", "", "", "", "", "ค่าบรรทุกรวม", totals.amount],
-      ["", "", "", "", "", "", "", "", `ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`, totals.vatAmount],
+      // ลูกค้าที่ไม่คิด VAT ไม่ต้องมีบรรทัดศูนย์ — เหมือนใบที่พิมพ์
+      ...(totals.vatRate > 0
+        ? [["", "", "", "", "", "", "", "", `ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`, totals.vatAmount]]
+        : []),
       ["", "", "", "", "", "", "", "", "รวมทั้งสิ้น", totals.grandTotal],
-      ["", "", "", "", "", "", "", "", `หัก ภาษี ณ ที่จ่าย ${totals.whtRate}%`, -totals.whtAmount],
-      ["", "", "", "", "", "", "", "", "ยอดรับสุทธิ", totals.netAmount],
     ];
 
     const wb = XLSX.utils.book_new();

@@ -730,29 +730,22 @@ export function BillingHub({
               </tfoot>
             </table>
 
-            <div className="p-4">
+            {/* ยอดท้ายบิลจบที่ «รวมทั้งสิ้น» — ภาษีหัก ณ ที่จ่ายเป็นเรื่องตอนลูกค้าจ่ายเงิน
+                ไม่ใช่ของใบวางบิล (ยอดหลังหักยังดูได้ที่หน้า รายงานการวางบิล) */}
+            <div className="print-keep p-4">
               <dl className="ml-auto w-full max-w-sm text-[14px]">
                 <Row label={`ค่าบรรทุกรวม (${totals.legs} ขา)`} value={money(totals.amount)} />
-                <Row label={`ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`} value={money(totals.vatAmount)} />
-                <Row label="รวมทั้งสิ้น" value={money(totals.grandTotal)} bold />
-                <Row label={`หัก ภาษี ณ ที่จ่าย ${totals.whtRate}%`} value={`-${money(totals.whtAmount)}`} red />
+                {/* ลูกค้าที่ไม่คิด VAT ไม่ต้องเห็นบรรทัด "ภาษีมูลค่าเพิ่ม 0%" ที่เป็นศูนย์เปล่าๆ
+                    ตั้งอัตราไว้เมื่อไหร่ บรรทัดนี้จะกลับมาเอง */}
+                {totals.vatRate > 0 && (
+                  <Row label={`ภาษีมูลค่าเพิ่ม ${totals.vatRate}%`} value={money(totals.vatAmount)} />
+                )}
                 <div className="mt-2 flex justify-between gap-3 rounded-lg bg-brand-50 px-3 py-2">
-                  <dt className="text-[14px] font-bold text-brand-900">ยอดรับสุทธิ</dt>
-                  <dd className="text-[16px] font-extrabold text-brand-900">{money(totals.netAmount)}</dd>
+                  <dt className="text-[14px] font-bold text-brand-900">รวมทั้งสิ้น</dt>
+                  <dd className="text-[16px] font-extrabold text-brand-900">{money(totals.grandTotal)}</dd>
                 </div>
               </dl>
-              <p className="no-print mt-2 text-[12px] text-slate-500">
-                – อัตรา VAT / หัก ณ ที่จ่าย ตั้งค่ากลางได้ที่{" "}
-                <a className="font-bold underline" href="/settings">
-                  ตั้งค่าระบบ
-                </a>{" "}
-                และตั้งเฉพาะลูกค้าบางรายได้ที่{" "}
-                <a className="font-bold underline" href="/db/customers">
-                  ข้อมูลลูกค้า
-                </a>{" "}
-                (กรอก 0 = ไม่คิดภาษีนั้น)
-              </p>
-              <div className="hidden pt-10 text-[12px] print:flex print:justify-between">
+              <div className="hidden pt-8 text-[12px] print:flex print:justify-between">
                 <div>ผู้วางบิล ..................................................</div>
                 <div>ผู้รับวางบิล .................................................. วันที่ ................................</div>
               </div>
@@ -770,11 +763,11 @@ function StatusBadge({ c }: { c: CustomerView }) {
   return <Badge tone={c.overdue ? "error" : "warn"}>ยังไม่วางบิล</Badge>;
 }
 
-function Row({ label, value, bold, red }: { label: string; value: string; bold?: boolean; red?: boolean }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3 border-b border-dashed border-[var(--border)] py-1.5">
-      <dt className={`text-[13px] ${bold ? "font-bold text-slate-900" : "text-slate-600"}`}>{label}</dt>
-      <dd className={`text-[13px] font-bold ${red ? "text-red-600" : "text-slate-900"}`}>{value}</dd>
+      <dt className="text-[13px] text-slate-600">{label}</dt>
+      <dd className="text-[13px] font-bold text-slate-900">{value}</dd>
     </div>
   );
 }
