@@ -92,11 +92,18 @@ export async function runBackup(): Promise<BackupOutcome> {
   const bytes = statSync(gz).size;
   const localPruned = pruneLocal();
 
-  // ── อัปขึ้น Google Drive ── ล้มเหลวได้ แต่ห้ามเงียบ
-  let drive = "ข้าม (ยังไม่ได้ตั้งค่า)";
+  // ── สำเนานอกบ้าน ── ล้มเหลวได้ แต่ห้ามเงียบ
+  //
+  // ค่าปริยายของที่นี่: ไม่ได้ตั้ง BACKUP_DRIVE_FOLDER_ID เพราะให้แอปของ NAS
+  // ซิงก์โฟลเดอร์สำรองขึ้น Google Drive ด้วยบัญชีของเจ้าของเอง
+  // (service account ไม่มีพื้นที่เก็บของตัวเอง จึงอัปเข้า My Drive ไม่ได้
+  //  ต้องมี Google Workspace ถึงจะใช้ไดรฟ์ที่แชร์ได้ — เลยเลี่ยงมาทางนี้)
+  let drive = "แอปของ NAS ซิงก์เอง — ระบบนี้ตรวจให้ไม่ได้ ดูที่หน้าแอปเป็นระยะ";
   const cfg = driveConfig();
   if ("error" in cfg) {
-    drive = `ข้าม — ${cfg.error}`;
+    // ตั้งค่าไว้ครึ่งๆ กลางๆ ต้องบอก ไม่ใช่ปล่อยผ่านเหมือนตั้งใจไม่ตั้ง
+    const halfSet = (process.env.BACKUP_DRIVE_FOLDER_ID ?? "").trim() !== "";
+    if (halfSet) drive = `❌ ตั้งค่าไว้ไม่ครบ — ${cfg.error}`;
   } else {
     try {
       await uploadToDrive(cfg.keyFile, cfg.folderId, gz);
@@ -129,7 +136,7 @@ export function backupMessage(r: BackupOutcome): string {
     `เวลา: ${when}`,
     `ไฟล์: ${r.file}`,
     `ขนาด: ${human(r.bytes ?? 0)}`,
-    `Google Drive: ${r.drive}`,
+    `สำเนานอกบ้าน: ${r.drive}`,
     `เก็บย้อนหลัง: ${KEEP_DAYS} วัน${r.localPruned ? ` (ลบของเก่าในเครื่อง ${r.localPruned} ไฟล์)` : ""}`,
   ].join("\n");
 }
