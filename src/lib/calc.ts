@@ -294,10 +294,16 @@ export type JobCalc = {
   referencePrice: number | null;
   bandLabel: string | null;
   customerRate: number | null;
-  /** รายได้ค่าบรรทุกของขานี้ */
+  /**
+   * รายได้ค่าบรรทุกของขานี้ — เก็บเต็มความละเอียด ยังไม่ปัดเศษ
+   *
+   * ปัดทีละขาแล้วค่อยบวก จะทำให้ยอดรวมเพี้ยนจาก "ราคา × น้ำหนักรวม" ไปหลายสตางค์
+   * (เศษของแต่ละขาสะสมกัน) จึงเก็บค่าเต็มไว้ แล้วปัดครั้งเดียวตอนรวมเสมอ
+   * ตอนแสดงผลรายขา ตัวจัดรูปแบบ (money/baht) ปัดให้เองอยู่แล้ว
+   */
   revenue: number;
   outsourceRate: number | null;
-  /** ค่าจ้างที่ต้องจ่ายรถร่วมสำหรับขานี้ */
+  /** ค่าจ้างที่ต้องจ่ายรถร่วมสำหรับขานี้ — เก็บเต็มความละเอียดเหมือน revenue */
   outsourcePay: number;
   /** คำเตือนที่ต้องให้ผู้ใช้แก้ไข */
   issues: string[];
@@ -408,13 +414,14 @@ export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
 
   // น้ำหนักในระบบเป็นตัน — ราคาต่อกิโลกรัม (เช่น 0.261) คูณด้วยน้ำหนักเป็นกิโล
   const multiplier = priceMultiplier(priceUnit, billingWeight);
-  const revenue = customerRate != null ? round2(customerRate * multiplier) : 0;
+  // ไม่ปัดตรงนี้ — ปัดครั้งเดียวตอนรวม ไม่งั้นเศษของทุกขาจะสะสมจนยอดรวมเพี้ยน
+  const revenue = customerRate != null ? customerRate * multiplier : 0;
 
   const isOutsource = ownerType === "รถร่วม";
   if (isOutsource && route && band && outsourceRate == null) {
     flag("outsource", `ยังไม่ได้ตั้งราคาจ่ายรถร่วม ${route.origin} → ${route.destination} (${route.vehicleType}) ที่ช่วงน้ำมัน ${band.label}`);
   }
-  const outsourcePay = isOutsource && outsourceRate != null ? round2(outsourceRate * multiplier) : 0;
+  const outsourcePay = isOutsource && outsourceRate != null ? outsourceRate * multiplier : 0;
 
   const distanceKm = route?.distanceKm ?? null;
   const kpiLitres =

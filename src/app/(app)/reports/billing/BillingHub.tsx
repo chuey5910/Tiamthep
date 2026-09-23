@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { DateRangeFilter } from "@/components/Filters";
 import { Badge, Card, Empty } from "@/components/ui";
-import { billingTotals, rateLabel } from "@/lib/billing";
+import { allocateSatang, billingTotals, rateLabel } from "@/lib/billing";
 import { baht, money, num } from "@/lib/format";
 import { compareThaiFirst } from "@/lib/sort";
 import { PRICE_UNITS } from "@/lib/price-unit";
@@ -148,6 +148,16 @@ export function BillingHub({
     picked?.vatRate ?? 0,
     picked?.whtRate ?? 0,
   );
+
+  // ยอดที่พิมพ์ในบิลของขาที่เลือก — เกลี่ยเศษสตางค์ให้บวกทุกบรรทัดได้เท่ายอดรวมพอดี
+  const shownAmount = useMemo(() => {
+    const m = new Map<number, number>();
+    const allocated = allocateSatang(chosenLines.map((l) => l.amount));
+    chosenLines.forEach((l, i) => m.set(l.jobId, allocated[i]));
+    return m;
+  }, [chosenLines]);
+  /** ยอดของขานี้ที่ต้องแสดง — ขาที่เลือกใช้ยอดที่เกลี่ยแล้ว ขาที่ยังไม่เลือกปัดตามปกติ */
+  const amountOf = (l: LineView) => shownAmount.get(l.jobId) ?? l.amount;
   /** เฉพาะขาที่ยังอยู่ในรายการจริง — ใช้กับทุกปุ่ม จะได้ไม่พาขาเก่าติดไปด้วย */
   const chosenIds = chosenLines.map((l) => l.jobId);
   /** ขาที่ติ๊กได้ "ในมุมมองที่กรองอยู่ตอนนี้" — ปุ่มเลือกทั้งหมดต้องทำงานกับสิ่งที่ตาเห็น */
@@ -633,7 +643,7 @@ export function BillingHub({
                     const all = ids.length > 0 && ids.every((id) => chosen.has(id));
                     const groupAmount = rows
                       .filter((l) => chosen.has(l.jobId))
-                      .reduce((a, l) => a + l.amount, 0);
+                      .reduce((a, l) => a + amountOf(l), 0);
                     return (
                       <GroupRows
                         key={destination}
@@ -646,6 +656,7 @@ export function BillingHub({
                         chosen={chosen}
                         onToggle={toggle}
                         seqOf={seqOf}
+                        amountOf={amountOf}
                       />
                     );
                   })}
@@ -700,7 +711,7 @@ export function BillingHub({
                     <td className="num">{l.weightOrigin != null ? num(l.weightOrigin, 3) : "-"}</td>
                     <td className="num">{l.weightDest != null ? num(l.weightDest, 3) : "-"}</td>
                     <td className="num">{rateLabel(l.priceUnit, l.rate)}</td>
-                    <td className="num">{money(l.amount)}</td>
+                    <td className="num">{money(amountOf(l))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -774,6 +785,7 @@ function GroupRows({
   chosen,
   onToggle,
   seqOf,
+  amountOf,
 }: {
   destination: string;
   rows: LineView[];
@@ -784,6 +796,8 @@ function GroupRows({
   chosen: Set<number>;
   onToggle: (jobId: number) => void;
   seqOf: Map<number, number>;
+  /** ยอดที่ต้องพิมพ์ในบิล (เกลี่ยเศษสตางค์แล้ว) */
+  amountOf: (l: LineView) => number;
 }) {
   const open = rows.filter(selectable).length;
   return (
@@ -832,7 +846,7 @@ function GroupRows({
               {l.weightDest != null ? num(l.weightDest, 3) : "-"}
             </td>
             <td className="num">{rateLabel(l.priceUnit, l.rate)}</td>
-            <td className={`num font-bold ${bad ? "text-red-700" : ""}`}>{money(l.amount)}</td>
+            <td className={`num font-bold ${bad ? "text-red-700" : ""}`}>{money(amountOf(l))}</td>
             <td className="no-print whitespace-nowrap">
               {bad ? (
                 <>

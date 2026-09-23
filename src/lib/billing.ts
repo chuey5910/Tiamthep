@@ -55,7 +55,10 @@ export function taxDefaults(settings: Map<string, string>): TaxDefaults {
   };
 }
 
-/** สรุปยอดท้ายบิล — สูตรเดียวใช้ทั้งหน้าจอ Excel และใบที่พิมพ์ ตัวเลขจึงตรงกันเสมอ */
+/**
+ * สรุปยอดท้ายบิล — สูตรเดียวใช้ทั้งหน้าจอ Excel และใบที่พิมพ์ ตัวเลขจึงตรงกันเสมอ
+ * amounts ที่ส่งเข้ามาต้องเป็นค่า "เต็มความละเอียด" (ยังไม่ปัด) — ปัดครั้งเดียวที่นี่
+ */
 export type BillingTotals = {
   legs: number;
   amount: number;
@@ -83,6 +86,49 @@ export function billingTotals(amounts: number[], vatRate: number, whtRate: numbe
     whtAmount,
     netAmount: round2(amount + vatAmount - whtAmount),
   };
+}
+
+/**
+ * เกลี่ยเศษสตางค์ให้ "บวกทุกบรรทัดในบิล = ยอดรวมท้ายบิล" เป๊ะเสมอ
+ *
+ * ปัญหา: ปัดทีละบรรทัดแล้วบวก จะไม่เท่ากับ ราคา × น้ำหนักรวม
+ * เช่น 29 ขา ราคา 65.63 บาท/ตัน น้ำหนักรวม 1,040.93 ตัน
+ *   บวกยอดที่ปัดแล้วทีละบรรทัด = 68,316.22
+ *   65.63 × 1,040.93            = 68,316.2359 → 68,316.24   ← ตัวนี้คือยอดที่ถูก
+ *
+ * วิธีแก้: ปัดยอดรวมครั้งเดียวจากค่าเต็มความละเอียด แล้วแจกเศษสตางค์ที่ยังขาด
+ * ให้บรรทัดที่ "เศษมากที่สุด" ก่อน (largest remainder) ทุกบรรทัดจึงต่างจากการ
+ * ปัดปกติไม่เกิน 1 สตางค์ และผลบวกตรงกับยอดรวมพอดี
+ */
+export function allocateSatang(exact: number[]): number[] {
+  if (exact.length === 0) return [];
+  // ยอดเป้าหมายต้องคิดด้วยสูตรเดียวกับ round2 เป๊ะ (บวกค่าเต็มก่อน แล้วค่อยปัด)
+  // ไม่งั้นยอดรวมท้ายบิลกับผลบวกรายบรรทัดอาจต่างกัน 1 สตางค์ ตอนที่ค่าตกขอบพอดี
+  const target = Math.round((exact.reduce((a, b) => a + b, 0) + Number.EPSILON) * 100);
+
+  // ทำงานเป็นจำนวนสตางค์ — บวกเลขจำนวนเต็มไม่มีเศษลอยตัวมากวน
+  const satang = exact.map((v) => v * 100);
+  const base = satang.map((s) => Math.floor(s + 1e-6));
+  const out = base.slice();
+
+  let need = target - base.reduce((a, b) => a + b, 0);
+  const byRemainder = satang
+    .map((s, i) => ({ i, rem: s - base[i] }))
+    .sort((a, b) => b.rem - a.rem || a.i - b.i);
+
+  // ปกติ need จะเป็นบวก (เพราะ base ปัดลงทุกบรรทัด) — เผื่อกรณีติดลบไว้ด้วย
+  for (const { i } of byRemainder) {
+    if (need <= 0) break;
+    out[i] += 1;
+    need--;
+  }
+  for (const { i } of [...byRemainder].reverse()) {
+    if (need >= 0) break;
+    out[i] -= 1;
+    need++;
+  }
+
+  return out.map((s) => s / 100);
 }
 
 /** ใบวางบิลที่ออกไปแล้ว (รูปแบบที่หน้าเว็บใช้) */

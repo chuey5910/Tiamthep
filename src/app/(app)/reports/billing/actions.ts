@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireWrite } from "@/lib/auth";
 import { buildContext, computeJob } from "@/lib/calc";
-import { billingTotals, cleanRate, nextInvoiceNo, rateLabel, taxDefaults } from "@/lib/billing";
+import { allocateSatang, billingTotals, cleanRate, nextInvoiceNo, rateLabel, taxDefaults } from "@/lib/billing";
 import { addDays, formatThaiDate, startOfDay } from "@/lib/date";
 import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
@@ -76,6 +76,8 @@ export async function createInvoice(customerId: number, jobIds: number[]): Promi
     const periodTo = new Date(Math.max(...dates));
     const billedAt = startOfDay(new Date());
     const totals = billingTotals(rows.map((r) => r.calc.revenue), vatRate, whtRate);
+    // ยอดรายขาที่เก็บลงบิล = ยอดที่เกลี่ยเศษสตางค์แล้ว บวกทุกบรรทัดได้เท่ายอดรวมเป๊ะ
+    const lineAmounts = allocateSatang(rows.map((r) => r.calc.revenue));
 
     const invoiceNo = await prisma.$transaction(async (tx) => {
       const prefix = `INV-${billedAt.getUTCFullYear() + 543}${String(billedAt.getUTCMonth() + 1).padStart(2, "0")}-`;
@@ -102,7 +104,7 @@ export async function createInvoice(customerId: number, jobIds: number[]): Promi
           netAmount: totals.netAmount,
           billedBy: user.name,
           lines: {
-            create: rows.map((r) => ({ jobId: r.job.id, amount: r.calc.revenue })),
+            create: rows.map((r, i) => ({ jobId: r.job.id, amount: lineAmounts[i] })),
           },
         },
       });
@@ -143,6 +145,7 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
 
     rows.sort((a, b) => a.calc.billingDate.getTime() - b.calc.billingDate.getTime() || a.job.id - b.job.id);
     const totals = billingTotals(rows.map((r) => r.calc.revenue), vatRate, whtRate);
+    const lineAmounts = allocateSatang(rows.map((r) => r.calc.revenue));
 
     const settings = new Map((await prisma.setting.findMany()).map((s) => [s.key, s.value]));
     const companyName = settings.get("companyName") ?? "บริษัท เทียมเทพ ขนส่ง จำกัด";
@@ -169,7 +172,7 @@ export async function exportBillingExcel(customerId: number, jobIds: number[]): 
       r.job.weightOrigin ?? "",
       r.job.weightDest ?? "",
       rateLabel(r.calc.priceUnit, r.calc.customerRate),
-      r.calc.revenue,
+      lineAmounts[i],
     ]);
 
     const sheet: (string | number)[][] = [
