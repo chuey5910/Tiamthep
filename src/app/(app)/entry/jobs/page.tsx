@@ -5,7 +5,7 @@ import { formatThaiDate, toInputDate } from "@/lib/date";
 import { baht, num } from "@/lib/format";
 import { readRange, type SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
-import { buildContext, computeJob } from "@/lib/calc";
+import { buildContext, computeJob, resolveDriver } from "@/lib/calc";
 import { sortOptionsThaiFirst } from "@/lib/sort";
 import { JobForm, JobRowActions, type JobInitial } from "./JobForm";
 
@@ -23,11 +23,12 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const plateFilter = typeof sp.plate === "string" ? sp.plate.trim() : "";
   const fold = (v: string | null | undefined) => (v ?? "").toLowerCase().replace(/\s+/g, "");
 
-  const [vehiclesRaw, customers, locations, cargoTypes, jobs, ctx] = await Promise.all([
+  const [vehiclesRaw, customers, locations, cargoTypes, drivers, jobs, ctx] = await Promise.all([
     prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: "asc" } }),
     prisma.customer.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.lookup.findMany({ where: { kind: "location" }, orderBy: [{ sort: "asc" }, { value: "asc" }] }),
     prisma.lookup.findMany({ where: { kind: "cargoType" }, orderBy: { sort: "asc" } }),
+    prisma.driver.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.job.findMany({
       where: { loadDate: { gte: from, lte: to } },
       orderBy: [{ loadDate: "desc" }, { tripCode: "asc" }, { id: "asc" }],
@@ -75,6 +76,20 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const legsPerTrip = new Map<string, number>();
   for (const j of jobs) legsPerTrip.set(j.tripCode, (legsPerTrip.get(j.tripCode) ?? 0) + 1);
 
+  // พขร. ของงานที่กำลังแก้ มาจากไหน — บอกให้ชัด จะได้รู้ว่าต้องเลือกเองไหม
+  // (รถสแปร์ไม่มีคู่ประจำ ถ้าปล่อยเป็นอัตโนมัติ ระบบจะหาไม่เจอแล้วขึ้น «ไม่พบ»)
+  const driverStatus = (() => {
+    if (!editing) return "";
+    if (editing.driverCode) {
+      return editing.sheetRef ? `✅ ใช้ ${editing.driverCode} ตามที่ระบุในชีต` : `✅ ใช้ ${editing.driverCode} ตามที่บันทึกไว้`;
+    }
+    const auto = resolveDriver(ctx.pairings, editing.headPlate, editing.trailerPlate, editing.loadDate);
+    if (auto) return `✅ ระบบหาให้จากตารางจับคู่รถ: ${auto}`;
+    const vehicle = ctx.vehicleByPlate.get(editing.headPlate);
+    if (vehicle?.ownerType === "รถร่วม") return "รถร่วม — ไม่มี พขร. ของบริษัท";
+    return "❌ ไม่พบในตารางจับคู่รถ — รถคันนี้ไม่มีคู่ประจำ ให้เลือก พขร. ที่ช่องนี้";
+  })();
+
   const initial: JobInitial | undefined = editing
     ? {
         id: editing.id,
@@ -83,6 +98,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         tripCode: editing.tripCode,
         headPlate: editing.headPlate,
         trailerPlate: editing.trailerPlate ?? "",
+        driverCode: editing.driverCode ?? "",
+        driverStatus,
         customerId: String(editing.customerId),
         origin: editing.origin,
         destination: editing.destination,
@@ -117,7 +134,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       />
 
       <Formula>
-        <b>ไม่ต้องเลือก พขร. เอง</b> — ระบบดึงจากตารางจับคู่รถ ณ วันที่ทำงาน · <b>ไม่ต้องกรอกราคา</b> — ระบบหาจากตารางเส้นทาง
+        <b>พขร. ปกติไม่ต้องเลือก</b> — ระบบดึงจากตารางจับคู่รถ ณ วันที่ทำงาน · ยกเว้น<b>รถสแปร์ที่ไม่มีคู่ประจำ</b> ให้เลือกเองในช่อง พขร.
+        (งานจากชีตใช้รหัสคนขับตามชีต) · <b>ไม่ต้องกรอกราคา</b> — ระบบหาจากตารางเส้นทาง
         เทียบกับช่วงราคาน้ำมันตามเกณฑ์ของลูกค้ารายนั้น · ถ้าคอลัมน์ &laquo;สถานะ&raquo; ขึ้นเตือน แปลว่ายังตั้งข้อมูลไม่ครบ
         ตัวเลขในรายงานจะยังไม่ถูก
       </Formula>
@@ -133,6 +151,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           customers={customers.map((c) => opt(String(c.id), `${c.code} — ${c.name}`))}
           locations={locationOptions}
           cargoTypes={cargoOptions}
+          drivers={drivers.map((d) => opt(d.code, `${d.code} — ${d.firstName} ${d.lastName}`))}
           initial={initial}
         />
       </Card>
@@ -203,7 +222,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                   <th>วันที่</th>
                   <th>รหัสรอบ</th>
                   <th>ทะเบียน</th>
-                  <th>พขร. (อัตโนมัติ)</th>
+                  <th>พขร.</th>
                   <th>ลูกค้า</th>
                   <th>เส้นทาง</th>
                   <th className="num">น้ำหนักคิดราคา</th>

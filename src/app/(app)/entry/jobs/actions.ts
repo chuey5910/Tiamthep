@@ -45,8 +45,19 @@ async function collect(form: FormData) {
 
   const ctx = await buildContext();
 
-  // บันทึกชื่อ พขร. ณ เวลานั้นไว้เลย เพื่อไม่ให้ข้อมูลย้อนหลังเปลี่ยนตามการจับคู่ใหม่
-  const driverCode = resolveDriver(ctx.pairings, headPlate, trailerPlate, loadDate);
+  // พขร. — ช่องว่าง = ให้ระบบหาจากตารางจับคู่รถ ณ วันที่ทำงาน แล้วบันทึกชื่อไว้เลย
+  // (กันข้อมูลย้อนหลังเปลี่ยนตามการจับคู่ใหม่)
+  // เลือกเอง = รถสแปร์ที่ไม่มีคู่ประจำ หรืองานจากชีตที่ระบุคนขับมาแล้ว
+  // ห้ามคำนวณทับค่าที่เลือกไว้ ไม่งั้นรหัสคนขับจากชีตจะหายทุกครั้งที่กดบันทึกแก้ไข
+  const chosen = str(form, "driverCode").toUpperCase();
+  let driverCode: string | null;
+  if (chosen) {
+    const exists = await prisma.driver.findUnique({ where: { code: chosen }, select: { code: true } });
+    if (!exists) return { error: `รหัสคนขับ ${chosen} ไม่มีในเว็บ — เพิ่มที่หน้า ข้อมูลพนักงานขับรถ ก่อน` as const };
+    driverCode = exists.code;
+  } else {
+    driverCode = resolveDriver(ctx.pairings, headPlate, trailerPlate, loadDate);
+  }
 
   const vehicle = ctx.vehicleByPlate.get(headPlate);
   const route = vehicle ? ctx.routeByKey.get(routeKey(origin, destination, vehicle.vehicleType)) ?? null : null;

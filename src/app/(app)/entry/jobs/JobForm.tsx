@@ -12,6 +12,10 @@ export type JobInitial = {
   tripCode: string;
   headPlate: string;
   trailerPlate: string;
+  /** รหัส พขร. ที่บันทึกไว้ ("" = ให้ระบบหาจากตารางจับคู่) */
+  driverCode: string;
+  /** บอกว่า พขร. ที่ใช้อยู่ตอนนี้มาจากไหน — ผู้ใช้จะได้รู้ว่าต้องเลือกเองไหม */
+  driverStatus: string;
   customerId: string;
   origin: string;
   destination: string;
@@ -38,6 +42,7 @@ export function JobForm({
   customers,
   locations,
   cargoTypes,
+  drivers,
   initial,
 }: {
   vehicles: Option[];
@@ -45,6 +50,7 @@ export function JobForm({
   customers: Option[];
   locations: Option[];
   cargoTypes: Option[];
+  drivers: Option[];
   initial?: JobInitial;
 }) {
   const router = useRouter();
@@ -61,6 +67,7 @@ export function JobForm({
   const originOptions = withCurrent(locations, initial?.origin);
   const destinationOptions = withCurrent(locations, initial?.destination);
   const cargoOptions = withCurrent(cargoTypes, initial?.cargoType || undefined);
+  const driverOptions = withCurrent(drivers, initial?.driverCode || undefined);
 
   // ช่องที่ค่าเดิมไม่มีในรายการหลัก — เตือนให้ไปเพิ่มชื่อ จะได้ไม่ต้องเดาตอนกรอกครั้งหน้า
   const missing = editing
@@ -133,6 +140,19 @@ export function JobForm({
             ))}
           </select>
           <p className="mt-0.5 text-[11px] text-slate-400">ระบบใช้ทะเบียนแม่+หางพ่วง หา พขร. ให้เอง</p>
+        </div>
+        <div>
+          <label className="lbl">พขร.</label>
+          <select name="driverCode" className="inp" defaultValue={initial?.driverCode ?? ""}>
+            <option value="">— ตามตารางจับคู่รถ (อัตโนมัติ) —</option>
+            {driverOptions.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+          {/* รถสแปร์ไม่มีคู่ประจำ ระบบหาไม่เจอ ต้องเลือกเอง — งานจากชีตจะมีรหัสคนขับติดมาอยู่แล้ว */}
+          <p className={`mt-0.5 text-[11px] ${initial?.driverStatus.startsWith("❌") ? "font-semibold text-red-600" : "text-slate-400"}`}>
+            {initial ? initial.driverStatus : "เว้นว่าง = ระบบหาให้ · รถสแปร์ที่ไม่มีคู่ประจำ ให้เลือกเอง"}
+          </p>
         </div>
 
         <div>
