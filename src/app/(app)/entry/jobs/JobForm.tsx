@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { createJob, createReturnLeg, deleteJob, updateJob } from "./actions";
 import type { Option } from "@/lib/crud";
+import { announceDataChanged } from "@/lib/live-refresh";
 
 export type JobInitial = {
   id: number;
@@ -92,6 +93,8 @@ export function JobForm({
         setError(res.error ?? "บันทึกไม่สำเร็จ");
         return;
       }
+      // บอกหน้าอื่นที่เปิดอยู่ (เช่น วางบิลลูกค้า) ว่าข้อมูลงานเปลี่ยนแล้ว ให้ดึงตัวเลขใหม่เอง
+      announceDataChanged();
       if (editing) router.push("?");
       else router.refresh();
     });

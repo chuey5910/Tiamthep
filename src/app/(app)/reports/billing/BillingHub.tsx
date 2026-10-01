@@ -8,6 +8,7 @@ import { allocateSatang, billingTotals, rateLabel } from "@/lib/billing";
 import { baht, money, num } from "@/lib/format";
 import { compareThaiFirst } from "@/lib/sort";
 import { PRICE_UNITS } from "@/lib/price-unit";
+import { openFixWindow, useAutoRefresh } from "@/lib/live-refresh";
 import { cancelInvoice, createInvoice, createMissingRoutes, exportBillingExcel } from "./actions";
 
 export type CustomerView = {
@@ -93,6 +94,13 @@ export function BillingHub({
   customerFilter: React.ReactNode;
 }) {
   const router = useRouter();
+  // ปุ่มแก้ข้อมูลเปิดเป็นหน้าต่างเล็ก — บันทึกในนั้นเมื่อไหร่ หน้านี้ดึงตัวเลขใหม่เอง
+  // ตัวกรอง (ช่วงวันที่/บริษัท/ปลายทาง) และช่องที่ติ๊กไว้ไม่หาย เพราะไม่ได้โหลดหน้าใหม่
+  const watchPopup = useAutoRefresh(() => router.refresh());
+  const openFix = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    watchPopup(openFixWindow(e.currentTarget.href));
+  };
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [origin, setOrigin] = useState("");
   const [dest, setDest] = useState("");
@@ -547,7 +555,7 @@ export function BillingHub({
                   >
                     {pending ? "กำลังสร้าง…" : `+ สร้างเส้นทางที่เลือก (${pickedRoutes.size} เส้น)`}
                   </button>
-                  <a href="/db/routes" target="_blank" rel="noopener" className="btn btn-ghost">
+                  <a href="/db/routes" onClick={openFix} className="btn btn-ghost" title="เปิดเป็นหน้าต่างเล็ก — บันทึกแล้วหน้านี้อัปเดตเอง">
                     เปิดหน้าเส้นทางเพื่อตั้งราคา ↗
                   </a>
                 </div>
@@ -650,6 +658,7 @@ export function BillingHub({
                         onToggle={toggle}
                         seqOf={seqOf}
                         amountOf={amountOf}
+                  onFix={openFix}
                       />
                     );
                   })}
@@ -774,6 +783,7 @@ function GroupRows({
   onToggle,
   seqOf,
   amountOf,
+  onFix,
 }: {
   destination: string;
   rows: LineView[];
@@ -786,6 +796,8 @@ function GroupRows({
   seqOf: Map<number, number>;
   /** ยอดที่ต้องพิมพ์ในบิล (เกลี่ยเศษสตางค์แล้ว) */
   amountOf: (l: LineView) => number;
+  /** เปิดหน้าแก้ไขเป็นหน้าต่างเล็ก (หน้าหลักจะดึงตัวเลขใหม่เองหลังบันทึก) */
+  onFix: (e: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const open = rows.filter(selectable).length;
   return (
@@ -845,9 +857,8 @@ function GroupRows({
                   {l.fix && (
                     <a
                       href={l.fix.href}
-                      target="_blank"
-                      rel="noopener"
-                      title={`${l.issues.join(" · ")} — เปิดในแท็บใหม่`}
+                      onClick={onFix}
+                      title={`${l.issues.join(" · ")} — เปิดเป็นหน้าต่างเล็ก บันทึกแล้วหน้านี้อัปเดตเอง`}
                       className="btn btn-primary px-2 py-1 text-[12px]"
                     >
                       {l.fix.label} ↗
