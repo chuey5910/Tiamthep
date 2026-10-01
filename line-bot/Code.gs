@@ -1305,6 +1305,25 @@ function onEdit(e) {
         "แถวที่วางมามีรหัสงานซ้ำกับแถวเดิม ระบบตั้งรหัสใหม่ให้แล้ว:\n" + renamed.join("\n"),
         "🔢 ตั้งรหัสงานใหม่", 8);
     }
+    // ── กันกรอกซ้ำตั้งแต่ตอนวาง ──
+    // ก๊อปแถวเดิมมาวางแล้วลืมแก้ = งานซ้ำที่ข้อมูลเหมือนกันหมด รหัสใหม่ไม่ช่วยอะไร
+    // ขึ้นเตือนทันทีในคอลัมน์ «ผลนำเข้าเว็บ» ให้คนรู้ตัวตอนนี้ ไม่ใช่ไปรู้ตอนวางบิล
+    if (e.range.getNumRows() > 1 || e.range.getNumColumns() > 1) {
+      var sameRows = [];
+      for (var r2 = row; r2 < row + e.range.getNumRows(); r2++) {
+        if (r2 < 2) continue;
+        var twin = sameJobRow_(sh, r2);
+        if (twin) {
+          sh.getRange(r2, JC.IMPORT_RESULT).setValue("⚠️ ข้อมูลเหมือนแถว " + twin + " ทุกช่อง (วันที่/คนขับ/รถ/ลูกค้า/เส้นทาง) — ถ้าวางผิด ให้ลบแถวนี้ · ถ้าวิ่งจริงอีกเที่ยว ปล่อยไว้ได้");
+          sameRows.push(r2 + " = " + twin);
+        }
+      }
+      if (sameRows.length) {
+        SpreadsheetApp.getActiveSpreadsheet().toast(
+          "แถวที่วางมามีข้อมูลเหมือนแถวเดิมทุกช่อง (น่าจะวางซ้ำ):\n" + sameRows.join("\n") + "\nถ้าวางผิด ให้ลบแถวนั้นทิ้ง",
+          "⚠️ อาจกรอกซ้ำ", 10);
+      }
+    }
     // เติมชื่อคนขับ + ทะเบียนรถประจำตัวเขา จากรหัสที่เลือก
     if (e.range.getColumn() === JC.DRIVER) {
       var code = String(e.range.getValue()).trim().toUpperCase();
@@ -1338,6 +1357,27 @@ function vehicleOfDriver_(code) {
 }
 
 /** มีกี่แถวในชีตที่ใช้รหัสงานนี้ — ใช้ตรวจรหัสซ้ำตอนก๊อปแถวมาวาง */
+/**
+ * หาแถวอื่นที่ข้อมูลงานเหมือนแถวนี้ทุกช่อง (วันที่ คนขับ รถ หาง ลูกค้า ต้นทาง ปลายทาง)
+ * คืนเลขแถวที่เจอแถวแรก หรือ null — ใช้เตือนตอนวางแถวซ้ำ
+ */
+function sameJobRow_(sheet, rowNo) {
+  var last = sheet.getLastRow();
+  if (last < 2) return null;
+  var cols = [JC.DATE, JC.DRIVER, JC.HEAD, JC.TRAILER, JC.CUSTOMER, JC.ORIGIN, JC.DEST];
+  var me = sheet.getRange(rowNo, 1, 1, JC.DEST).getValues()[0];
+  var key = cols.map(function (c) { return c === JC.DATE ? dateStr_(me[c - 1]) : String(me[c - 1]).trim(); }).join("|");
+  if (!String(me[JC.DATE - 1]).trim() || !String(me[JC.HEAD - 1]).trim()) return null;
+  var all = sheet.getRange(2, 1, last - 1, JC.DEST).getValues();
+  for (var i = 0; i < all.length; i++) {
+    var r = i + 2;
+    if (r === rowNo) continue;
+    var k = cols.map(function (c) { return c === JC.DATE ? dateStr_(all[i][c - 1]) : String(all[i][c - 1]).trim(); }).join("|");
+    if (k === key) return r;
+  }
+  return null;
+}
+
 function jobIdRowCount_(sheet, jobId) {
   var last = sheet.getLastRow();
   if (last < 2) return 0;

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { importFromSheet } from "./actions";
+import { importFromSheet, resolveDuplicate } from "./actions";
 import type { SheetImportResult } from "@/lib/sheet-jobs";
 
 /** ปุ่มดึงงานจากชีต + แสดงผลรายแถว */
@@ -10,6 +10,20 @@ export function ImportPanel() {
   const router = useRouter();
   const [result, setResult] = useState<SheetImportResult | null>(null);
   const [pending, start] = useTransition();
+
+  // คนตัดสินแถวซ้ำบนเว็บ — เขียนลงชีตแล้วดึงงานใหม่ ผลที่ได้แทนที่ของเดิมทั้งก้อน
+  const decide = (rowNo: number, jobId: string, action: "rename" | "cancel") => {
+    const ask =
+      action === "cancel"
+        ? `ยืนยันว่าแถว ${rowNo} (รหัส ${jobId}) เป็นการกรอกซ้ำ?\nระบบจะตั้งสถานะเป็น «ยกเลิก» — ไม่ลบแถว ข้อมูลยังอยู่`
+        : `ยืนยันว่าแถว ${rowNo} (รหัส ${jobId}) เป็นคนละเที่ยว?\nระบบจะตั้งรหัสงานใหม่ให้ แล้วดึงเข้าเว็บ`;
+    if (!confirm(ask)) return;
+    start(async () => {
+      const res = await resolveDuplicate(rowNo, jobId, action);
+      setResult(res);
+      if (res.ok && res.imported > 0) router.refresh();
+    });
+  };
 
   return (
     <div>
@@ -72,44 +86,101 @@ export function ImportPanel() {
             </div>
           )}
 
-          {/* รหัสซ้ำที่ระบบตัดสินให้ไม่ได้ — ต้องให้คนดู เด่นที่สุดในหน้า */}
+          {/* แถวกรอกซ้ำที่ระบบตั้งเป็น «ยกเลิก» ให้ — ไม่ลบ ข้อมูลยังอยู่ */}
+          {result.cancelled.length > 0 && (
+            <div className="rounded-lg border border-slate-300">
+              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[14px] font-bold text-slate-800">
+                🗑 ตั้งเป็น «ยกเลิก» ให้ {result.cancelled.length} แถว เพราะเหมือนแถวที่เก็บรหัสเดิมทุกช่อง (กรอกซ้ำ)
+                <div className="mt-0.5 text-[12px] font-medium text-slate-600">
+                  – ไม่ได้ลบแถว ข้อมูลยังอยู่ครบในชีต · เว็บไม่นับแถวเหล่านี้เป็นงาน จึงไม่เกิดขาซ้ำในใบวางบิล
+                </div>
+              </div>
+              <div className="px-3 py-2 text-[12px] text-slate-700">
+                {result.cancelled.map((c) => (
+                  <div key={c.row}>
+                    แถว <b>{c.row}</b> (รหัส <span className="font-mono">{c.from}</span>) เหมือนแถว <b>{c.keeperRow}</b> ทุกช่อง
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* รหัสซ้ำที่ระบบตัดสินให้ไม่ได้ — ให้คนกดตัดสินตรงนี้ ไม่ต้องไปแก้ชีต */}
           {result.duplicates.length > 0 && (
             <div className="rounded-lg border-2 border-red-400">
               <div className="border-b border-red-300 bg-red-50 px-3 py-2 text-[14px] font-bold text-red-900">
                 ❌ รหัสงานซ้ำที่ต้องให้คนตัดสิน {result.duplicates.length} รหัส — ขาที่หายไป{" "}
                 {result.duplicates.reduce((a, d) => a + d.missing, 0)} ขา
                 <div className="mt-0.5 text-[12px] font-medium">
-                  – เว็บรับได้รหัสละ 1 ขา · แถวที่ใช้รหัสซ้ำกันจึงเข้าเว็บไม่ได้ และวางบิลไม่ได้
-                  <br />– ระบบแก้ให้เองเฉพาะกรณีที่รู้แน่ว่าแถวไหนคือขาในเว็บ รหัสด้านล่างนี้ตัดสินไม่ได้ ดูเหตุผลในช่อง «ต้องทำอะไร»
+                  – ระบบแก้ให้เองเฉพาะที่พิสูจน์ได้ (เหมือนทุกช่อง = กรอกซ้ำ · คนละวัน/รถ/เส้นทาง = คนละเที่ยว)
+                  <br />– แถวด้านล่างนี้ก้ำกึ่ง ให้ดูสรุปแต่ละแถวแล้ว<b>กดปุ่มตัดสินตรงนี้</b> — ไม่ต้องไปแก้ในชีต (แถวที่ล็อก «ปิดงาน» ก็ทำได้)
                 </div>
               </div>
-              <div className="max-h-80 overflow-auto">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>รหัสงานที่ซ้ำ</th>
-                      <th>แถวในชีต</th>
-                      <th className="num">เข้าเว็บแล้ว</th>
-                      <th className="num">ขาด</th>
-                      <th>ต้องทำอะไร</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.duplicates.map((d) => (
-                      <tr key={d.jobId} className="bg-red-50">
-                        <td className="font-mono text-[12px] font-bold text-red-700">{d.jobId}</td>
-                        <td className="text-[12px] text-red-700">แถว {d.rows.join(", ")}</td>
-                        <td className="num text-red-700">{d.inWeb}</td>
-                        <td className="num font-bold text-red-700">{d.missing}</td>
-                        <td className="min-w-64 text-[12px] leading-relaxed text-red-800">{d.reason ?? "ตั้งรหัสงานใหม่ให้แถวที่เกิน แล้วตั้งสถานะเป็น «ยืนยัน»"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="divide-y divide-red-200">
+                {result.duplicates.map((d) => (
+                  <div key={d.jobId} className="px-3 py-2">
+                    <div className="flex flex-wrap items-baseline gap-x-3 text-[13px]">
+                      <span className="font-mono font-bold text-red-700">{d.jobId}</span>
+                      <span className="text-red-700">ซ้ำ {d.rows.length} แถว · เข้าเว็บแล้ว {d.inWeb} · ขาด {d.missing}</span>
+                    </div>
+                    <div className="mt-1 text-[12px] leading-relaxed text-red-800">{d.reason}</div>
+                    {d.detail && (
+                      <table className="tbl mt-2">
+                        <thead>
+                          <tr>
+                            <th>แถว</th>
+                            <th>สถานะในชีต</th>
+                            <th>ข้อมูลในแถว</th>
+                            <th className="no-print">ตัดสิน</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {d.detail.map((r) => (
+                            <tr key={r.rowNo} className={r.inWeb ? "bg-emerald-50" : undefined}>
+                              <td className="font-bold">แถว {r.rowNo}</td>
+                              <td className="whitespace-nowrap text-[12px]">{r.status || "-"}</td>
+                              <td className="text-[12px]">
+                                {r.summary}
+                                {r.inWeb && <span className="ml-2 badge badge-ok">ตรงกับงานในเว็บ</span>}
+                              </td>
+                              <td className="no-print whitespace-nowrap">
+                                {r.inWeb ? (
+                                  <span className="text-[11px] text-slate-500">เก็บรหัสเดิมไว้</span>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost px-2 py-1 text-[12px]"
+                                      disabled={pending}
+                                      title="วิ่งจริงอีกเที่ยว → ตั้งรหัสใหม่ให้ แล้วดึงเข้าเว็บ"
+                                      onClick={() => decide(r.rowNo, d.jobId, "rename")}
+                                    >
+                                      🔢 คนละเที่ยว
+                                    </button>{" "}
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger px-2 py-1 text-[12px]"
+                                      disabled={pending}
+                                      title="กรอกซ้ำ → ตั้งเป็น «ยกเลิก» ไม่ลบแถว"
+                                      onClick={() => decide(r.rowNo, d.jobId, "cancel")}
+                                    >
+                                      🗑 กรอกซ้ำ
+                                    </button>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                ))}
               </div>
               <p className="border-t border-red-300 px-3 py-2 text-[12px] leading-relaxed text-red-900">
-                แถวที่กรอกซ้ำจริง (ไม่ได้วิ่งจริง) ให้ลบแถวนั้นทิ้งในชีต แล้วกดดึงงานใหม่ คำเตือนจะหายไปเอง ·
-                แถวที่ชีตล็อก «ปิดงาน» ไว้ แก้เองไม่ได้ — พอเหลือแถวเดียวต่อรหัส ระบบจะจัดการต่อให้ตอนกดดึงงาน
+                <b>คนละเที่ยว</b> = รถวิ่งจริงอีกเที่ยว ระบบตั้งรหัสใหม่ให้แล้วดึงเข้าเว็บ ·{" "}
+                <b>กรอกซ้ำ</b> = แถวนี้ไม่ใช่งานจริง ระบบตั้งเป็น «ยกเลิก» (ไม่ลบ ข้อมูลยังอยู่) ·
+                ทุกการตัดสินถูกเขียนไว้ในชีตคอลัมน์ «ผลนำเข้าเว็บ» ย้อนดูได้
               </p>
             </div>
           )}
