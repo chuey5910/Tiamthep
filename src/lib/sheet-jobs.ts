@@ -219,7 +219,9 @@ export function planDuplicateFixes(jobId: string, rows: DupRow[], webJob: LegKey
   const sorted = [...rows].sort((a, b) => a.rowNo - b.rowNo);
   let keeper: DupRow;
   let keeperConfirm = false;
-  const none = (reason: string): DupPlan => ({ renames: [], keeperConfirm: false, keeperRow: null, reason });
+  // keeperRow ส่งกลับไปด้วยแม้ตัดสินไม่ได้ — หน้าเว็บจะได้รู้ว่าแถวไหนคือ "แถวที่เก็บรหัสเดิม" (ไม่ต้องมีปุ่ม)
+  // แถวอื่นทุกแถวต้องมีปุ่มให้คนกด ต่อให้ข้อมูลเหมือนแถวในเว็บเป๊ะก็ตาม
+  const none = (reason: string, keeperRow: number | null = null): DupPlan => ({ renames: [], keeperConfirm: false, keeperRow, reason });
 
   if (webJob) {
     const trip = sorted.filter((r) => r.leg && sameTrip(webJob, r.leg));
@@ -260,6 +262,7 @@ export function planDuplicateFixes(jobId: string, rows: DupRow[], webJob: LegKey
   if (undecided.length > 0) {
     return none(
       `แถว ${undecided.join(", ")} เป็นเที่ยวเดียวกับแถว ${keeper.rowNo} (วันที่/ทะเบียน/เส้นทางเหมือน${anyIdentical ? " น้ำหนักก็เท่ากัน" : ""}) — อาจเป็นรถวิ่งจริงอีกเที่ยว หรือวางแถวซ้ำ ระบบไม่ตัดสินเอง: วิ่งจริง กด «คนละเที่ยว» · วางซ้ำ กด «กรอกซ้ำ»`,
+      keeper.rowNo,
     );
   }
   return { renames, keeperConfirm, keeperRow: keeper.rowNo };
@@ -446,11 +449,13 @@ export async function runSheetImport(): Promise<SheetImportResult> {
         duplicates.push({
           ...dup,
           reason: plan.reason,
+          // ป้าย "ตรงกับงานในเว็บ" ติดเฉพาะแถวที่เก็บรหัสเดิม — ถ้าติดทุกแถวที่ข้อมูลเหมือน
+          // (กรณีเหมือนกันหมดคือทุกแถว) ปุ่มจะหายหมดจนตัดสินอะไรไม่ได้เลย
           detail: dupRows.map((r) => ({
             rowNo: r.rowNo,
             status: r.status,
             summary: summarizeRow(r.cells),
-            inWeb: !!webJob && !!r.leg && differentLeg(webJob, r.leg) === null,
+            inWeb: plan.keeperRow === r.rowNo,
           })),
         });
         continue;
