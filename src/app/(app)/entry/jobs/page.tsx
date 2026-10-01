@@ -49,13 +49,21 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     if (customerFilter && String(job.customerId) !== customerFilter) return false;
     if (plateFilter && job.headPlate !== plateFilter && job.trailerPlate !== plateFilter) return false;
     if (fq) {
-      const hay = [job.headPlate, job.trailerPlate, job.tripCode, job.origin, job.destination, job.note, calc.driverCode, customerById.get(job.customerId)?.code, customerById.get(job.customerId)?.name];
+      const hay = [job.sheetRef, job.headPlate, job.trailerPlate, job.tripCode, job.origin, job.destination, job.note, calc.driverCode, customerById.get(job.customerId)?.code, customerById.get(job.customerId)?.name];
       if (!hay.some((v) => fold(v).includes(fq))) return false;
     }
     return true;
   });
   const shown = onlyProblems ? calcs.filter((x) => x.calc.issues.length > 0) : calcs;
   const filtering = !!(q || customerFilter || plateFilter);
+
+  // พิมพ์รหัสงานในชีต (เช่น TT690908-31) แต่ไม่เจอในช่วงวันที่นี้ — หาให้ทั้งฐานข้อมูล
+  // แล้วบอกว่าอยู่วันไหน พร้อมลิงก์กระโดดไป ไม่ต้องไล่เปลี่ยนเดือนเอง
+  const looksLikeSheetRef = /^TT\d{6}-\d+$/i.test(q);
+  const elsewhere =
+    looksLikeSheetRef && calcs.length === 0
+      ? await prisma.job.findUnique({ where: { sheetRef: q.toUpperCase() }, select: { id: true, loadDate: true, headPlate: true, origin: true, destination: true } })
+      : null;
 
   const totals = {
     legs: calcs.length,
@@ -159,7 +167,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       <DateRangeFilter from={fromStr} to={toStr} />
 
       <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
-        <SearchFilter value={q} placeholder="ทะเบียน รอบ เส้นทาง พขร. หมายเหตุ…" />
+        <SearchFilter value={q} placeholder="รหัสงานในชีต ทะเบียน รอบ เส้นทาง พขร. หมายเหตุ…" />
         <SelectFilter
           name="customer"
           label="ลูกค้า"
@@ -211,6 +219,19 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         )}
       </div>
 
+      {elsewhere && (
+        <p className="no-print mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-900">
+          ⚠️ รหัส <b className="font-mono">{q.toUpperCase()}</b> มีในเว็บ แต่อยู่นอกช่วงวันที่ที่เลือก — วันที่ {formatThaiDate(elsewhere.loadDate)} ·{" "}
+          {elsewhere.headPlate} · {elsewhere.origin} → {elsewhere.destination}{" "}
+          <Link
+            className="font-bold underline"
+            href={`?from=${toInputDate(elsewhere.loadDate)}&to=${toInputDate(elsewhere.loadDate)}&q=${encodeURIComponent(q)}`}
+          >
+            ไปดูงานนี้ →
+          </Link>
+        </p>
+      )}
+
       <Card bodyClass="p-0">
         {shown.length === 0 ? (
           <Empty>{onlyProblems ? "ไม่มีขาที่ต้องแก้ในช่วงนี้ — ข้อมูลครบทุกขา" : filtering ? "ไม่พบงานตามเงื่อนไขที่กรองในช่วงวันที่นี้" : "ยังไม่มีงานในช่วงวันที่นี้"}</Empty>
@@ -244,7 +265,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                   return (
                     <tr key={job.id}>
                       <td className="whitespace-nowrap">{formatThaiDate(job.loadDate)}</td>
-                      <td className="font-mono text-[11px] text-slate-500">{job.tripCode}</td>
+                      <td className="font-mono text-[11px] text-slate-500">
+                        {job.tripCode}
+                        {/* รหัสงานในชีต — ให้ค้นเจอแล้วเห็นเลยว่าใช่แถวนั้น */}
+                        {job.sheetRef && <div className="text-[10px] text-slate-400">ชีต {job.sheetRef}</div>}
+                      </td>
                       <td className={`whitespace-nowrap font-medium${bad("plate")}`}>
                         {job.headPlate}
                         {job.trailerPlate && <span className="text-slate-400"> + {job.trailerPlate}</span>}
