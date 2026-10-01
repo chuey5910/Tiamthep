@@ -204,6 +204,16 @@ b, strong, th { font-weight: 700; }
 /* หัวกระดาษ — แสดงเฉพาะตอนสั่งพิมพ์ */
 .print-head { display: none; }
 
+/* โครงแผ่นกระดาษ (ดู Shell.tsx) — บนจอต้องไม่มีกล่องของตารางเลย ให้ลูกๆ จัดวางเหมือนเดิมทุกประการ */
+.print-sheet,
+.print-sheet > thead,
+.print-sheet > tbody,
+.print-sheet > tfoot,
+.print-sheet > * > tr,
+.print-sheet > * > tr > td {
+  display: contents;
+}
+
 /* พิมพ์รายงาน — ซ่อนเมนูและปุ่ม แสดงหัวกระดาษพร้อมโลโก้ */
 @media print {
   .no-print { display: none !important; }
@@ -224,11 +234,32 @@ b, strong, th { font-weight: 700; }
   /* ── กระดาษ ──
      A4 แนวตั้ง ขอบตามระเบียบงานสารบรรณ: บน 2.5 ซม. · ล่าง 2 ซม. · ซ้าย-ขวา 2 ซม.
      เหลือเนื้อที่พิมพ์ 17 x 24.5 ซม. — 10 คอลัมน์ต้องบีบให้พอดีความกว้างนี้
-     จึงย่อตัวอักษรและระยะในตารางเฉพาะตอนพิมพ์ (บนจอยังเท่าเดิม) */
+     จึงย่อตัวอักษรและระยะในตารางเฉพาะตอนพิมพ์ (บนจอยังเท่าเดิม)
+
+     ขอบ "อยู่ในตัวเอกสาร" ไม่ได้พึ่ง @page margin:
+       บน/ล่าง = แถวหัว/ท้ายของตาราง .print-sheet ที่ซ้ำทุกหน้าเอง
+       ซ้าย/ขวา = padding ของ body
+     @page margin ตั้งเป็น 0 เพื่อให้ "Margins: Default" ของเบราว์เซอร์ไม่มาบวกซ้ำอีกชั้น
+     และ "Margins: None" ก็ไม่มีอะไรให้โยนทิ้ง — ออกมาเท่ากันทุกเครื่อง */
   @page {
     size: A4 portrait;
-    margin: 2.5cm 2cm 2cm 2cm;
+    margin: 0;
   }
+  html, body { margin: 0; }
+  body { padding: 0 2cm; }
+  .print-sheet {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+  .print-sheet > thead { display: table-header-group; }
+  .print-sheet > tfoot { display: table-footer-group; }
+  .print-sheet > tbody { display: table-row-group; }
+  .print-sheet > * > tr { display: table-row; }
+  .print-sheet > * > tr > td { display: table-cell; padding: 0; vertical-align: top; }
+  .print-sheet-top { height: 2.5cm; }
+  .print-sheet-bottom { height: 2cm; }
 
   /* ตารางตอนพิมพ์ต้องอยู่ในความกว้างกระดาษเสมอ ห้ามมีแถบเลื่อน */
   :where(div, section):has(> .tbl) {

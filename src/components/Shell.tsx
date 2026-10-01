@@ -88,15 +88,37 @@ export function Shell({
       </nav>
 
       <main className="min-w-0 flex-1 p-4 lg:p-6">
-        {/* หัวกระดาษ — โผล่เฉพาะตอนสั่งพิมพ์รายงาน */}
-        <div className="print-head">
-          <Logo className="w-52" title={companyName} />
-          <div className="text-right text-[11px] leading-relaxed text-slate-600">
-            <div className="font-semibold text-slate-900">{companyName}</div>
-            <div>ระบบบริหารงานขนส่ง</div>
-          </div>
-        </div>
-        {children}
+        {/* โครง "แผ่นกระดาษ" ตอนพิมพ์ — บนจอมองไม่เห็น (display: contents)
+            ตอนพิมพ์กลายเป็นตารางคลุมทั้งเอกสาร: แถวหัว 2.5 ซม. และแถวท้าย 2 ซม.
+            ซ้ำเองทุกหน้า จึงได้ขอบบน-ล่างครบทุกแผ่น ไม่ว่าหน้าต่างพิมพ์จะตั้ง Margins เป็นอะไร
+            (ถ้าพึ่ง @page margin อย่างเดียว เบราว์เซอร์ที่ตั้ง "Margins: None" จะโยนขอบทิ้งหมด) */}
+        <table className="print-sheet">
+          <thead>
+            <tr>
+              <td className="print-sheet-top" />
+            </tr>
+          </thead>
+          <tfoot>
+            <tr>
+              <td className="print-sheet-bottom" />
+            </tr>
+          </tfoot>
+          <tbody>
+            <tr>
+              <td className="print-sheet-body">
+                {/* หัวกระดาษ — โผล่เฉพาะตอนสั่งพิมพ์รายงาน */}
+                <div className="print-head">
+                  <Logo className="w-52" title={companyName} />
+                  <div className="text-right text-[11px] leading-relaxed text-slate-600">
+                    <div className="font-semibold text-slate-900">{companyName}</div>
+                    <div>ระบบบริหารงานขนส่ง</div>
+                  </div>
+                </div>
+                {children}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </main>
     </div>
   );
