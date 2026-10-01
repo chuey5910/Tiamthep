@@ -35,15 +35,52 @@ export function ImportPanel() {
 
       {result?.ok && (
         <div className="mt-4 space-y-3">
-          {/* รหัสงานซ้ำ = ขาหายจากใบวางบิล ต้องเด่นที่สุดในหน้า */}
+          {/* รหัสซ้ำที่ระบบตั้งรหัสใหม่ให้เองแล้ว — ทำผ่าน API จึงแก้แถวที่ชีตล็อก «ปิดงาน» ได้ */}
+          {result.renumbered.length > 0 && (
+            <div className="rounded-lg border-2 border-sky-400">
+              <div className="border-b border-sky-300 bg-sky-50 px-3 py-2 text-[14px] font-bold text-sky-900">
+                🔢 ตั้งรหัสงานใหม่ให้ {result.renumbered.length} แถว เพราะรหัสเดิมซ้ำกับแถวที่อยู่ในเว็บแล้ว
+                <div className="mt-0.5 text-[12px] font-medium">
+                  – ระบบเทียบข้อมูลทุกช่องกับงานในเว็บก่อน แถวที่ตรงกันเก็บรหัสเดิม แถวที่เป็นคนละขาได้รหัสใหม่
+                  <br />– แถวที่ปิดงานหรือยืนยันแล้ว ดึงเข้าเว็บให้ในรอบนี้เลย · แถวที่ยังอยู่ในมือคนขับ รอจนกว่าจะยืนยัน
+                </div>
+              </div>
+              <div className="max-h-80 overflow-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>แถวในชีต</th>
+                      <th>รหัสเดิม</th>
+                      <th>รหัสใหม่</th>
+                      <th>ซ้ำกับแถว</th>
+                      <th>ดึงเข้าเว็บ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.renumbered.map((r) => (
+                      <tr key={r.row}>
+                        <td className="font-bold">แถว {r.row}</td>
+                        <td className="font-mono text-[12px] text-slate-500 line-through">{r.from}</td>
+                        <td className="font-mono text-[12px] font-bold text-sky-800">{r.to}</td>
+                        <td className="text-[12px] text-slate-600">แถว {r.keeperRow} (อยู่ในเว็บแล้ว)</td>
+                        <td className="text-[12px]">{r.confirmed ? "✅ รอบนี้" : "⏳ รอยืนยันก่อน"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* รหัสซ้ำที่ระบบตัดสินให้ไม่ได้ — ต้องให้คนดู เด่นที่สุดในหน้า */}
           {result.duplicates.length > 0 && (
             <div className="rounded-lg border-2 border-red-400">
               <div className="border-b border-red-300 bg-red-50 px-3 py-2 text-[14px] font-bold text-red-900">
-                ❌ พบรหัสงานซ้ำในชีต {result.duplicates.length} รหัส — ขาที่หายไป{" "}
+                ❌ รหัสงานซ้ำที่ต้องให้คนตัดสิน {result.duplicates.length} รหัส — ขาที่หายไป{" "}
                 {result.duplicates.reduce((a, d) => a + d.missing, 0)} ขา
                 <div className="mt-0.5 text-[12px] font-medium">
                   – เว็บรับได้รหัสละ 1 ขา · แถวที่ใช้รหัสซ้ำกันจึงเข้าเว็บไม่ได้ และวางบิลไม่ได้
-                  <br />– ระบบไม่เดาให้ว่าแถวไหนคือขาจริง ต้องไปตั้งรหัสงานใหม่ในชีตเอง
+                  <br />– ระบบแก้ให้เองเฉพาะกรณีที่รู้แน่ว่าแถวไหนคือขาในเว็บ รหัสด้านล่างนี้ตัดสินไม่ได้ ดูเหตุผลในช่อง «ต้องทำอะไร»
                 </div>
               </div>
               <div className="max-h-80 overflow-auto">
@@ -52,9 +89,9 @@ export function ImportPanel() {
                     <tr>
                       <th>รหัสงานที่ซ้ำ</th>
                       <th>แถวในชีต</th>
-                      <th className="num">ในชีต</th>
                       <th className="num">เข้าเว็บแล้ว</th>
                       <th className="num">ขาด</th>
+                      <th>ต้องทำอะไร</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -62,19 +99,17 @@ export function ImportPanel() {
                       <tr key={d.jobId} className="bg-red-50">
                         <td className="font-mono text-[12px] font-bold text-red-700">{d.jobId}</td>
                         <td className="text-[12px] text-red-700">แถว {d.rows.join(", ")}</td>
-                        <td className="num text-red-700">{d.rows.length}</td>
                         <td className="num text-red-700">{d.inWeb}</td>
                         <td className="num font-bold text-red-700">{d.missing}</td>
+                        <td className="min-w-64 text-[12px] leading-relaxed text-red-800">{d.reason ?? "ตั้งรหัสงานใหม่ให้แถวที่เกิน แล้วตั้งสถานะเป็น «ยืนยัน»"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="border-t border-red-300 px-3 py-2 text-[12px] leading-relaxed text-red-900">
-                <b>วิธีแก้ในชีต:</b> เปิดแท็บ «งาน» ไปที่แถวที่ระบุ → แถวแรกเก็บรหัสเดิมไว้ ·
-                แถวที่เหลือตั้งรหัสใหม่ให้ไม่ซ้ำ (เช่น ต่อท้ายเป็น -41, -42) → เปลี่ยนสถานะเป็น «ยืนยัน» → กดดึงงานอีกครั้ง
-                <br />
-                ถ้าแถวที่เกินคือการกรอกซ้ำจริง (ไม่ได้วิ่งจริง) ให้ลบแถวนั้นทิ้ง แล้วกดดึงงานใหม่ คำเตือนจะหายไปเอง
+                แถวที่กรอกซ้ำจริง (ไม่ได้วิ่งจริง) ให้ลบแถวนั้นทิ้งในชีต แล้วกดดึงงานใหม่ คำเตือนจะหายไปเอง ·
+                แถวที่ชีตล็อก «ปิดงาน» ไว้ แก้เองไม่ได้ — พอเหลือแถวเดียวต่อรหัส ระบบจะจัดการต่อให้ตอนกดดึงงาน
               </p>
             </div>
           )}

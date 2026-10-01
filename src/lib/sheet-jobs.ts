@@ -52,8 +52,10 @@ export type SheetImportResult = {
   advancesSynced: number;
   /** แถวที่ปิดงานแล้วและอัปเดตข้อความ «ผลนำเข้าเว็บ» ให้ตรงกับสถานะปัจจุบัน (เช่น คำเตือนเก่าหายไป) */
   refreshed: number;
-  /** รหัสงานที่ซ้ำกันในชีต — เว็บรับได้รหัสละ 1 ขา ที่เหลือจึงหายไปเงียบๆ ถ้าไม่ดัก */
+  /** รหัสงานที่ซ้ำกันในชีตและระบบตัดสินให้ไม่ได้ว่าแถวไหนคือขาจริง — ต้องให้คนดู */
   duplicates: DuplicateJobId[];
+  /** แถวที่ระบบตั้งรหัสงานใหม่ให้เอง เพราะรหัสเดิมซ้ำกับแถวที่อยู่ในเว็บแล้ว */
+  renumbered: RenumberedRow[];
   rows: { jobId: string; ok: boolean; message: string }[];
 };
 
@@ -66,18 +68,137 @@ export type DuplicateJobId = {
   inWeb: number;
   /** ขาที่หายไป = จำนวนแถวในชีต − ขาที่เข้าเว็บ */
   missing: number;
+  /** ทำไมระบบแก้ให้เองไม่ได้ (เติมเฉพาะรหัสที่ยังค้าง) */
+  reason?: string;
+};
+
+export type RenumberedRow = {
+  row: number;
+  from: string;
+  to: string;
+  /** แถวที่เก็บรหัสเดิมไว้ (ขาที่อยู่ในเว็บจริง หรือแถวแรก) */
+  keeperRow: number;
+  /** ตั้งสถานะเป็น «ยืนยัน» ให้ด้วย = ดึงเข้าเว็บในรอบนี้เลย */
+  confirmed: boolean;
 };
 
 /**
- * ข้อความเตือนรหัสงานซ้ำ — บอกให้ครบว่า ซ้ำกี่แถว แถวไหน หายไปกี่ขา และต้องแก้ยังไง
+ * ข้อความเตือนรหัสงานซ้ำที่ระบบแก้ให้เองไม่ได้ — บอกให้ครบว่า ซ้ำกี่แถว แถวไหน ทำไมแก้ไม่ได้ และต้องทำยังไง
  * ต้องดักตั้งแต่ก่อนนำเข้า ไม่งั้นแถวที่เกินจะชนกุญแจ unique แล้วถูกกลืนไปเงียบๆ
  */
 function duplicateMessage(d: DuplicateJobId, alreadyClosed: boolean): string {
   const where = `แถว ${d.rows.join(", ")}`;
   const head = `รหัสงาน ${d.jobId} ซ้ำ ${d.rows.length} แถว (${where})`;
   const state = `เว็บรับได้รหัสละ 1 ขา — เข้าเว็บแล้ว ${d.inWeb} ขา ขาดอีก ${d.missing} ขา`;
-  const fix = "แก้: ตั้งรหัสงานใหม่ที่ไม่ซ้ำให้แถวที่เกิน แล้วตั้งสถานะเป็น «ยืนยัน» · ถ้าเป็นแถวที่กรอกซ้ำ ให้ลบแถวเกินทิ้ง";
-  return `${alreadyClosed ? "⚠️" : "❌"} ${head} · ${state} · ${fix}`;
+  return `${alreadyClosed ? "⚠️" : "❌"} ${head} · ${state} · ${d.reason ?? "ตั้งรหัสงานใหม่ที่ไม่ซ้ำให้แถวที่เกิน แล้วตั้งสถานะเป็น «ยืนยัน»"}`;
+}
+
+/** ข้อมูลของขาหนึ่งเท่าที่ใช้เทียบว่า "แถวนี้กับงานในเว็บเป็นขาเดียวกันไหม" */
+export type LegKey = {
+  loadDate: Date;
+  headPlate: string;
+  origin: string;
+  destination: string;
+  weightOrigin: number | null;
+  weightDest: number | null;
+};
+
+/** อ่านขาจากแถวในชีต — null ถ้าวันที่อ่านไม่ได้ (เทียบอะไรไม่ได้) */
+export function legOfRow(row: string[]): LegKey | null {
+  const loadDate = parseDate(row[C.date] ?? "");
+  if (!loadDate) return null;
+  return {
+    loadDate,
+    headPlate: (row[C.head] ?? "").trim(),
+    origin: (row[C.origin] ?? "").trim(),
+    destination: (row[C.dest] ?? "").trim(),
+    weightOrigin: numOrNull(row[C.wOrigin] ?? ""),
+    weightDest: numOrNull(row[C.wDest] ?? ""),
+  };
+}
+
+/**
+ * รหัสงานใหม่ที่ไม่ซ้ำ — ใช้คำนำหน้าเดิมของรหัสที่ซ้ำ (เช่น TT690908-) แล้วต่อเลขถัดจาก
+ * เลขสูงสุดที่มีอยู่ในชีต ตรงกับที่ line-bot/Code.gs ตั้งให้ตอนวางแถวใหม่ (nextJobId_)
+ * ไม่คำนวณจากวันที่ เพราะชีตเก็บปี พ.ศ. เป็นปี ค.ศ. บ้าง (2569) การยึดคำนำหน้าเดิมจึงไม่มีทางผิด
+ */
+export function nextFreeJobId(jobId: string, used: Set<string>): string {
+  const cut = jobId.lastIndexOf("-");
+  const prefix = cut >= 0 ? jobId.slice(0, cut + 1) : `${jobId}-`;
+  let max = 0;
+  for (const id of used) {
+    if (!id.startsWith(prefix)) continue;
+    const n = Number(id.slice(prefix.length));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  const next = String(max + 1);
+  return prefix + (next.length < 2 ? `0${next}` : next);
+}
+
+/** สถานะที่แปลว่า "ออฟฟิศตรวจแล้ว" — ตั้งรหัสใหม่แล้วดึงเข้าเว็บต่อได้เลย */
+const REVIEWED_STATUSES: ReadonlySet<string> = new Set([ST.CONFIRMED, ST.IMPORTED, ST.FAILED]);
+
+export type DupRow = { rowNo: number; status: string; leg: LegKey | null };
+
+/**
+ * ตัดสินว่ารหัสงานที่ซ้ำกัน แถวไหนเก็บรหัสเดิมไว้ และแถวไหนต้องได้รหัสใหม่
+ *
+ * ทำไมต้องให้ระบบทำ: แถวที่ «ปิดงาน» แล้วชีตล็อกไม่ให้แก้ (line-bot/Code.gs ดีดค่ากลับ)
+ * แต่แถวซ้ำที่ถูกปิดงานทั้งที่ยังไม่เข้าเว็บ (ของเก่าเคยกลืนเงียบๆ) จะติดอยู่อย่างนั้น
+ * คนแก้ในชีตไม่ได้ ระบบจึงต้องแก้ให้ผ่าน API ซึ่งไม่ติดล็อกของ onEdit
+ *
+ * ไม่เดา: แถวที่เก็บรหัสเดิมไว้ต้องเป็นแถวที่ข้อมูล "ตรงกับงานในเว็บทุกช่อง" เท่านั้น
+ *  - ตรง 1 แถวพอดี → แถวอื่นได้รหัสใหม่
+ *  - ตรง 0 หรือหลายแถว → ไม่แตะ ส่งกลับเป็น reason ให้คนดู
+ *  - ยังไม่มีในเว็บเลย → แถวแรกเก็บรหัสเดิม แถวอื่นได้รหัสใหม่ (ทุกแถวจะถูกตรวจซ้ำตอนนำเข้าอยู่แล้ว)
+ */
+export function planDuplicateFixes(
+  jobId: string,
+  rows: DupRow[],
+  webJob: LegKey | null,
+  used: Set<string>,
+): { renames: RenumberedRow[]; keeperConfirm: boolean; reason?: string } {
+  const sorted = [...rows].sort((a, b) => a.rowNo - b.rowNo);
+  let keeper: DupRow;
+  let keeperConfirm = false;
+
+  if (webJob) {
+    const matches = sorted.filter((r) => r.leg && differentLeg(webJob, r.leg) === null);
+    if (matches.length === 0) {
+      return {
+        renames: [],
+        keeperConfirm: false,
+        reason: "ไม่มีแถวไหนตรงกับงานที่อยู่ในเว็บ (ข้อมูลในเว็บอาจถูกแก้ไปแล้ว) — ตรวจที่หน้า บันทึกงานขนส่ง แล้วตั้งรหัสใหม่ให้แถวที่เกินเอง",
+      };
+    }
+    if (matches.length > 1) {
+      return {
+        renames: [],
+        keeperConfirm: false,
+        reason: `แถว ${matches.map((m) => m.rowNo).join(", ")} ข้อมูลเหมือนกันทุกช่อง = กรอกซ้ำ ไม่ใช่คนละขา — ลบแถวที่เกินทิ้งให้เหลือแถวเดียว`,
+      };
+    }
+    keeper = matches[0];
+  } else {
+    keeper = sorted[0];
+    // ปิดงานไว้ทั้งที่ยังไม่มีในเว็บ — ต้องเปิดให้ดึงเข้า ไม่งั้นค้างตลอดไป
+    keeperConfirm = keeper.status === ST.IMPORTED;
+  }
+
+  const renames: RenumberedRow[] = [];
+  for (const r of sorted) {
+    if (r.rowNo === keeper.rowNo) continue;
+    const to = nextFreeJobId(jobId, used);
+    used.add(to);
+    renames.push({
+      row: r.rowNo,
+      from: jobId,
+      to,
+      keeperRow: keeper.rowNo,
+      confirmed: REVIEWED_STATUSES.has(r.status),
+    });
+  }
+  return { renames, keeperConfirm };
 }
 
 /**
@@ -173,7 +294,7 @@ function numOrNull(s: string): number | null {
 export async function runSheetImport(): Promise<SheetImportResult> {
   const cfg = sheetConfig();
   if ("error" in cfg) {
-    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], rows: [] };
+    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], rows: [] };
   }
   const { sheetId, keyFile } = cfg;
 
@@ -193,15 +314,42 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       if (id) rowsById.set(id, [...(rowsById.get(id) ?? []), i + 2]);
     }
     const duplicates: DuplicateJobId[] = [];
+    const renumbered: RenumberedRow[] = [];
+    const renameByRow = new Map<number, RenumberedRow>();
+    const writes: { range: string; values: string[][] }[] = [];
+    const usedIds = new Set(rowsById.keys());
     for (const [jobId, rowNos] of rowsById) {
       if (rowNos.length < 2) continue;
-      const inWeb = await prisma.job.count({ where: { sheetRef: jobId } });
-      duplicates.push({ jobId, rows: rowNos, inWeb, missing: rowNos.length - inWeb });
+      const webJob = await prisma.job.findUnique({ where: { sheetRef: jobId } });
+      const dup: DuplicateJobId = { jobId, rows: rowNos, inWeb: webJob ? 1 : 0, missing: rowNos.length - (webJob ? 1 : 0) };
+
+      // ระบบตั้งรหัสใหม่ให้แถวที่เกินเอง (ทำผ่าน API จึงไม่ติดล็อก «ปิดงาน» ของชีต)
+      const plan = planDuplicateFixes(
+        jobId,
+        rowNos.map((rowNo) => ({ rowNo, status: (values[rowNo - 2][C.status] ?? "").trim(), leg: legOfRow(values[rowNo - 2]) })),
+        webJob,
+        usedIds,
+      );
+      if (plan.reason) {
+        duplicates.push({ ...dup, reason: plan.reason });
+        continue;
+      }
+      for (const rn of plan.renames) {
+        const row = values[rn.row - 2];
+        row[C.id] = rn.to;
+        writes.push({ range: `${JOBS_TAB}!A${rn.row}`, values: [[rn.to]] });
+        if (rn.confirmed) row[C.status] = ST.CONFIRMED;
+        renameByRow.set(rn.row, rn);
+        renumbered.push(rn);
+      }
+      if (plan.keeperConfirm) {
+        const keeperRow = rowNos.find((r) => !renameByRow.has(r))!;
+        values[keeperRow - 2][C.status] = ST.CONFIRMED;
+      }
     }
     const dupById = new Map(duplicates.map((d) => [d.jobId, d]));
 
     const results: SheetImportResult["rows"] = [];
-    const writes: { range: string; values: string[][] }[] = [];
     const dupReported = new Set<string>();
     let imported = 0;
     let failed = 0;
@@ -237,6 +385,17 @@ export async function runSheetImport(): Promise<SheetImportResult> {
         }
         continue;
       }
+      // แถวที่เพิ่งได้รหัสใหม่แต่ยังอยู่ในมือคนขับ (ยังไม่ยืนยัน) — บอกไว้ในชีต แล้วรอรอบหน้า
+      const renamed = renameByRow.get(rowNo);
+      const renamedNote = renamed
+        ? `🔢 รหัสเดิม ${renamed.from} ซ้ำกับแถว ${renamed.keeperRow} — ตั้งรหัสใหม่เป็น ${renamed.to} ให้แล้ว`
+        : "";
+      if (renamed && !renamed.confirmed) {
+        writes.push({ range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[`${renamedNote} · จะดึงเข้าเว็บเมื่อสถานะเป็น «${ST.CONFIRMED}»`]] });
+        results.push({ jobId: renamed.to, ok: true, message: `${renamedNote} (ยังไม่ดึงเข้าเว็บ รอยืนยัน)` });
+        continue;
+      }
+
       // แถว «นำเข้าไม่ผ่าน» ลองใหม่ให้ทุกครั้ง — ออฟฟิศแก้ช่องที่ผิดแล้ว (เช่น เติมรหัสลูกค้า)
       // มักลืมเปลี่ยนสถานะกลับเป็น «ยืนยัน» งานเลยค้างอยู่อย่างนั้น ทั้งที่แก้เสร็จแล้ว
       if (status !== ST.CONFIRMED && status !== ST.FAILED) {
@@ -261,6 +420,8 @@ export async function runSheetImport(): Promise<SheetImportResult> {
       const res = await importRow(row, jobId, ctx, driverByCode, customerByCode);
       // ทุกแถวขึ้นต้นด้วยเครื่องหมายสถานะเหมือนกัน: ✅ จบ · ⚠️ ต้องแก้ · ❌ ยังไม่เข้าเว็บ
       if (!res.ok) res.message = `❌ ${res.message}`;
+      // รหัสเพิ่งถูกเปลี่ยน ต้องบอกไว้ในชีตด้วย ไม่งั้นออฟฟิศหารหัสเดิมไม่เจอแล้วงง
+      if (renamedNote) res.message = `${renamedNote} · ${res.message}`;
 
       if (res.ok) {
         imported++;
@@ -287,12 +448,12 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     // อัปเดตข้อมูลหลักให้ dropdown ในชีตตรงกับเว็บเสมอ
     await pushMasterData(keyFile, sheetId, ctx, drivers);
 
-    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, duplicates, rows: results };
+    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, duplicates, renumbered, rows: results };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "เชื่อมต่อชีตไม่สำเร็จ",
-      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], rows: [],
+      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], rows: [],
     };
   }
 }
