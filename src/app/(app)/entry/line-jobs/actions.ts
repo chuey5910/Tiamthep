@@ -24,7 +24,7 @@ export async function resolveDuplicate(
   await requireWrite();
   const res = await resolveDuplicateRow(rowNo, jobId, action);
   if (!res.ok) {
-    return { ok: false, error: res.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], cancelled: [], rows: [] };
+    return { ok: false, error: res.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], rows: [] };
   }
   const result = await runSheetImport();
   if (result.ok && result.imported > 0) revalidatePath("/", "layout");

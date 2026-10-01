@@ -40,7 +40,7 @@ const ST = {
   CONFIRMED: "ยืนยัน",
   IMPORTED: "ปิดงาน", // ดึงเข้าเว็บสำเร็จ = งานจบสมบูรณ์ ชีตจะล็อกแถวนี้ไม่ให้แก้
   FAILED: "นำเข้าไม่ผ่าน",
-  CANCELLED: "ยกเลิก", // แถวที่ไม่นับเป็นงาน (เช่น กรอกซ้ำ) — ข้อมูลยังอยู่ แค่ไม่ถูกดึง
+  CANCELLED: "ยกเลิก", // แถวที่คนตัดสินว่าไม่นับเป็นงาน (เช่น วางซ้ำ) — ข้อมูลยังอยู่ แค่ไม่ถูกดึง
 } as const;
 
 export type SheetImportResult = {
@@ -57,8 +57,6 @@ export type SheetImportResult = {
   duplicates: DuplicateJobId[];
   /** แถวที่ระบบตั้งรหัสงานใหม่ให้เอง เพราะเป็นคนละขากับแถวที่เก็บรหัสเดิม */
   renumbered: RenumberedRow[];
-  /** แถวที่ระบบตั้งเป็น «ยกเลิก» ให้ เพราะเหมือนแถวที่เก็บรหัสเดิมทุกช่อง (กรอกซ้ำ) — ไม่ลบ ข้อมูลยังอยู่ */
-  cancelled: CancelledRow[];
   rows: { jobId: string; ok: boolean; message: string }[];
 };
 
@@ -85,8 +83,6 @@ export type DupRowDetail = {
   /** แถวนี้คือขาที่อยู่ในเว็บ (ข้อมูลตรงทุกช่อง) */
   inWeb: boolean;
 };
-
-export type CancelledRow = { row: number; from: string; keeperRow: number };
 
 export type RenumberedRow = {
   row: number;
@@ -159,7 +155,11 @@ export type DupRow = { rowNo: number; status: string; leg: LegKey | null; cells:
 /** คอลัมน์ที่ "ระบบ" เป็นคนเขียน ไม่ใช่ข้อมูลงาน — ไม่นับตอนเทียบว่าสองแถวเหมือนกันทุกช่อง */
 const SYSTEM_COLS: ReadonlySet<number> = new Set([C.status, 12 /* เวลาแจ้ง */, 15 /* รูปตั๋วต้นทาง */, 18 /* รูปตั๋วปลายทาง */, 21 /* ผลนำเข้า */]);
 
-/** สองแถวมีข้อมูลงานเหมือนกันทุกช่อง (ไม่นับรหัสงานและช่องของระบบ) = กรอกซ้ำ ไม่ใช่คนละขา */
+/**
+ * สองแถวมีข้อมูลงานเหมือนกันทุกช่อง (ไม่นับรหัสงานและช่องของระบบ)
+ * ⚠ เหมือนกันทุกช่อง "ไม่ได้แปลว่าวางซ้ำ" — รถวิ่งเที่ยวเดิมซ้ำ น้ำหนักเท่ากันเป๊ะก็มีจริง
+ *   ใช้แค่บอกคนว่า "เหมือนกันหมดนะ" ห้ามให้ระบบตัดสินเองว่าเป็นงานซ้ำ
+ */
 export function identicalRows(a: string[], b: string[]): boolean {
   for (let i = 1; i <= 20; i++) {
     if (SYSTEM_COLS.has(i)) continue;
@@ -197,30 +197,29 @@ export function summarizeRow(cells: string[]): string {
 
 export type DupPlan = {
   renames: RenumberedRow[];
-  cancels: CancelledRow[];
   keeperConfirm: boolean;
   keeperRow: number | null;
   reason?: string;
 };
 
 /**
- * ตัดสินว่ารหัสงานที่ซ้ำกัน แถวไหนเก็บรหัสเดิมไว้ แถวไหนต้องได้รหัสใหม่ แถวไหนเป็นแค่กรอกซ้ำ
+ * ตัดสินว่ารหัสงานที่ซ้ำกัน แถวไหนเก็บรหัสเดิมไว้ และแถวไหนต้องได้รหัสใหม่
  *
  * ทำไมต้องให้ระบบทำ: แถวที่ «ปิดงาน» แล้วชีตล็อกไม่ให้แก้ (line-bot/Code.gs ดีดค่ากลับ)
  * แต่แถวซ้ำที่ถูกปิดงานทั้งที่ยังไม่เข้าเว็บ (ของเก่าเคยกลืนเงียบๆ) จะติดอยู่อย่างนั้น
  * คนแก้ในชีตไม่ได้ ระบบจึงต้องแก้ให้ผ่าน API ซึ่งไม่ติดล็อกของ onEdit
  *
  * ทำเองเฉพาะที่พิสูจน์ได้ ที่เหลือส่งให้คนตัดสินบนหน้าเว็บ (มีปุ่มให้กด ไม่ต้องแก้ชีต):
- *  - แถวที่เหมือนแถวเก็บรหัสทุกช่อง → «ยกเลิก» (ไม่ลบ ข้อมูลยังอยู่ครบในแถวเก็บรหัส)
  *  - แถวที่ วันที่/ทะเบียน/ต้นทาง/ปลายทาง ต่างจากแถวเก็บรหัส → เป็นคนละขาแน่ → รหัสใหม่
- *  - เที่ยวเดียวกันแต่น้ำหนักต่าง → อาจเป็น 2 เที่ยวจริง หรือแก้ตัวเลขแล้วก๊อปมาวาง → ให้คนตัดสิน
+ *  - เที่ยวเดียวกัน (วันที่/ทะเบียน/เส้นทางเหมือน) ไม่ว่าน้ำหนักจะเท่าหรือต่าง → ให้คนตัดสิน
+ *    เพราะรถวิ่งเที่ยวเดิมซ้ำแล้วน้ำหนักเท่ากันเป๊ะก็มีจริง ระบบแยกจาก "วางซ้ำ" ไม่ได้
  *  - ไม่มีแถวไหนตรงกับงานในเว็บ → ให้คนตัดสิน
  */
 export function planDuplicateFixes(jobId: string, rows: DupRow[], webJob: LegKey | null, used: Set<string>): DupPlan {
   const sorted = [...rows].sort((a, b) => a.rowNo - b.rowNo);
   let keeper: DupRow;
   let keeperConfirm = false;
-  const none = (reason: string): DupPlan => ({ renames: [], cancels: [], keeperConfirm: false, keeperRow: null, reason });
+  const none = (reason: string): DupPlan => ({ renames: [], keeperConfirm: false, keeperRow: null, reason });
 
   if (webJob) {
     const trip = sorted.filter((r) => r.leg && sameTrip(webJob, r.leg));
@@ -228,13 +227,12 @@ export function planDuplicateFixes(jobId: string, rows: DupRow[], webJob: LegKey
       return none("ไม่มีแถวไหนตรงกับงานในเว็บเลย (วันที่/ทะเบียน/เส้นทางต่างหมด — ข้อมูลในเว็บอาจถูกแก้ไปแล้ว) — ให้ตัดสินด้วยปุ่มด้านขวา");
     }
     const exact = trip.filter((r) => differentLeg(webJob, r.leg!) === null);
-    if (exact.length === 1) keeper = exact[0];
-    else if (trip.every((r) => identicalRows(r.cells, trip[0].cells))) keeper = trip[0];
+    // แถวที่ตรงเว็บเป๊ะมีหลายแถว = ข้อมูลเหมือนกันหมด แถวไหนก็ได้เป็นผู้เก็บรหัส (เอาแถวแรก)
+    // ที่เหลือจะถูกส่งให้คนตัดสินข้างล่างอยู่แล้ว เพราะเป็นเที่ยวเดียวกัน
+    if (exact.length >= 1) keeper = exact[0];
     else {
       return none(
-        exact.length === 0
-          ? "เที่ยวเดียวกับงานในเว็บหลายแถว แต่น้ำหนักไม่ตรงกับเว็บสักแถว (น้ำหนักในเว็บถูกแก้แล้ว?) — ให้ตัดสินด้วยปุ่มด้านขวา"
-          : "หลายแถวตรงกับงานในเว็บเท่ากัน แต่ต่างกันที่ช่องอื่น (เช่น เลขตั๋ว/คนขับ) — ให้ตัดสินด้วยปุ่มด้านขวา",
+        "เที่ยวเดียวกับงานในเว็บหลายแถว แต่น้ำหนักไม่ตรงกับเว็บสักแถว (น้ำหนักในเว็บถูกแก้แล้ว?) — ให้ตัดสินด้วยปุ่มด้านขวา",
       );
     }
   } else {
@@ -244,16 +242,14 @@ export function planDuplicateFixes(jobId: string, rows: DupRow[], webJob: LegKey
   }
 
   const renames: RenumberedRow[] = [];
-  const cancels: CancelledRow[] = [];
   const undecided: number[] = [];
+  let anyIdentical = false;
   for (const r of sorted) {
     if (r.rowNo === keeper.rowNo) continue;
-    if (identicalRows(r.cells, keeper.cells)) {
-      cancels.push({ row: r.rowNo, from: jobId, keeperRow: keeper.rowNo });
-      continue;
-    }
-    // เที่ยวเดียวกัน (วันที่/ทะเบียน/เส้นทางเหมือน) แต่ตัวเลขต่าง — ระบบไม่เดาว่าวิ่ง 2 เที่ยวหรือแก้เลข
+    // เที่ยวเดียวกัน (วันที่/ทะเบียน/เส้นทางเหมือน) — ระบบไม่เดาว่าวิ่งจริงอีกเที่ยวหรือวางซ้ำ
+    // ต่อให้น้ำหนักเท่ากันเป๊ะก็ยังเป็นงานจริงได้ (รถวิ่งเที่ยวเดิมซ้ำ ของเท่าเดิม)
     if (r.leg && keeper.leg && sameTrip(r.leg, keeper.leg)) {
+      if (identicalRows(r.cells, keeper.cells)) anyIdentical = true;
       undecided.push(r.rowNo);
       continue;
     }
@@ -263,16 +259,16 @@ export function planDuplicateFixes(jobId: string, rows: DupRow[], webJob: LegKey
   }
   if (undecided.length > 0) {
     return none(
-      `แถว ${undecided.join(", ")} เป็นเที่ยวเดียวกับแถว ${keeper.rowNo} (วันที่/ทะเบียน/เส้นทางเหมือน) แต่น้ำหนักหรือช่องอื่นต่าง — ถ้าวิ่งจริง 2 เที่ยว กด «คนละเที่ยว» · ถ้าเป็นการแก้ตัวเลขแล้วก๊อปมาวาง กด «กรอกซ้ำ»`,
+      `แถว ${undecided.join(", ")} เป็นเที่ยวเดียวกับแถว ${keeper.rowNo} (วันที่/ทะเบียน/เส้นทางเหมือน${anyIdentical ? " น้ำหนักก็เท่ากัน" : ""}) — อาจเป็นรถวิ่งจริงอีกเที่ยว หรือวางแถวซ้ำ ระบบไม่ตัดสินเอง: วิ่งจริง กด «คนละเที่ยว» · วางซ้ำ กด «กรอกซ้ำ»`,
     );
   }
-  return { renames, cancels, keeperConfirm, keeperRow: keeper.rowNo };
+  return { renames, keeperConfirm, keeperRow: keeper.rowNo };
 }
 
 /**
  * คนตัดสินบนหน้าเว็บว่าแถวซ้ำแถวหนึ่งเป็นอะไร — เขียนลงชีตผ่าน API (แถวที่ล็อก «ปิดงาน» ก็แก้ได้)
  *   "rename" = คนละเที่ยว → ตั้งรหัสใหม่ แล้วดึงเข้าเว็บต่อ (ถ้าถึงขั้นยืนยันแล้ว)
- *   "cancel" = กรอกซ้ำ → ตั้งสถานะ «ยกเลิก» ไม่ลบแถว ข้อมูลยังอยู่
+ *   "cancel" = วางแถวซ้ำ → ตั้งสถานะ «ยกเลิก» ไม่ลบแถว ข้อมูลยังอยู่
  * ไม่แตะงานที่อยู่ในเว็บแล้วเด็ดขาด
  */
 export async function resolveDuplicateRow(
@@ -298,7 +294,7 @@ export async function resolveDuplicateRow(
   let message: string;
 
   if (action === "cancel") {
-    message = `🗑 แถวนี้กรอกซ้ำกับแถว ${twins.join(", ")} (คนตัดสินบนเว็บ) — ตั้งเป็น «${ST.CANCELLED}» ไม่นำเข้า ข้อมูลยังอยู่ครบในแถวนั้น`;
+    message = `🗑 คนตัดสินบนเว็บว่าแถวนี้วางซ้ำกับแถว ${twins.join(", ")} — ตั้งเป็น «${ST.CANCELLED}» ไม่นำเข้า ข้อมูลยังอยู่ครบในแถวนั้น`;
     writes.push(
       { range: `${JOBS_TAB}!${STATUS_COL}${rowNo}`, values: [[ST.CANCELLED]] },
       { range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[message]] },
@@ -306,7 +302,8 @@ export async function resolveDuplicateRow(
   } else {
     const used = new Set(values.map((v) => (v[C.id] ?? "").trim()).filter(Boolean));
     const to = nextFreeJobId(jobId, used);
-    const confirm = REVIEWED_STATUSES.has(status);
+    // คนยืนยันแล้วว่าวิ่งจริง — แถวที่เคยถูกตั้งเป็น «ยกเลิก» ก็ต้องกลับมาดึงเข้าได้
+    const confirm = REVIEWED_STATUSES.has(status) || status === ST.CANCELLED;
     message = `🔢 รหัสเดิม ${jobId} ซ้ำกับแถว ${twins.join(", ")} — คนตัดสินบนเว็บว่าเป็นคนละเที่ยว ตั้งรหัสใหม่เป็น ${to}${confirm ? "" : ` · จะดึงเข้าเว็บเมื่อสถานะเป็น «${ST.CONFIRMED}»`}`;
     writes.push({ range: `${JOBS_TAB}!A${rowNo}`, values: [[to]] }, { range: `${JOBS_TAB}!${RESULT_COL}${rowNo}`, values: [[message]] });
     if (confirm) writes.push({ range: `${JOBS_TAB}!${STATUS_COL}${rowNo}`, values: [[ST.CONFIRMED]] });
@@ -408,7 +405,7 @@ function numOrNull(s: string): number | null {
 export async function runSheetImport(): Promise<SheetImportResult> {
   const cfg = sheetConfig();
   if ("error" in cfg) {
-    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], cancelled: [], rows: [] };
+    return { ok: false, error: cfg.error, imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], rows: [] };
   }
   const { sheetId, keyFile } = cfg;
 
@@ -429,9 +426,7 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     }
     const duplicates: DuplicateJobId[] = [];
     const renumbered: RenumberedRow[] = [];
-    const cancelled: CancelledRow[] = [];
     const renameByRow = new Map<number, RenumberedRow>();
-    const cancelByRow = new Map<number, CancelledRow>();
     const writes: { range: string; values: string[][] }[] = [];
     const usedIds = new Set(rowsById.keys());
     for (const [jobId, rowNos] of rowsById) {
@@ -459,16 +454,6 @@ export async function runSheetImport(): Promise<SheetImportResult> {
           })),
         });
         continue;
-      }
-      for (const cn of plan.cancels) {
-        const row = values[cn.row - 2];
-        row[C.status] = ST.CANCELLED;
-        writes.push(
-          { range: `${JOBS_TAB}!${STATUS_COL}${cn.row}`, values: [[ST.CANCELLED]] },
-          { range: `${JOBS_TAB}!${RESULT_COL}${cn.row}`, values: [[`🗑 แถวนี้เหมือนแถว ${cn.keeperRow} ทุกช่อง (กรอกซ้ำ) — ระบบตั้งเป็น «${ST.CANCELLED}» ไม่นำเข้า ข้อมูลยังอยู่ครบในแถว ${cn.keeperRow}`]] },
-        );
-        cancelByRow.set(cn.row, cn);
-        cancelled.push(cn);
       }
       for (const rn of plan.renames) {
         const row = values[rn.row - 2];
@@ -518,13 +503,6 @@ export async function runSheetImport(): Promise<SheetImportResult> {
         }
         continue;
       }
-      // แถวกรอกซ้ำที่เพิ่งตั้งเป็น «ยกเลิก» — รายงานไว้ แล้วข้าม
-      const cn = cancelByRow.get(rowNo);
-      if (cn) {
-        results.push({ jobId: cn.from, ok: true, message: `🗑 แถว ${cn.row} เหมือนแถว ${cn.keeperRow} ทุกช่อง — ตั้งเป็น «${ST.CANCELLED}» ให้แล้ว (ไม่ลบ ข้อมูลยังอยู่)` });
-        continue;
-      }
-
       // แถวที่เพิ่งได้รหัสใหม่แต่ยังอยู่ในมือคนขับ (ยังไม่ยืนยัน) — บอกไว้ในชีต แล้วรอรอบหน้า
       const renamed = renameByRow.get(rowNo);
       const renamedNote = renamed
@@ -588,12 +566,12 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     // อัปเดตข้อมูลหลักให้ dropdown ในชีตตรงกับเว็บเสมอ
     await pushMasterData(keyFile, sheetId, ctx, drivers);
 
-    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, duplicates, renumbered, cancelled, rows: results };
+    return { ok: true, imported, failed, pendingReview, advancesSynced, refreshed, duplicates, renumbered, rows: results };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "เชื่อมต่อชีตไม่สำเร็จ",
-      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], cancelled: [], rows: [],
+      imported: 0, failed: 0, pendingReview: 0, advancesSynced: 0, refreshed: 0, duplicates: [], renumbered: [], rows: [],
     };
   }
 }
@@ -704,24 +682,6 @@ async function importRow(
   // ทุกอย่างผ่าน — บันทึก (loadDate/customer ผ่านการตรวจแล้วแน่นอน)
   const date = loadDate!;
 
-  // กันขาผี: วันที่/ทะเบียน/เส้นทาง/น้ำหนักทั้งสองช่อง เหมือนงานที่มีอยู่แล้ว (คนละรหัส)
-  // น้ำหนักเท่ากันถึงทศนิยมสองเที่ยวแทบเป็นไปไม่ได้ — มักเป็นแถวที่ก๊อปมาวางแล้วลืมแก้
-  // ไม่เดา: ถ้าวิ่งจริง ให้คนพิมพ์ «วิ่งจริง» ในหมายเหตุ แล้วจะรับเข้า
-  const wO = numOrNull(row[C.wOrigin] ?? "");
-  const wD = numOrNull(row[C.wDest] ?? "");
-  const noteText = (row[C.note] ?? "").trim();
-  if ((wO != null || wD != null) && !noteText.includes("วิ่งจริง")) {
-    const twin = await prisma.job.findFirst({
-      where: { loadDate: date, headPlate, origin, destination, weightOrigin: wO, weightDest: wD, NOT: { sheetRef: jobId } },
-      select: { id: true, sheetRef: true },
-    });
-    if (twin) {
-      return {
-        ok: false,
-        message: `ข้อมูลเหมือนงาน #${twin.id} (รหัส ${twin.sheetRef ?? "-"}) ทุกช่องรวมน้ำหนัก — น่าจะเป็นแถวที่กรอกซ้ำ · ถ้าวิ่งจริง 2 เที่ยว ให้พิมพ์ «วิ่งจริง» ในหมายเหตุ แล้วตั้งสถานะ «${ST.CONFIRMED}» ใหม่`,
-      };
-    }
-  }
   const vehicle = ctx.vehicleByPlate.get(headPlate)!;
   const route = ctx.routeByKey.get(routeKey(origin, destination, vehicle.vehicleType)) ?? null;
   const tripCode = `${headPlate}-${toInputDate(date).split("-").reverse().join("")}`;
