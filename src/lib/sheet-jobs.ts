@@ -422,10 +422,13 @@ export async function runSheetImport(): Promise<SheetImportResult> {
     // ── ตรวจรหัสงานซ้ำ "ก่อน" นำเข้า ──
     // รหัสงานเป็นกุญแจ unique ในเว็บ ถ้าชีตมีหลายแถวใช้รหัสเดียวกัน แถวแรกเข้าได้
     // ที่เหลือจะชนกุญแจแล้วถูกกลืนไปเงียบๆ กลายเป็นขาที่หายไปจากใบวางบิลโดยไม่มีใครรู้
+    // แถวที่คนตั้งเป็น «ยกเลิก» แล้ว ไม่นับเป็นงาน — ต้องไม่ถูกจับว่า "รหัสซ้ำ" อีก
+    // ไม่งั้นรอบถัดไประบบจะเขียนทับสถานะเป็น «นำเข้าไม่ผ่าน» แล้วถามคนซ้ำไม่รู้จบ
     const rowsById = new Map<string, number[]>();
     for (let i = 0; i < values.length; i++) {
       const id = (values[i][C.id] ?? "").trim();
-      if (id) rowsById.set(id, [...(rowsById.get(id) ?? []), i + 2]);
+      if (!id || (values[i][C.status] ?? "").trim() === ST.CANCELLED) continue;
+      rowsById.set(id, [...(rowsById.get(id) ?? []), i + 2]);
     }
     const duplicates: DuplicateJobId[] = [];
     const renumbered: RenumberedRow[] = [];
