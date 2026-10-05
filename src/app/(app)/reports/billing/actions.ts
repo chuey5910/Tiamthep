@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuth, requireWrite } from "@/lib/auth";
 import { buildContext, computeJob } from "@/lib/calc";
 import { allocateSatang, billingTotals, nextInvoiceNo, rateLabel } from "@/lib/billing";
-import { addDays, formatThaiDate, startOfDay } from "@/lib/date";
+import { addDays, formatThaiDate, parseDate, startOfDay } from "@/lib/date";
 import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
 
@@ -33,7 +33,12 @@ async function priceSelectedJobs(customerId: number, jobIds: number[]) {
  *   3. ขาที่อยู่ในใบอื่นแล้ว ออกซ้ำไม่ได้ (jobId เป็น unique ในตารางบรรทัดบิล)
  *   4. ทั้งหมดอยู่ใน transaction เดียว — ล้มกลางทางแล้วไม่เหลือใบครึ่งใบ
  */
-export async function createInvoice(customerId: number, jobIds: number[]): Promise<ActionResult> {
+export async function createInvoice(
+  customerId: number,
+  jobIds: number[],
+  /** ช่วงวันที่ที่เลือกในตัวกรองตอนกดออกบิล (yyyy-mm-dd) — เก็บเป็น "ช่วงงาน" ของใบ */
+  range?: { from: string; to: string },
+): Promise<ActionResult> {
   const user = await requireWrite();
   try {
     const ids = [...new Set(jobIds)].filter((n) => Number.isInteger(n));
@@ -65,9 +70,13 @@ export async function createInvoice(customerId: number, jobIds: number[]): Promi
       return { ok: false, error: `มี ${already.length} ขาที่วางบิลไปแล้วในใบ ${nos} — กดโหลดหน้าใหม่` };
     }
 
+    // ช่วงงานของใบ = ช่วงที่เลือกในตัวกรอง (เจ้าของต้องการให้ใบแสดงตามนี้ ไม่ใช่วันของขาแรก–ขาสุดท้าย)
+    // ขยายให้คลุมทุกขาเสมอ — กันกรณีขาอยู่นอกช่วง ไม่งั้นเปิดใบย้อนหลังแล้วขาหาย
     const dates = rows.map((r) => r.calc.billingDate.getTime());
-    const periodFrom = new Date(Math.min(...dates));
-    const periodTo = new Date(Math.max(...dates));
+    const fromPicked = range ? parseDate(range.from) : null;
+    const toPicked = range ? parseDate(range.to) : null;
+    const periodFrom = new Date(Math.min(...dates, ...(fromPicked ? [fromPicked.getTime()] : [])));
+    const periodTo = new Date(Math.max(...dates, ...(toPicked ? [toPicked.getTime()] : [])));
     const billedAt = startOfDay(new Date());
     const totals = billingTotals(rows.map((r) => r.calc.revenue));
     // ยอดรายขาที่เก็บลงบิล = ยอดที่เกลี่ยเศษสตางค์แล้ว บวกทุกบรรทัดได้เท่ายอดรวมเป๊ะ

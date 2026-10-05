@@ -232,7 +232,7 @@ export function BillingHub({
     setError(null);
     setDone(null);
     start(async () => {
-      const res = await createInvoice(picked.customerId, chosenIds);
+      const res = await createInvoice(picked.customerId, chosenIds, { from: fromStr, to: toStr });
       if (!res.ok) {
         setError(res.error);
         return;
