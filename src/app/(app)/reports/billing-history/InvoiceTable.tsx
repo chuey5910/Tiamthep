@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui";
+import { PdfPreview } from "@/components/PdfPreview";
 import { money } from "@/lib/format";
 
 export type InvoiceRow = {
@@ -32,6 +33,8 @@ function DueBadge({ daysLeft }: { daysLeft: number | null }) {
 
 export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
   const [open, setOpen] = useState<InvoiceRow | null>(null);
+  // ใบที่กำลังดูเป็น PDF (null = ปิดอยู่)
+  const [pdf, setPdf] = useState<InvoiceRow | null>(null);
 
   return (
     <>
@@ -69,6 +72,14 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                   <button type="button" className="btn btn-ghost px-2 py-1 text-[12px]" onClick={() => setOpen(r)}>
                     ดูยอด
                   </button>{" "}
+                  <button
+                    type="button"
+                    className="btn btn-primary px-2 py-1 text-[12px]"
+                    title="ดูใบวางบิลใบนี้เป็น PDF แล้วกดบันทึกได้"
+                    onClick={() => setPdf(r)}
+                  >
+                    📄 PDF
+                  </button>{" "}
                   <a
                     href={`/reports/billing?from=${r.periodFrom}&to=${r.periodTo}&customer=${r.customerId}`}
                     target="_blank"
@@ -84,6 +95,14 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {pdf && (
+        <PdfPreview
+          path={`/print/invoice/${pdf.id}`}
+          title={`${pdf.invoiceNo} — ${pdf.customerCode} ${pdf.customerName}`}
+          onClose={() => setPdf(null)}
+        />
+      )}
 
       {open && (
         <div

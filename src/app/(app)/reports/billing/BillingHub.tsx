@@ -9,6 +9,7 @@ import { baht, money, num } from "@/lib/format";
 import { compareThaiFirst } from "@/lib/sort";
 import { PRICE_UNITS } from "@/lib/price-unit";
 import { openFixWindow, useAutoRefresh } from "@/lib/live-refresh";
+import { PdfPreview } from "@/components/PdfPreview";
 import { cancelInvoice, createInvoice, createMissingRoutes, exportBillingExcel } from "./actions";
 
 export type CustomerView = {
@@ -105,6 +106,8 @@ export function BillingHub({
   const [origin, setOrigin] = useState("");
   const [dest, setDest] = useState("");
   const [pending, start] = useTransition();
+  // หน้าต่างดู PDF ก่อนบันทึก — เก็บที่อยู่หน้าเอกสารที่จะทำเป็น PDF (null = ปิดอยู่)
+  const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   /** เส้นทางที่ขาด: คีย์ที่ติ๊กไว้ และหน่วยคิดราคาที่เลือกให้แต่ละเส้น */
@@ -591,11 +594,21 @@ export function BillingHub({
               <button type="button" className="btn btn-primary" disabled={pending || chosenIds.length === 0} onClick={download}>
                 ⬇ Export Excel
               </button>
-              <button type="button" className="btn btn-primary" data-print disabled={chosenIds.length === 0}>
-                📄 Export PDF / พิมพ์
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={chosenIds.length === 0}
+                onClick={() =>
+                  setPdfPath(`/print/bill?customer=${picked.customerId}&from=${fromStr}&to=${toStr}&ids=${chosenIds.join(",")}`)
+                }
+              >
+                📄 ดาวน์โหลด PDF
+              </button>
+              <button type="button" className="btn btn-ghost" data-print disabled={chosenIds.length === 0}>
+                🖨 พิมพ์
               </button>
               <span className="text-[12px] text-slate-500">
-                – ไฟล์และใบที่พิมพ์ออกเฉพาะขาที่ติ๊กเลือก · PDF ให้เลือก «บันทึกเป็น PDF» ในหน้าต่างพิมพ์
+                – ไฟล์และใบที่พิมพ์ออกเฉพาะขาที่ติ๊กเลือก · กด «ดาวน์โหลด PDF» จะโชว์ให้ดูก่อน แล้วค่อยกด «บันทึก PDF»
               </span>
             </div>
 
@@ -753,6 +766,14 @@ export function BillingHub({
           </>
         )}
       </Card>
+
+      {pdfPath && picked && (
+        <PdfPreview
+          path={pdfPath}
+          title={`ใบวางบิล ${picked.code} — ${chosenIds.length} ขา (ร่าง ยังไม่ออกเลขที่)`}
+          onClose={() => setPdfPath(null)}
+        />
+      )}
     </>
   );
 }

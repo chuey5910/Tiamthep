@@ -13,6 +13,8 @@ FROM node:22-bookworm-slim
 # openssl — Prisma ต้องใช้ · tzdata — ให้เวลาในกล่องตรงกับไทย มีผลกับการตัดวันในรายงาน
 # postgresql-client-16 — pg_dump สำหรับสำรองข้อมูล ต้องเป็นรุ่น 16 ให้ตรงกับกล่องฐานข้อมูล
 #   (ของ Debian bookworm เป็นรุ่น 15 ซึ่ง pg_dump จะปฏิเสธการดัมป์จากเซิร์ฟเวอร์ที่ใหม่กว่า)
+# chromium + ฟอนต์ไทย — ตัวทำไฟล์ PDF ใบวางบิล (src/app/api/pdf) ให้ออกมาเหมือนที่พิมพ์ทุกประการ
+#   fonts-noto-core มี Noto Sans Thai (อยู่ในชุดฟอนต์ของเว็บ) · fonts-thai-tlwg เป็นตัวสำรอง
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates tzdata curl gnupg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -21,10 +23,13 @@ RUN apt-get update \
     > /etc/apt/sources.list.d/pgdg.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-16 \
+    chromium fonts-noto-core fonts-thai-tlwg fontconfig \
  && apt-get purge -y curl gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=Asia/Bangkok
+# ที่อยู่ Chromium ของ Debian — api/pdf ใช้ค่านี้
+ENV CHROMIUM_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 # ให้เว็บรับการเชื่อมต่อจากนอกกล่อง ไม่ใช่เฉพาะในกล่องเอง
 ENV HOSTNAME=0.0.0.0

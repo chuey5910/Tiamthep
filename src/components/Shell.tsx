@@ -32,7 +32,8 @@ export function Shell({
           ☰
         </button>
         <div className="min-w-0 flex-1">
-          <Logo withThai={false} className="h-7 w-auto" title={companyName} />
+          {/* จอเล็ก: ใช้โลโก้ตัวเต็ม ห้ามครอปส่วนชื่อไทยออก — ย่อขนาดอย่างเดียว */}
+          <Logo className="w-32" title={companyName} />
         </div>
         <span className="truncate text-[12px] text-slate-500">{user.name}</span>
       </header>
