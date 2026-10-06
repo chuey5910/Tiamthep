@@ -48,7 +48,9 @@
   เพื่อให้เทียบกับบรรทัด `อัปเดตจาก xxxxxxx → xxxxxxx` ที่ขึ้นบนจอ NAS ได้ว่าขึ้นครบจริง
 - ชีตสั่งงาน + ไลน์บอทอยู่บน Google (`line-bot/Code.gs`) — **ต้องมีเว็บเครื่องเดียวที่เชื่อมชีต** ไม่งั้นแย่งกันเขียนสถานะ
 - แก้โครงคอลัมน์ในชีต ต้องแก้ทั้ง `src/lib/sheet-jobs.ts` และ `line-bot/Code.gs` ให้ตรงกัน
-- สำรองข้อมูลอัตโนมัติ 00:00 และ 12:15 (กล่อง `tiamthep-backup` รัน `scripts/backup-daemon.ts`)
+- สำรองข้อมูลอัตโนมัติ **ทุกวันอังคารและวันศุกร์ 00:00 น.** + ทุกครั้งที่สั่ง update
+  (กล่อง `tiamthep-backup` รัน `scripts/backup-daemon.ts` · ตารางอยู่ที่ `scripts/backup-schedule.ts`
+  ตั้งผ่าน `BACKUP_DAYS` / `BACKUP_TIME` ใน .env — ตัวเก่า `BACKUP_TIMES` เลิกใช้แล้ว)
   เก็บในเครื่อง 30 วัน แล้วแจ้งผลเข้าไลน์ถึงผู้ดูแลทุกรอบ
   **สำเนานอกบ้านใช้แอปซิงก์ของ NAS** ซิงก์ `/volume1/docker/tiamthep/data/backup` ขึ้น Google Drive
   ด้วยบัญชีเจ้าของ — ไม่ใช่ service account เพราะ service account ไม่มีพื้นที่เก็บของตัวเอง

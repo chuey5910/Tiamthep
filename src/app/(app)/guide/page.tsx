@@ -136,9 +136,9 @@ export default function GuidePage() {
       <Card title="ระบบสำรองข้อมูล" className="mb-4">
         <dl className="space-y-3 text-[13px] leading-relaxed">
           <div>
-            <dt className="font-semibold text-slate-800">สำรองอัตโนมัติวันละ 2 รอบ</dt>
+            <dt className="font-semibold text-slate-800">สำรองอัตโนมัติสัปดาห์ละ 2 รอบ</dt>
             <dd className="text-slate-600">
-              เวลา <b>00:00</b> และ <b>12:15</b> ทุกวัน — เก็บไว้ทั้งในเครื่อง NAS และสำเนาบน{" "}
+              ทุกวัน<b>อังคาร</b>และวัน<b>ศุกร์</b> เวลา <b>00:00 น.</b> + ทุกครั้งที่อัปเดตระบบ — เก็บไว้ทั้งในเครื่อง NAS และสำเนาบน{" "}
               <b>Google Drive</b> ย้อนหลัง 30 วัน
               <br />
               NAS ปิดอยู่ตอนถึงเวลา พอเปิดเครื่องใหม่ระบบจะสำรองให้ทันที ไม่ปล่อยให้ขาดรอบ
