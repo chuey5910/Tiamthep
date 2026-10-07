@@ -123,8 +123,8 @@ export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
                     <td className="nw">{r.date}</td>
                     <td className="nw">{r.plate}</td>
                     <td className="nw">{r.ticket}</td>
-                    <td>{r.origin}</td>
-                    <td>{r.destination}</td>
+                    <td className="nw">{r.origin}</td>
+                    <td className="nw">{r.destination}</td>
                     <td className="c">{fmtW(r.weightOrigin)}</td>
                     <td className="c">{fmtW(r.weightDest)}</td>
                     {/* ใบที่ปนหลายหน่วย (ตัน + เที่ยว) บอกหน่วยในช่อง — ไม่งั้นอ่านตัวเลขผิดได้ */}

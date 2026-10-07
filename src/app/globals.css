@@ -203,7 +203,7 @@ b, strong, th { font-weight: 700; }
 
 /* ── ใบวางบิล (PDF) — แบบที่เจ้าของอนุมัติ ดู src/components/InvoiceDocument.tsx ──
    ใช้คลาสของตัวเอง ไม่ใช้ .tbl เพื่อไม่ให้กฎการพิมพ์ของรายงานอื่นมากระทบ */
-.inv-doc { color: #111; font-size: 10px; line-height: 1.35; }
+.inv-doc { color: #111; font-size: 10px; line-height: 1.35; font-family: "Loma", "Noto Sans Thai", sans-serif; }
 .inv-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
   border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 12px; }
 .inv-logo { width: 190px; }
