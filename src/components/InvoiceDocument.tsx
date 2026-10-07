@@ -107,7 +107,7 @@ export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
                   <th>
                     ราคาต่อหน่วย
                     <br />
-                    {doc.rateUnit ? `(บาท/${doc.rateUnit})` : "(บาท)"}
+                    {doc.rateUnit ? `(บาท/${doc.rateUnit})` : "(บาท/หน่วย)"}
                   </th>
                   <th>
                     ค่าบรรทุก
@@ -127,11 +127,8 @@ export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
                     <td className="nw">{r.destination}</td>
                     <td className="c">{fmtW(r.weightOrigin)}</td>
                     <td className="c">{fmtW(r.weightDest)}</td>
-                    {/* ใบที่ปนหลายหน่วย (ตัน + เที่ยว) บอกหน่วยในช่อง — ไม่งั้นอ่านตัวเลขผิดได้ */}
-                    <td className="r">
-                      {fmtRate(r.rate)}
-                      {!doc.rateUnit && r.rate != null && <span className="inv-unit">/{r.rateUnit}</span>}
-                    </td>
+                    {/* ตัวเลขล้วน — หน่วยอยู่บนหัวคอลัมน์เท่านั้น */}
+                    <td className="r">{fmtRate(r.rate)}</td>
                     <td className="r">{money(r.amount)}</td>
                   </tr>
                 ))}

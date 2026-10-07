@@ -47,7 +47,7 @@ export type InvoiceDoc = {
   };
   period: string;
   rows: InvoiceDocRow[];
-  /** หน่วยราคาของทั้งใบ (ใส่บนหัวคอลัมน์) — null = ใบนี้ปนหลายหน่วย ต้องบอกหน่วยในแต่ละช่อง */
+  /** หน่วยราคาของทั้งใบ (ใส่บนหัวคอลัมน์) — null = ใบนี้ปนหลายหน่วย หัวคอลัมน์เป็น (บาท/หน่วย) */
   rateUnit: "ตัน" | "เที่ยว" | null;
   sumWeightOrigin: number;
   sumWeightDest: number;
@@ -69,7 +69,7 @@ export async function companyName(): Promise<string> {
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-/** หน่วยเดียวทั้งใบ → ใส่ที่หัวคอลัมน์ · ปนกัน → null (บอกหน่วยในแต่ละช่องแทน) */
+/** หน่วยเดียวทั้งใบ → ใส่ที่หัวคอลัมน์ · ปนกัน → null (หัวคอลัมน์เป็น บาท/หน่วย) */
 function commonUnit(units: ("ตัน" | "เที่ยว")[]): "ตัน" | "เที่ยว" | null {
   const set = new Set(units);
   return set.size === 1 ? units[0] : set.size === 0 ? "ตัน" : null;

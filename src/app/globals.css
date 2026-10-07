@@ -223,7 +223,6 @@ b, strong, th { font-weight: 700; }
 .inv-tbl .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .inv-tbl .nw { white-space: nowrap; }
 .inv-tbl tfoot td { font-weight: 700; background: #f6f6f8; }
-.inv-unit { color: #555; font-size: 8.5px; }
 .inv-total { margin: 14px 0 0 auto; width: 56%; display: flex; justify-content: space-between; align-items: center;
   background: #fdf2f2; border-radius: 6px; padding: 7px 12px; color: #83161a; font-weight: 700; font-size: 12px; }
 .inv-total b { font-size: 14px; }
