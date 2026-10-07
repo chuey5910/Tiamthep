@@ -1,12 +1,15 @@
 /** icon = อีโมจิหน้าหัวข้อของหน้านั้น (ไม่ใส่จะใช้ของกลุ่ม) */
 export type NavItem = { href: string; label: string; icon?: string };
+/** สีพาสเทลประจำหัวข้อหลัก — หัวข้อย่อยในกลุ่มใช้สีเดียวกัน (ชุดคลาสอยู่ใน Shell.tsx) */
+export type NavTone = "sky" | "emerald" | "violet" | "amber" | "orange" | "pink" | "indigo";
 /** adminOnly = แสดงเฉพาะผู้ที่มีสิทธิ์ผู้ดูแลระบบ */
-export type NavGroup = { title: string; icon: string; items: NavItem[]; adminOnly?: boolean };
+export type NavGroup = { title: string; icon: string; tone: NavTone; items: NavItem[]; adminOnly?: boolean };
 
 export const NAV: NavGroup[] = [
   {
     title: "ภาพรวม",
-    icon: "▦",
+    icon: "🧭",
+    tone: "sky",
     items: [
       { href: "/", icon: "🏠", label: "หน้าหลัก" },
       { href: "/guide", icon: "📖", label: "คู่มือการใช้งาน" },
@@ -14,7 +17,8 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "บันทึกประจำวัน",
-    icon: "✎",
+    icon: "📝",
+    tone: "emerald",
     items: [
       { href: "/entry/jobs", icon: "🚚", label: "บันทึกงานขนส่ง" },
       { href: "/entry/line-jobs", icon: "💬", label: "งานจากไลน์ (ชีตสั่งงาน)" },
@@ -26,6 +30,7 @@ export const NAV: NavGroup[] = [
   {
     title: "รายงาน",
     icon: "📊",
+    tone: "violet",
     items: [
       { href: "/reports/company", icon: "📈", label: "งบกำไรขาดทุนกิจการ" },
       { href: "/reports/vehicles", icon: "🚛", label: "กำไรขาดทุนรายคัน" },
@@ -41,7 +46,8 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "ฐานข้อมูล",
-    icon: "🗄",
+    icon: "🗄️",
+    tone: "amber",
     items: [
       { href: "/db/vehicles", icon: "🚛", label: "ข้อมูลรถ" },
       { href: "/db/drivers", icon: "👷", label: "ข้อมูลพนักงานขับรถ" },
@@ -55,6 +61,7 @@ export const NAV: NavGroup[] = [
   {
     title: "คลังอะไหล่",
     icon: "🔧",
+    tone: "orange",
     items: [
       { href: "/stock/items", icon: "🧰", label: "คลังอะไหล่ (รับเข้า/เบิกใช้)" },
       { href: "/stock/balance", icon: "📦", label: "สรุปคงเหลือ" },
@@ -64,7 +71,8 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "ตั้งค่า",
-    icon: "⚙",
+    icon: "⚙️",
+    tone: "pink",
     items: [
       { href: "/settings", icon: "⚙️", label: "ตั้งค่าระบบ" },
       { href: "/settings/fuel-basis", icon: "📐", label: "เกณฑ์ราคาน้ำมันลูกค้า" },
@@ -75,6 +83,7 @@ export const NAV: NavGroup[] = [
   {
     title: "ผู้ดูแลระบบ",
     icon: "🔐",
+    tone: "indigo",
     adminOnly: true,
     items: [
       { href: "/admin/users", icon: "👥", label: "จัดการผู้ใช้งาน" },

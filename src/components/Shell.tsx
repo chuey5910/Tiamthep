@@ -3,7 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
-import { NAV } from "@/lib/nav";
+import { NAV, type NavTone } from "@/lib/nav";
+
+/**
+ * สีพาสเทลของแต่ละหัวข้อหลักในเมนูซ้าย — หัวข้อย่อยใช้สีเดียวกับหัวข้อหลักของตัวเอง
+ * เขียนคลาสเต็มไว้ตรงนี้ (Tailwind ต้องเห็นชื่อคลาสครบ ประกอบสตริงเองไม่ได้)
+ */
+const TONES: Record<NavTone, { head: string; line: string; active: string; hover: string }> = {
+  sky: { head: "bg-sky-100 text-sky-900", line: "border-sky-200", active: "bg-sky-200 text-sky-900", hover: "hover:bg-sky-50" },
+  emerald: { head: "bg-emerald-100 text-emerald-900", line: "border-emerald-200", active: "bg-emerald-200 text-emerald-900", hover: "hover:bg-emerald-50" },
+  violet: { head: "bg-violet-100 text-violet-900", line: "border-violet-200", active: "bg-violet-200 text-violet-900", hover: "hover:bg-violet-50" },
+  amber: { head: "bg-amber-100 text-amber-900", line: "border-amber-200", active: "bg-amber-200 text-amber-900", hover: "hover:bg-amber-50" },
+  orange: { head: "bg-orange-100 text-orange-900", line: "border-orange-200", active: "bg-orange-200 text-orange-900", hover: "hover:bg-orange-50" },
+  pink: { head: "bg-pink-100 text-pink-900", line: "border-pink-200", active: "bg-pink-200 text-pink-900", hover: "hover:bg-pink-50" },
+  indigo: { head: "bg-indigo-100 text-indigo-900", line: "border-indigo-200", active: "bg-indigo-200 text-indigo-900", hover: "hover:bg-indigo-50" },
+};
 import { logout } from "@/app/(auth)/actions";
 import { Logo } from "@/components/Logo";
 import { ROLE_LABEL, type SessionUser } from "@/lib/roles";
@@ -49,40 +63,47 @@ export function Shell({
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3">
-          {groups.map((group) => (
-            <div key={group.title} className="mb-3">
-              <div className="px-3 pb-1 text-[12px] font-extrabold uppercase tracking-wide text-slate-600">
-                <span className="mr-1">{group.icon}</span>
-                {group.title}
+          {groups.map((group) => {
+            const t = TONES[group.tone];
+            return (
+              <div key={group.title} className="mb-3">
+                {/* หัวข้อหลัก — แถบสีพาสเทลประจำกลุ่ม อีโมจิใหญ่ชัด */}
+                <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${t.head}`}>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-[17px] leading-none shadow-sm">
+                    {group.icon}
+                  </span>
+                  <span className="text-[14px] font-extrabold">{group.title}</span>
+                </div>
+                {/* หัวข้อย่อย — เยื้องเข้าขวา มีเส้นสีเดียวกับหัวข้อหลักนำหน้า */}
+                <div className={`ml-5 mt-1 border-l-2 pl-2 ${t.line}`}>
+                  {group.items.map((item) => {
+                    const active =
+                      item.href === "/"
+                        ? pathname === "/"
+                        : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const badge = item.href === "/admin/users" && pendingCount > 0 ? pendingCount : null;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[14px] transition-colors ${
+                          active ? `font-bold ${t.active}` : `font-medium text-slate-800 ${t.hover}`
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        {badge && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white">
+                            {badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-              {group.items.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname === item.href || pathname.startsWith(item.href + "/");
-                const badge = item.href === "/admin/users" && pendingCount > 0 ? pendingCount : null;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-[14px] font-medium transition-colors ${
-                      active
-                        ? "bg-brand-50 font-bold text-brand-700"
-                        : "text-slate-800 hover:bg-slate-50 hover:text-slate-900"
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {badge && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white">
-                        {badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <UserBar user={user} />
