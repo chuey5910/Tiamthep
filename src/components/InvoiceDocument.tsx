@@ -122,7 +122,7 @@ export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
                     <td className="c">{r.seq}</td>
                     <td className="nw">{r.date}</td>
                     <td className="nw">{r.plate}</td>
-                    <td className="nw">{r.ticket}</td>
+                    <td className="c nw">{r.ticket}</td>
                     <td className="nw">{r.origin}</td>
                     <td className="nw">{r.destination}</td>
                     <td className="c">{fmtW(r.weightOrigin)}</td>
