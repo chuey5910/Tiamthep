@@ -604,27 +604,11 @@ export function BillingHub({
               >
                 📄 ดาวน์โหลด PDF
               </button>
-              <button type="button" className="btn btn-ghost" data-print disabled={chosenIds.length === 0}>
-                🖨 พิมพ์
-              </button>
               <span className="text-[12px] text-slate-500">
-                – ไฟล์และใบที่พิมพ์ออกเฉพาะขาที่ติ๊กเลือก · กด «ดาวน์โหลด PDF» จะโชว์ให้ดูก่อน แล้วค่อยกด «บันทึก PDF»
+                – ไฟล์ออกเฉพาะขาที่ติ๊กเลือก · กด «ดาวน์โหลด PDF» จะโชว์ให้ดูก่อน แล้วกด «บันทึก PDF» หรือสั่งพิมพ์จากหน้าต่างนั้นได้เลย
               </span>
             </div>
 
-            {/* หัวใบวางบิล — โผล่เฉพาะตอนสั่งพิมพ์ */}
-            <div className="hidden px-4 pb-3 print:block">
-              <div className="text-[15px] font-bold">
-                ใบวางบิล — {picked.code} {picked.name}
-              </div>
-              <div className="text-[12px] leading-relaxed">
-                {picked.address && <>ที่อยู่: {picked.address}<br /></>}
-                เลขประจำตัวผู้เสียภาษี: {picked.taxId ?? "-"} · สาขา: {picked.branch ?? "-"} · เครดิต{" "}
-                {picked.creditDays} วัน
-                <br />
-                งานช่วง {range} · รวม {chosenIds.length} ขา · คิดเงินตาม{picked.weightBasis}
-              </div>
-            </div>
 
             <div className="overflow-x-auto print:hidden">
               <table className="tbl">
@@ -700,48 +684,6 @@ export function BillingHub({
               </table>
             </div>
 
-            {/* ใบวางบิลสำหรับพิมพ์ — เฉพาะขาที่เลือก เรียงตามวันที่ และนับลำดับใหม่ให้เรียงสวย */}
-            <table className="tbl hidden print:table">
-              <thead>
-                <tr>
-                  <th>ลำดับ</th>
-                  <th>วันที่</th>
-                  <th>ทะเบียนรถ</th>
-                  <th>เลขที่ตั๋วต้นทาง</th>
-                  <th>ต้นทาง</th>
-                  <th>ปลายทาง</th>
-                  <th className="num">น้ำหนักต้นทาง</th>
-                  <th className="num">น้ำหนักปลายทาง</th>
-                  <th className="num">ราคา/หน่วย</th>
-                  <th className="num">ค่าบรรทุก (บาท)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {chosenLines.map((l, i) => (
-                  <tr key={l.jobId}>
-                    <td>{i + 1}</td>
-                    <td className="whitespace-nowrap">{l.date}</td>
-                    <td className="whitespace-nowrap">{l.plate}</td>
-                    <td className="whitespace-nowrap">{l.ticketOrigin ?? "-"}</td>
-                    <td>{l.origin}</td>
-                    <td>{l.destination}</td>
-                    <td className="num">{l.weightOrigin != null ? num(l.weightOrigin, 3) : "-"}</td>
-                    <td className="num">{l.weightDest != null ? num(l.weightDest, 3) : "-"}</td>
-                    <td className="num">{rateLabel(l.priceUnit, l.rate)}</td>
-                    <td className="num">{money(amountOf(l))}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={6}>รวม {totals.legs} ขา</td>
-                  <td className="num">{num(chosenLines.reduce((a, l) => a + (l.weightOrigin ?? 0), 0), 3)}</td>
-                  <td className="num">{num(chosenLines.reduce((a, l) => a + (l.weightDest ?? 0), 0), 3)}</td>
-                  <td className="num">—</td>
-                  <td className="num">{money(totals.amount)}</td>
-                </tr>
-              </tfoot>
-            </table>
 
             {/* ท้ายบิลมีบรรทัดเดียว — ค่าบรรทุกรวม ไม่มี VAT ไม่มีหัก ณ ที่จ่าย */}
             <div className="print-keep p-4">
@@ -751,17 +693,6 @@ export function BillingHub({
                   <dd className="text-[16px] font-extrabold text-brand-900">{money(totals.amount)}</dd>
                 </div>
               </dl>
-              {/* ช่องเซ็น — กระดาษแนวตั้งกว้าง 17 ซม. วางสองช่องเรียงกัน ชื่อบนวันที่ล่าง */}
-              <div className="hidden pt-10 text-[11px] print:grid print:grid-cols-2 print:gap-10">
-                <div>
-                  <div>ผู้วางบิล ........................................</div>
-                  <div className="pt-5">วันที่ ........................................</div>
-                </div>
-                <div>
-                  <div>ผู้รับวางบิล ........................................</div>
-                  <div className="pt-5">วันที่ ........................................</div>
-                </div>
-              </div>
             </div>
           </>
         )}

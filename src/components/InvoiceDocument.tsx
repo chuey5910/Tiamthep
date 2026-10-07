@@ -1,19 +1,27 @@
 /**
  * หน้าตาใบวางบิล 1 ใบ — ใช้ทำ PDF (src/app/print/...) ให้ออกมาเหมือนกันทุกครั้ง
  *
- * กระดาษ A4 แนวตั้ง ขอบตามระเบียบงานสารบรรณ (บน 2.5 · ล่าง 2 · ซ้าย-ขวา 2 ซม.)
- * ขอบบน/ล่างซ้ำทุกหน้าด้วยโครง .print-sheet เหมือนหน้าอื่นของเว็บ (ดู globals.css)
+ * แบบที่เจ้าของอนุมัติ (ภาพตัวอย่าง 7 ต.ค. 2569):
+ *  – A4 แนวตั้ง ขอบตามระเบียบงานสารบรรณ (บน 2.5 · ล่าง 2 · ซ้าย-ขวา 2 ซม.)
+ *  – ตารางมีเส้นทั้งแนวนอนและแนวตั้ง ระยะบรรทัดมาตรฐาน อ่านง่าย
+ *  – หัวตารางครบพร้อมหน่วย ขึ้นบรรทัดใหม่ตรงช่องว่าง ไม่ตัดกลางคำ · "ลำดับ" บรรทัดเดียว
+ *  – ทะเบียนรถเฉพาะตัวแม่ · น้ำหนักอยู่กลางคอลัมน์ · ราคาต่อหน่วยเป็นตัวเลขล้วน หน่วยอยู่บนหัว
  * โลโก้ใช้ไฟล์ตัวจริงผ่าน <Logo /> เท่านั้น — ห้ามแก้ไขโลโก้
  */
 
 import { Logo } from "@/components/Logo";
 import type { InvoiceDoc } from "@/lib/invoice-doc";
-import { money, num } from "@/lib/format";
+import { money } from "@/lib/format";
+
+/** ทศนิยม 2 ตำแหน่งตายตัว (30.90 · 182.00) ให้ตัวเลขทุกแถวยาวเท่ากัน ตรงแนวกัน */
+const fixed2 = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
   const c = doc.customer;
+  const fmtW = (w: number | null) => (w != null ? fixed2(w) : "-");
+  const fmtRate = (v: number | null) => (v != null ? fixed2(v) : "-");
   return (
-    <table className="print-sheet invoice-doc">
+    <table className="print-sheet inv-doc">
       <thead>
         <tr>
           <td className="print-sheet-top" />
@@ -28,20 +36,21 @@ export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
         <tr>
           <td className="print-sheet-body">
             {/* หัวกระดาษ — โลโก้ตัวจริง + ชื่อบริษัท */}
-            <div className="mb-4 flex items-end justify-between gap-4 border-b-2 border-[#111114] pb-2">
-              <Logo className="w-52" title={doc.companyName} />
-              <div className="text-right text-[11px] leading-relaxed text-slate-600">
-                <div className="font-semibold text-slate-900">{doc.companyName}</div>
-                <div>ระบบบริหารงานขนส่ง</div>
+            <div className="inv-head">
+              <Logo className="inv-logo" title={doc.companyName} />
+              <div className="inv-co">
+                <b>{doc.companyName}</b>
+                <br />
+                ระบบบริหารงานขนส่ง
               </div>
             </div>
 
-            <div className="mb-3 flex items-start justify-between gap-4">
+            <div className="inv-top">
               <div>
-                <div className="text-[15px] font-bold">
+                <h1 className="inv-title">
                   ใบวางบิล — {c.code} {c.name}
-                </div>
-                <div className="text-[12px] leading-relaxed">
+                </h1>
+                <div className="inv-info">
                   {c.address && (
                     <>
                       ที่อยู่: {c.address}
@@ -53,78 +62,105 @@ export function InvoiceDocument({ doc }: { doc: InvoiceDoc }) {
                   งานช่วง {doc.period} · รวม {doc.rows.length} ขา · คิดเงินตาม{c.weightBasis}
                 </div>
               </div>
-              {/* เลขที่/วันที่ของใบจริง — ร่างยังไม่มีเลขที่ */}
-              <div className="shrink-0 text-right text-[12px] leading-relaxed">
+              <div className="inv-no">
                 {doc.invoiceNo ? (
                   <>
-                    <div className="text-[13px] font-bold">เลขที่ {doc.invoiceNo}</div>
-                    <div>วันที่วางบิล {doc.billedAt}</div>
-                    {doc.dueAt && <div>ครบกำหนดชำระ {doc.dueAt}</div>}
+                    <b>เลขที่ {doc.invoiceNo}</b>
+                    <br />
+                    วันที่วางบิล {doc.billedAt}
+                    {doc.dueAt && (
+                      <>
+                        <br />
+                        ครบกำหนดชำระ {doc.dueAt}
+                      </>
+                    )}
                   </>
                 ) : (
-                  <div className="text-slate-500">ร่าง — ยังไม่ออกเลขที่</div>
+                  <span className="text-slate-500">ร่าง — ยังไม่ออกเลขที่</span>
                 )}
               </div>
             </div>
 
-            <table className="tbl">
+            <table className="inv-tbl">
               <thead>
                 <tr>
                   <th>ลำดับ</th>
                   <th>วันที่</th>
                   <th>ทะเบียนรถ</th>
-                  <th>เลขที่ตั๋วต้นทาง</th>
+                  <th>
+                    เลขที่ตั๋ว
+                    <br />
+                    ต้นทาง
+                  </th>
                   <th>ต้นทาง</th>
                   <th>ปลายทาง</th>
-                  <th className="num">น้ำหนักต้นทาง</th>
-                  <th className="num">น้ำหนักปลายทาง</th>
-                  <th className="num">ราคา/หน่วย</th>
-                  <th className="num">ค่าบรรทุก (บาท)</th>
+                  <th>
+                    น้ำหนักต้นทาง
+                    <br />
+                    (ตัน)
+                  </th>
+                  <th>
+                    น้ำหนักปลายทาง
+                    <br />
+                    (ตัน)
+                  </th>
+                  <th>
+                    ราคาต่อหน่วย
+                    <br />
+                    {doc.rateUnit ? `(บาท/${doc.rateUnit})` : "(บาท)"}
+                  </th>
+                  <th>
+                    ค่าบรรทุก
+                    <br />
+                    (บาท)
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {doc.rows.map((r) => (
                   <tr key={r.seq}>
-                    <td>{r.seq}</td>
-                    <td className="whitespace-nowrap">{r.date}</td>
-                    <td className="whitespace-nowrap">{r.plate}</td>
-                    <td className="whitespace-nowrap">{r.ticket}</td>
+                    <td className="c">{r.seq}</td>
+                    <td className="nw">{r.date}</td>
+                    <td className="nw">{r.plate}</td>
+                    <td className="nw">{r.ticket}</td>
                     <td>{r.origin}</td>
                     <td>{r.destination}</td>
-                    <td className="num">{r.weightOrigin != null ? num(r.weightOrigin, 3) : "-"}</td>
-                    <td className="num">{r.weightDest != null ? num(r.weightDest, 3) : "-"}</td>
-                    <td className="num">{r.rate}</td>
-                    <td className="num">{money(r.amount)}</td>
+                    <td className="c">{fmtW(r.weightOrigin)}</td>
+                    <td className="c">{fmtW(r.weightDest)}</td>
+                    {/* ใบที่ปนหลายหน่วย (ตัน + เที่ยว) บอกหน่วยในช่อง — ไม่งั้นอ่านตัวเลขผิดได้ */}
+                    <td className="r">
+                      {fmtRate(r.rate)}
+                      {!doc.rateUnit && r.rate != null && <span className="inv-unit">/{r.rateUnit}</span>}
+                    </td>
+                    <td className="r">{money(r.amount)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
                   <td colSpan={6}>รวม {doc.rows.length} ขา</td>
-                  <td className="num">{num(doc.sumWeightOrigin, 3)}</td>
-                  <td className="num">{num(doc.sumWeightDest, 3)}</td>
-                  <td className="num">—</td>
-                  <td className="num">{money(doc.amount)}</td>
+                  <td className="c">{fixed2(doc.sumWeightOrigin)}</td>
+                  <td className="c">{fixed2(doc.sumWeightDest)}</td>
+                  <td className="c">—</td>
+                  <td className="r">{money(doc.amount)}</td>
                 </tr>
               </tfoot>
             </table>
 
-            {/* ท้ายบิลบรรทัดเดียว — ค่าบรรทุกรวม (ไม่มี VAT/หัก ณ ที่จ่าย) + ช่องเซ็น */}
-            <div className="print-keep p-4">
-              <dl className="ml-auto w-full max-w-sm text-[14px]">
-                <div className="flex justify-between gap-3 rounded-lg bg-brand-50 px-3 py-2">
-                  <dt className="text-[14px] font-bold text-brand-900">ค่าบรรทุกรวม ({doc.rows.length} ขา)</dt>
-                  <dd className="text-[16px] font-extrabold text-brand-900">{money(doc.amount)}</dd>
-                </div>
-              </dl>
-              <div className="grid grid-cols-2 gap-10 pt-10 text-[11px]">
+            {/* ท้ายบิล: ค่าบรรทุกรวม (ไม่มี VAT/หัก ณ ที่จ่าย) + ช่องเซ็น — อยู่หน้าเดียวกันทั้งก้อน */}
+            <div className="print-keep">
+              <div className="inv-total">
+                <span>ค่าบรรทุกรวม ({doc.rows.length} ขา)</span>
+                <b>{money(doc.amount)}</b>
+              </div>
+              <div className="inv-sign">
                 <div>
-                  <div>ผู้วางบิล ........................................</div>
-                  <div className="pt-5">วันที่ ........................................</div>
+                  ผู้วางบิล ........................................
+                  <div>วันที่ ........................................</div>
                 </div>
                 <div>
-                  <div>ผู้รับวางบิล ........................................</div>
-                  <div className="pt-5">วันที่ ........................................</div>
+                  ผู้รับวางบิล ........................................
+                  <div>วันที่ ........................................</div>
                 </div>
               </div>
             </div>

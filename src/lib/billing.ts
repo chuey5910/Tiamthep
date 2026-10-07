@@ -354,16 +354,36 @@ export function rateLabel(priceUnit: string, rate: number | null): string {
 }
 
 /**
- * เลขที่ใบวางบิลถัดไป — INV-{ปี พ.ศ.}{เดือน}-{ลำดับในเดือนนั้น}
- * เช่น INV-256909-001 · เรียงตามเวลาที่ออกบิล หาย้อนหลังง่าย
+ * ราคาต่อหน่วยที่พิมพ์บนใบวางบิล — แสดงเป็น "บาท/ตัน" หรือ "บาท/เที่ยว" เท่านั้น
+ * ราคาต่อกิโลกรัมแปลงเป็นต่อตัน (× 1,000) ตามที่เจ้าของกำหนด เช่น BGC 0.261 บาท/กก. → 261 บาท/ตัน
+ * ยอดเงินไม่เปลี่ยน: 0.261 × 30,540 กก. = 261 × 30.54 ตัน = 7,970.94
+ */
+export function billRate(priceUnit: string, rate: number | null): { value: number | null; unit: "ตัน" | "เที่ยว" } {
+  if (priceUnit === "ต่อกิโลกรัม") {
+    return { value: rate == null ? null : Math.round(rate * 1000 * 1e6) / 1e6, unit: "ตัน" };
+  }
+  if (priceUnit === "ต่อตัน") return { value: rate, unit: "ตัน" };
+  return { value: rate, unit: "เที่ยว" };
+}
+
+/** คำนำหน้าเลขที่ใบของเดือนที่ออกบิล — INV{ปี ค.ศ. 4 หลัก}{เดือน 2 หลัก} */
+export function invoicePrefix(billedAt: Date): string {
+  return `INV${billedAt.getUTCFullYear()}${String(billedAt.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * เลขที่ใบวางบิลถัดไป — INV{ปี ค.ศ.}{เดือน}{ลำดับในเดือน 4 หลัก} เช่น INV2026100001
+ * (ใบที่ออกก่อนเปลี่ยนรูปแบบคงเลขเดิม INV-256910-024 ไว้ ตามที่เจ้าของเลือก — ไม่ปนกันเพราะคำนำหน้าต่างกัน)
  */
 export function nextInvoiceNo(billedAt: Date, existingInMonth: string[]): string {
-  const prefix = `INV-${billedAt.getUTCFullYear() + 543}${String(billedAt.getUTCMonth() + 1).padStart(2, "0")}-`;
+  const prefix = invoicePrefix(billedAt);
   let max = 0;
   for (const no of existingInMonth) {
     if (!no.startsWith(prefix)) continue;
-    const n = Number(no.slice(prefix.length));
-    if (Number.isInteger(n) && n > max) max = n;
+    const rest = no.slice(prefix.length);
+    if (!/^\d{4,}$/.test(rest)) continue;
+    const n = Number(rest);
+    if (n > max) max = n;
   }
-  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
 }

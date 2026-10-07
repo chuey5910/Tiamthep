@@ -10,7 +10,7 @@
  * PDF จึงตรงกับหน้าจอและ Excel ทุกสตางค์
  */
 
-import { allocateSatang, billingLines, billingTotals, rateLabel } from "./billing";
+import { allocateSatang, billRate, billingLines, billingTotals } from "./billing";
 import { formatThaiDate } from "./date";
 import { prisma } from "./prisma";
 import { loadPeriod } from "./reports";
@@ -24,7 +24,9 @@ export type InvoiceDocRow = {
   destination: string;
   weightOrigin: number | null;
   weightDest: number | null;
-  rate: string;
+  /** ราคาต่อหน่วยเป็นตัวเลขล้วน — หน่วยอยู่ที่หัวคอลัมน์ (ต่อกิโลกรัมแปลงเป็นต่อตันแล้ว) */
+  rate: number | null;
+  rateUnit: "ตัน" | "เที่ยว";
   amount: number;
 };
 
@@ -45,6 +47,8 @@ export type InvoiceDoc = {
   };
   period: string;
   rows: InvoiceDocRow[];
+  /** หน่วยราคาของทั้งใบ (ใส่บนหัวคอลัมน์) — null = ใบนี้ปนหลายหน่วย ต้องบอกหน่วยในแต่ละช่อง */
+  rateUnit: "ตัน" | "เที่ยว" | null;
   sumWeightOrigin: number;
   sumWeightDest: number;
   amount: number;
@@ -64,6 +68,12 @@ export async function companyName(): Promise<string> {
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+/** หน่วยเดียวทั้งใบ → ใส่ที่หัวคอลัมน์ · ปนกัน → null (บอกหน่วยในแต่ละช่องแทน) */
+function commonUnit(units: ("ตัน" | "เที่ยว")[]): "ตัน" | "เที่ยว" | null {
+  const set = new Set(units);
+  return set.size === 1 ? units[0] : set.size === 0 ? "ตัน" : null;
+}
 
 /** ร่างใบวางบิลจากขาที่ติ๊กเลือก — ลำดับเดียวกับหน้าวางบิล */
 export async function draftInvoiceDoc(customerId: number, from: Date, to: Date, jobIds: number[]): Promise<InvoiceDoc | null> {
@@ -100,15 +110,17 @@ export async function draftInvoiceDoc(customerId: number, from: Date, to: Date, 
     rows: lines.map((l, i) => ({
       seq: i + 1,
       date: formatThaiDate(l.date),
-      plate: l.trailerPlate ? `${l.plate} + ${l.trailerPlate}` : l.plate,
+      plate: l.plate, // ทะเบียนแม่อย่างเดียว ไม่ใส่หางพ่วง
       ticket: l.ticketOrigin ?? "-",
       origin: l.origin,
       destination: l.destination,
       weightOrigin: l.weightOrigin,
       weightDest: l.weightDest,
-      rate: rateLabel(l.priceUnit, l.rate),
+      rate: billRate(l.priceUnit, l.rate).value,
+      rateUnit: billRate(l.priceUnit, l.rate).unit,
       amount: shown[i],
     })),
+    rateUnit: commonUnit(lines.map((l) => billRate(l.priceUnit, l.rate).unit)),
     sumWeightOrigin: lines.reduce((a, l) => a + (l.weightOrigin ?? 0), 0),
     sumWeightDest: lines.reduce((a, l) => a + (l.weightDest ?? 0), 0),
     amount: totals.amount,
@@ -148,15 +160,17 @@ export async function issuedInvoiceDoc(id: number): Promise<InvoiceDoc | null> {
     rows: lines.map((l, i) => ({
       seq: i + 1,
       date: formatThaiDate(l.date),
-      plate: l.trailerPlate ? `${l.plate} + ${l.trailerPlate}` : l.plate,
+      plate: l.plate, // ทะเบียนแม่อย่างเดียว ไม่ใส่หางพ่วง
       ticket: l.ticketOrigin ?? "-",
       origin: l.origin,
       destination: l.destination,
       weightOrigin: l.weightOrigin,
       weightDest: l.weightDest,
-      rate: rateLabel(l.priceUnit, l.rate),
+      rate: billRate(l.priceUnit, l.rate).value,
+      rateUnit: billRate(l.priceUnit, l.rate).unit,
       amount: amountByJob.get(l.jobId)!,
     })),
+    rateUnit: commonUnit(lines.map((l) => billRate(l.priceUnit, l.rate).unit)),
     sumWeightOrigin: lines.reduce((a, l) => a + (l.weightOrigin ?? 0), 0),
     sumWeightDest: lines.reduce((a, l) => a + (l.weightDest ?? 0), 0),
     // ยอดรวมของใบ = ยอดที่บันทึกตอนออกบิล ไม่คำนวณใหม่

@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireWrite } from "@/lib/auth";
 import { buildContext, computeJob } from "@/lib/calc";
-import { allocateSatang, billingTotals, nextInvoiceNo, rateLabel } from "@/lib/billing";
+import { allocateSatang, billingTotals, invoicePrefix, nextInvoiceNo, rateLabel } from "@/lib/billing";
 import { addDays, formatThaiDate, parseDate, startOfDay } from "@/lib/date";
 import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
@@ -83,7 +83,7 @@ export async function createInvoice(
     const lineAmounts = allocateSatang(rows.map((r) => r.calc.revenue));
 
     const invoiceNo = await prisma.$transaction(async (tx) => {
-      const prefix = `INV-${billedAt.getUTCFullYear() + 543}${String(billedAt.getUTCMonth() + 1).padStart(2, "0")}-`;
+      const prefix = invoicePrefix(billedAt);
       const inMonth = await tx.customerBilling.findMany({
         where: { invoiceNo: { startsWith: prefix } },
         select: { invoiceNo: true },
