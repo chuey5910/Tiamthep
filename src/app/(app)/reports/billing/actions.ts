@@ -6,6 +6,7 @@ import { requireAuth, requireWrite } from "@/lib/auth";
 import { buildContext, computeJob } from "@/lib/calc";
 import { allocateSatang, billingTotals, invoicePrefix, nextInvoiceNo, rateLabel } from "@/lib/billing";
 import { addDays, formatThaiDate, parseDate, startOfDay } from "@/lib/date";
+import { snapOf } from "@/lib/invoice-adjust";
 import { PRICE_UNITS } from "@/lib/price-unit";
 import { prisma } from "@/lib/prisma";
 
@@ -80,6 +81,8 @@ export async function createInvoice(
     const billedAt = startOfDay(new Date());
     const totals = billingTotals(rows.map((r) => r.calc.revenue));
     // ยอดรายขาที่เก็บลงบิล = ยอดที่เกลี่ยเศษสตางค์แล้ว บวกทุกบรรทัดได้เท่ายอดรวมเป๊ะ
+    // เกลี่ยตามลำดับรหัสงานเสมอ — «ปรับยอด» ใช้ลำดับเดียวกัน เศษสตางค์จึงไม่สลับขาเอง
+    rows.sort((a, b) => a.job.id - b.job.id);
     const lineAmounts = allocateSatang(rows.map((r) => r.calc.revenue));
 
     const invoiceNo = await prisma.$transaction(async (tx) => {
@@ -108,7 +111,8 @@ export async function createInvoice(
           netAmount: totals.amount,
           billedBy: user.name,
           lines: {
-            create: rows.map((r, i) => ({ jobId: r.job.id, amount: lineAmounts[i] })),
+            // เก็บน้ำหนัก/ราคาที่พิมพ์บนใบไว้ด้วย — PDF ใบนี้จะเหมือนเดิมเสมอ และกด «ปรับยอด» แล้วเทียบได้ว่าอะไรเปลี่ยน
+            create: rows.map((r, i) => ({ jobId: r.job.id, amount: lineAmounts[i], ...snapOf(r.job, r.calc) })),
           },
         },
       });

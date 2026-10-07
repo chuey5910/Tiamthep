@@ -38,6 +38,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   ]);
 
   const editing = editId ? await prisma.job.findUnique({ where: { id: editId } }) : null;
+  // งานที่วางบิลไปแล้ว — แก้แล้วยอดในใบไม่เปลี่ยนเอง ต้องบอกว่าไปกดปรับยอดที่ไหน
+  const editingInvoice = editing
+    ? await prisma.customerBillingLine.findUnique({
+        where: { jobId: editing.id },
+        select: { billing: { select: { invoiceNo: true, billedAt: true, customerId: true } } },
+      })
+    : null;
 
   const customerById = new Map(customers.map((c) => [c.id, c]));
   const allCalcs = jobs.map((j) => ({ job: j, calc: computeJob(ctx, j) }));
@@ -149,6 +156,20 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       </Formula>
 
       <Card title={editing ? `แก้ไขงาน #${editing.id}` : "บันทึกงานใหม่"} className="mb-4 no-print">
+        {editingInvoice && (
+          <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+            ⚠️ งานนี้วางบิลไปแล้วในใบ <b>{editingInvoice.billing.invoiceNo}</b> — แก้น้ำหนักแล้ว ยอดในใบไม่เปลี่ยนเอง
+            ให้ไปกด{" "}
+            <a
+              className="font-bold underline"
+              href={`/reports/billing-history?year=${editingInvoice.billing.billedAt.getUTCFullYear()}&month=${editingInvoice.billing.billedAt.getUTCMonth() + 1}&customer=${editingInvoice.billing.customerId}`}
+              target="_blank"
+              rel="noopener"
+            >
+              «🔄 ปรับยอดใบนี้» ที่หน้ารายงานการวางบิล ↗
+            </a>
+          </p>
+        )}
         <JobForm
           vehicles={vehiclesRaw
             .filter((v) => !v.vehicleType.includes("หาง"))

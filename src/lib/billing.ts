@@ -174,7 +174,7 @@ export type BillingCustomerRow = {
 };
 
 /** ย้อนหาอัตราต่อหน่วยจากยอดจริง เผื่อกรณีราคาถูกลบหลังคำนวณ — ดีกว่าโชว์ขีดเฉยๆ */
-function rateOf(priceUnit: string, amount: number, weight: number, rate: number | null): number | null {
+export function rateOf(priceUnit: string, amount: number, weight: number, rate: number | null): number | null {
   if (rate != null) return rate;
   if (amount === 0) return null;
   if (!isWeightPriced(priceUnit)) return amount;

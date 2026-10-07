@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui";
 import { PdfPreview } from "@/components/PdfPreview";
 import { money } from "@/lib/format";
+import { AdjustDialog } from "./AdjustDialog";
 
 export type InvoiceRow = {
   id: number;
@@ -21,6 +22,8 @@ export type InvoiceRow = {
   legs: number;
   amount: number;
   billedBy: string | null;
+  /** ประวัติการกด «ปรับยอดใบนี้» ล่าสุดก่อน */
+  adjustments: { at: string; by: string | null; oldAmount: number; newAmount: number; detail: string }[];
 };
 
 /** สถานะกำหนดชำระ — ยังไม่ถึงกำหนด / ใกล้ครบ / เลยกำหนดแล้ว */
@@ -31,10 +34,12 @@ function DueBadge({ daysLeft }: { daysLeft: number | null }) {
   return <Badge tone="ok">อีก {daysLeft} วัน</Badge>;
 }
 
-export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
+export function InvoiceTable({ rows, canEdit }: { rows: InvoiceRow[]; canEdit: boolean }) {
   const [open, setOpen] = useState<InvoiceRow | null>(null);
   // ใบที่กำลังดูเป็น PDF (null = ปิดอยู่)
   const [pdf, setPdf] = useState<InvoiceRow | null>(null);
+  // ใบที่กำลังปรับยอด (null = ปิดอยู่)
+  const [adjust, setAdjust] = useState<InvoiceRow | null>(null);
 
   return (
     <>
@@ -80,6 +85,18 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                   >
                     📄 PDF
                   </button>{" "}
+                  {canEdit && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-ghost border-amber-400 bg-amber-50 px-2 py-1 text-[12px] text-amber-900"
+                        title="แก้น้ำหนัก/ราคาที่ต้นทางแล้ว กดที่นี่เพื่อดึงยอดใหม่เข้าใบนี้ — เลขที่ใบคงเดิม"
+                        onClick={() => setAdjust(r)}
+                      >
+                        🔄 ปรับยอดใบนี้
+                      </button>{" "}
+                    </>
+                  )}
                   <a
                     href={`/reports/billing?from=${r.periodFrom}&to=${r.periodTo}&customer=${r.customerId}`}
                     target="_blank"
@@ -101,6 +118,14 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
           path={`/print/invoice/${pdf.id}`}
           title={`${pdf.invoiceNo} — ${pdf.customerCode} ${pdf.customerName}`}
           onClose={() => setPdf(null)}
+        />
+      )}
+
+      {adjust && (
+        <AdjustDialog
+          billingId={adjust.id}
+          title={`${adjust.invoiceNo} — ${adjust.customerCode} ${adjust.customerName}`}
+          onClose={() => setAdjust(null)}
         />
       )}
 
@@ -137,8 +162,22 @@ export function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                 </div>
               </dl>
               <p className="mt-3 text-[12px] text-slate-500">
-                – ยอดนี้คือยอด ณ วันที่กดออกบิล เก็บไว้เทียบย้อนหลัง ถึงข้อมูลงานจะถูกแก้ทีหลังก็ไม่เปลี่ยน
+                – ยอดนี้คือยอด ณ วันที่กดออกบิล (หรือที่ปรับยอดล่าสุด) ถึงข้อมูลงานจะถูกแก้ทีหลังก็ไม่เปลี่ยนเอง
+                <br />– ถ้าแก้น้ำหนัก/ราคาแล้ว ต้องการให้ใบนี้เป็นยอดใหม่ กด «🔄 ปรับยอดใบนี้»
               </p>
+              {open.adjustments.length > 0 && (
+                <div className="mt-3 border-t border-[var(--border)] pt-3">
+                  <b className="text-[14px]">ประวัติการปรับยอด</b>
+                  {open.adjustments.map((a, i) => (
+                    <div key={i} className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[12.5px]">
+                      <div className="font-bold">
+                        {a.at} · {a.by ?? "-"} · {money(a.oldAmount)} → {money(a.newAmount)}
+                      </div>
+                      <div className="whitespace-pre-line text-slate-600">{a.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

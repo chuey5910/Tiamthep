@@ -12,6 +12,7 @@
 
 import { allocateSatang, billRate, billingLines, billingTotals } from "./billing";
 import { formatThaiDate } from "./date";
+import { priceJobsLive, storedSnap, type LineSnap } from "./invoice-adjust";
 import { prisma } from "./prisma";
 import { loadPeriod } from "./reports";
 
@@ -129,7 +130,11 @@ export async function draftInvoiceDoc(customerId: number, from: Date, to: Date, 
   };
 }
 
-/** ใบวางบิลที่ออกไปแล้ว — ยอดรายขาและยอดรวมใช้ค่าที่บันทึกไว้ตอนออกบิล */
+/**
+ * ใบวางบิลที่ออกไปแล้ว — ยอดรายขาและยอดรวมใช้ค่าที่บันทึกไว้ตอนออกบิล/ปรับยอดล่าสุด
+ * น้ำหนัก/ราคา/ทะเบียน ก็ใช้ค่าที่เก็บไว้ตอนนั้น ตัวเลขบนใบจึงตรงกับยอดเงินเสมอ
+ * (ใบที่ออกก่อนมีที่เก็บ ไม่มีค่าเดิม → ใช้ข้อมูลงานปัจจุบันแทน)
+ */
 export async function issuedInvoiceDoc(id: number): Promise<InvoiceDoc | null> {
   const inv = await prisma.customerBilling.findUnique({
     where: { id },
@@ -137,9 +142,12 @@ export async function issuedInvoiceDoc(id: number): Promise<InvoiceDoc | null> {
   });
   if (!inv) return null;
 
-  const data = await loadPeriod({ from: inv.periodFrom, to: inv.periodTo });
-  const amountByJob = new Map(inv.lines.map((l) => [l.jobId, l.amount]));
-  const lines = billingLines(data, inv.customerId, new Map()).filter((l) => amountByJob.has(l.jobId));
+  const needLive = inv.lines.filter((l) => !storedSnap(l)).map((l) => l.jobId);
+  const live = await priceJobsLive(needLive);
+  const lines = inv.lines
+    .map((l) => ({ amount: l.amount, jobId: l.jobId, snap: storedSnap(l) ?? live.get(l.jobId)?.snap ?? null }))
+    .filter((l): l is { amount: number; jobId: number; snap: LineSnap } => l.snap != null)
+    .sort((a, b) => a.snap.date.getTime() - b.snap.date.getTime() || a.jobId - b.jobId);
   const c = inv.customer;
 
   return {
@@ -157,23 +165,23 @@ export async function issuedInvoiceDoc(id: number): Promise<InvoiceDoc | null> {
       weightBasis: c.weightBasis ?? "น้ำหนักปลายทาง",
     },
     period: `${formatThaiDate(inv.periodFrom)} ถึง ${formatThaiDate(inv.periodTo)}`,
-    rows: lines.map((l, i) => ({
+    rows: lines.map(({ snap: s, amount }, i) => ({
       seq: i + 1,
-      date: formatThaiDate(l.date),
-      plate: l.plate, // ทะเบียนแม่อย่างเดียว ไม่ใส่หางพ่วง
-      ticket: l.ticketOrigin ?? "-",
-      origin: l.origin,
-      destination: l.destination,
-      weightOrigin: l.weightOrigin,
-      weightDest: l.weightDest,
-      rate: billRate(l.priceUnit, l.rate).value,
-      rateUnit: billRate(l.priceUnit, l.rate).unit,
-      amount: amountByJob.get(l.jobId)!,
+      date: formatThaiDate(s.date),
+      plate: s.plate, // ทะเบียนแม่อย่างเดียว ไม่ใส่หางพ่วง
+      ticket: s.ticketOrigin ?? "-",
+      origin: s.origin,
+      destination: s.destination,
+      weightOrigin: s.weightOrigin,
+      weightDest: s.weightDest,
+      rate: billRate(s.priceUnit, s.rate).value,
+      rateUnit: billRate(s.priceUnit, s.rate).unit,
+      amount,
     })),
-    rateUnit: commonUnit(lines.map((l) => billRate(l.priceUnit, l.rate).unit)),
-    sumWeightOrigin: lines.reduce((a, l) => a + (l.weightOrigin ?? 0), 0),
-    sumWeightDest: lines.reduce((a, l) => a + (l.weightDest ?? 0), 0),
-    // ยอดรวมของใบ = ยอดที่บันทึกตอนออกบิล ไม่คำนวณใหม่
+    rateUnit: commonUnit(lines.map((l) => billRate(l.snap.priceUnit, l.snap.rate).unit)),
+    sumWeightOrigin: lines.reduce((a, l) => a + (l.snap.weightOrigin ?? 0), 0),
+    sumWeightDest: lines.reduce((a, l) => a + (l.snap.weightDest ?? 0), 0),
+    // ยอดรวมของใบ = ยอดที่บันทึกไว้ ไม่คำนวณใหม่
     amount: inv.amount,
     missing: inv.lines.length - lines.length,
     fileName: `${inv.invoiceNo}.pdf`,

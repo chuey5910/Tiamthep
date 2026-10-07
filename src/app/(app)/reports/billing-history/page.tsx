@@ -1,9 +1,11 @@
 import { SelectFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, LinkButton, PageHeader, Stat } from "@/components/ui";
-import { daysUntil, endOfMonth, formatThaiDate, TH_MONTHS_FULL, utcDate } from "@/lib/date";
+import { getCurrentUser } from "@/lib/auth";
+import { daysUntil, endOfMonth, formatThaiDate, formatThaiDateTime, TH_MONTHS_FULL, utcDate } from "@/lib/date";
 import { baht, money } from "@/lib/format";
 import { readMonth, type SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
+import { canWrite } from "@/lib/roles";
 import { compareThaiFirst } from "@/lib/sort";
 import { InvoiceTable, type InvoiceRow } from "./InvoiceTable";
 
@@ -25,16 +27,21 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
   const from = allMonths ? utcDate(year, 1, 1) : utcDate(year, month, 1);
   const to = allMonths ? endOfMonth(year, 12) : endOfMonth(year, month);
 
-  const [billings, customers] = await Promise.all([
+  const [billings, customers, user] = await Promise.all([
     prisma.customerBilling.findMany({
       where: {
         billedAt: { gte: from, lte: to },
         ...(customerId ? { customerId } : {}),
       },
-      include: { customer: true, _count: { select: { lines: true } } },
+      include: {
+        customer: true,
+        _count: { select: { lines: true } },
+        adjustments: { orderBy: { adjustedAt: "desc" } },
+      },
       orderBy: [{ billedAt: "desc" }, { invoiceNo: "desc" }],
     }),
     prisma.customer.findMany({ orderBy: { code: "asc" } }),
+    getCurrentUser(),
   ]);
 
   const today = new Date();
@@ -56,6 +63,13 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
       legs: b._count.lines,
       amount: b.amount,
       billedBy: b.billedBy,
+      adjustments: b.adjustments.map((a) => ({
+        at: formatThaiDateTime(a.adjustedAt),
+        by: a.adjustedBy,
+        oldAmount: a.oldAmount,
+        newAmount: a.newAmount,
+        detail: a.detail,
+      })),
     };
   });
 
@@ -149,7 +163,7 @@ export default async function BillingHistoryPage({ searchParams }: { searchParam
             </a>
           </Empty>
         ) : (
-          <InvoiceTable rows={rows} />
+          <InvoiceTable rows={rows} canEdit={canWrite(user)} />
         )}
       </Card>
 

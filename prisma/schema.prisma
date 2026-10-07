@@ -178,7 +178,8 @@ model CustomerBilling {
   note      String?
   createdAt DateTime @default(now())
 
-  lines CustomerBillingLine[]
+  lines       CustomerBillingLine[]
+  adjustments CustomerBillingAdjustment[]
 
   @@index([customerId, billedAt])
   @@index([billedAt])
@@ -196,6 +197,33 @@ model CustomerBillingLine {
   job       Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
   /// ค่าบรรทุกของขานี้ ณ ตอนออกบิล
   amount    Float           @default(0)
+
+  /// ข้อมูลที่พิมพ์บนใบ ณ ตอนออกบิล/ปรับยอดล่าสุด — PDF ใบที่ส่งลูกค้าไปแล้วใช้ค่าชุดนี้
+  /// จึงตรงกับยอดเงินเสมอ ถึงงานจะถูกแก้ทีหลัง · ใบที่ออกก่อนมีช่องเหล่านี้ = ว่าง (ใช้ข้อมูลงานปัจจุบันแทน)
+  date         DateTime?
+  plate        String?
+  ticketOrigin String?
+  origin       String?
+  destination  String?
+  weightOrigin Float?
+  weightDest   Float?
+  priceUnit    String?
+  rate         Float?
+
+  @@index([billingId])
+}
+
+/// ประวัติการกด «ปรับยอดใบนี้» — ใคร ปรับเมื่อไร ยอดเดิม/ยอดใหม่ และเปลี่ยนอะไรบ้าง
+model CustomerBillingAdjustment {
+  id         Int             @id @default(autoincrement())
+  billingId  Int
+  billing    CustomerBilling @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  adjustedAt DateTime        @default(now())
+  adjustedBy String?
+  oldAmount  Float
+  newAmount  Float
+  /// รายการที่เปลี่ยน บรรทัดละ 1 ขา
+  detail     String
 
   @@index([billingId])
 }
