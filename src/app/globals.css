@@ -73,23 +73,20 @@ b, strong, th { font-weight: 700; }
   color: #1f1f24;
   font-weight: 700;
   font-size: 0.8125rem;
-  text-align: left;
+  text-align: center;
   padding: 0.5rem 0.75rem;
   white-space: nowrap;
   border-bottom: 1px solid var(--border);
 }
+/* หลักของเจ้าของ: ข้อมูลในตารางอยู่กึ่งกลางคอลัมน์เสมอ ทุกหน้า (รวมตัวเลขเงิน) */
 .tbl tbody td {
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid #f0f0f1;
   vertical-align: middle;
+  text-align: center;
 }
 .tbl tbody tr:hover td {
   background: #fafafa;
-}
-/* ตารางที่ข้อมูลอยู่กึ่งกลางคอลัมน์ทุกช่อง (หลักของเจ้าของ: ข้อมูลในตารางต้องอยู่กึ่งกลางเสมอ) */
-.tbl.tbl-center thead th,
-.tbl.tbl-center tbody td {
-  text-align: center;
 }
 /* แถวที่มีเอกสารใกล้หมดอายุ/หมดอายุแล้ว — แดงทั้งแถวจนกว่าจะต่อครบทุกรายการ */
 .tbl tbody tr.row-danger td {
@@ -100,13 +97,14 @@ b, strong, th { font-weight: 700; }
   background: #ffeaea;
 }
 .tbl tfoot td {
+  text-align: center;
   padding: 0.55rem 0.75rem;
   font-weight: 700;
   background: #f8f8f9;
   border-top: 2px solid var(--border);
 }
 .num {
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -219,13 +217,13 @@ b, strong, th { font-weight: 700; }
 .inv-no { text-align: right; font-size: 10.5px; line-height: 1.55; white-space: nowrap; }
 .inv-no b { font-size: 12px; }
 .inv-tbl { width: 100%; border-collapse: collapse; font-size: 9.5px; }
-.inv-tbl th, .inv-tbl td { border: 1px solid #9a9aa2; padding: 4px 5px; vertical-align: middle; }
+.inv-tbl th, .inv-tbl td { border: 1px solid #9a9aa2; padding: 4px 5px; vertical-align: middle; text-align: center; }
 .inv-tbl th { background: #eeeef1; font-weight: 700; text-align: center; line-height: 1.3; white-space: nowrap; }
 .inv-tbl thead { display: table-header-group; }
 .inv-tbl tfoot { display: table-row-group; }
 .inv-tbl tr { break-inside: avoid; page-break-inside: avoid; }
 .inv-tbl .c { text-align: center; }
-.inv-tbl .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.inv-tbl .r { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .inv-tbl .nw { white-space: nowrap; }
 .inv-tbl tfoot td { font-weight: 700; background: #f6f6f8; }
 .inv-total { margin: 14px 0 0 auto; width: 56%; display: flex; justify-content: space-between; align-items: center;

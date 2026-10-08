@@ -64,7 +64,8 @@ export async function ingestPhoto(p: ShipPhoto): Promise<number> {
 /** ดึงผล OCR ใหม่จากแท็บ «ตั๋วเรือ» */
 export async function pullShipTickets(): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
   const cfg = sheetConfig();
-  if ("error" in cfg) return { ok: false, error: cfg.error };
+  // ข้อความทางเทคนิคของ sheetConfig พูดถึงไลน์/ไฟล์ตั้งค่า — หน้านี้บอกแค่สิ่งที่ผู้ใช้ต้องรู้
+  if ("error" in cfg) return { ok: false, error: "เว็บเครื่องนี้ยังไม่ได้เชื่อมกับ Google Sheet ที่เก็บผลอ่านรูปตั๋ว" };
   try {
     const rows = await readValues(cfg.keyFile, cfg.sheetId, `${SHIP.tab}!A2:F`);
     let added = 0;

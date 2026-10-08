@@ -93,7 +93,7 @@ export function ShipTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="tbl tbl-center [&_td]:whitespace-nowrap [&_td]:!px-2 [&_th]:!px-2">
+        <table className="tbl [&_td]:whitespace-nowrap [&_td]:!px-2 [&_th]:!px-2">
           <thead>
             <tr>
               <th>รูป</th>

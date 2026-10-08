@@ -41,7 +41,7 @@ export default async function ShipTicketsPage() {
         <br />– ทะเบียน = ชื่อโฟลเดอร์ · พขร. จากตารางจับคู่รถ ถ้าชื่อในตั๋วไม่ตรงให้เลือกเอง (ระบบจำไว้ ครั้งหน้าไม่ต้องเลือกซ้ำ)
       </Formula>
 
-      {!pulled.ok && <p className="mb-3 text-[13px] font-bold text-amber-700">⚠️ ดึงรูปใหม่จากชีตไม่ได้: {pulled.error}</p>}
+      {!pulled.ok && <p className="mb-3 text-[13px] font-bold text-amber-700">⚠️ ดึงรูปตั๋วใหม่ไม่ได้ — {pulled.error}</p>}
       {data.notices.map((n) => (
         <p key={n} className={`mb-3 text-[13px] font-bold ${n.startsWith("❌") ? "text-red-700" : "text-amber-700"}`}>
           {n}
@@ -59,7 +59,7 @@ export default async function ShipTicketsPage() {
       {recent.length > 0 && (
         <Card title="ตรวจแล้วล่าสุด" bodyClass="p-0">
           <div className="overflow-x-auto">
-            <table className="tbl tbl-center">
+            <table className="tbl">
               <thead>
                 <tr>
                   <th>เลขที่ตั๋ว</th>
