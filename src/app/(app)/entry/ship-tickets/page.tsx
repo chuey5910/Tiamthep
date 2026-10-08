@@ -31,7 +31,7 @@ export default async function ShipTicketsPage() {
     <>
       <PageHeader
         title="ตั๋วเรือรอตรวจ"
-        subtitle={`ลูกค้า ${SHIP.customerCode} · ${SHIP.origin} → ${SHIP.destination} · ระบบอ่านรูปจากโฟลเดอร์ «ตั๋วเรือฮาร์เบอร์» ให้แล้ว`}
+        subtitle={`ลูกค้า ${SHIP.customerCode} · ${SHIP.origin} → ${SHIP.destination} · ระบบอ่านรูปจากโฟลเดอร์ «ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์» ใน Google Drive ให้แล้ว`}
       />
 
       <Formula>
