@@ -1494,8 +1494,12 @@ function cleanupOneShotTriggers_() {
 // ชื่อบอกเส้นทาง (ต้นทาง - ปลายทาง) กันสับสนกับสถานที่อื่นที่ชื่อคล้ายกัน
 var SHIP_FOLDER_NAME = "ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์";
 var SHIP_HEADER = ["เวลา", "ทะเบียน (ชื่อโฟลเดอร์)", "fileId", "ชื่อไฟล์", "ลิงก์รูป", "ข้อความ OCR"];
-/** อ่านไม่เกินรอบละกี่รูป — OCR ของ Google จำกัดความถี่ ("User rate limit exceeded for OCR") */
-var SHIP_MAX_PER_RUN = 8;
+/**
+ * อ่านต่อเนื่องได้รอบละกี่วินาที — Apps Script ให้รันได้ครั้งละไม่เกิน 6 นาที จึงหยุดที่ 4.5 นาที
+ * (ตัวตั้งเวลาเรียกทุก 5 นาที รูปค้างเยอะก็อ่านต่อเนื่องเกือบตลอด)
+ * ถ้า Google ตอบ "User rate limit exceeded for OCR" จะหยุดรอบนั้นทันที แล้วอ่านต่อรอบหน้า
+ */
+var SHIP_MAX_SECONDS = 270;
 
 /** หาโฟลเดอร์ตั๋วเรือ: ใช้ SHIP_FOLDER_ID ถ้าตั้งไว้ ไม่งั้นหาจากชื่อ (ต้องมีชื่อนี้โฟลเดอร์เดียว) */
 function shipFolder_() {
@@ -1546,12 +1550,15 @@ function scanShipTickets() {
 
     var folder = shipFolder_();
     var count = 0;
+    var started = Date.now();
+    var timeUp = function () { return (Date.now() - started) / 1000 > SHIP_MAX_SECONDS; };
+    var limited = false;
     var subs = folder.getFolders();
-    while (subs.hasNext() && count < SHIP_MAX_PER_RUN) {
+    while (subs.hasNext() && !timeUp() && !limited) {
       var sub = subs.next();
       var plate = sub.getName().trim();
       var files = sub.getFiles();
-      while (files.hasNext() && count < SHIP_MAX_PER_RUN) {
+      while (files.hasNext() && !timeUp() && !limited) {
         var f = files.next();
         if (done[f.getId()]) continue;
         var mime = f.getMimeType();
@@ -1562,7 +1569,7 @@ function scanShipTickets() {
         } catch (err) {
           // อ่านไม่ได้ก็ยังต้องส่งแถวไป — เว็บจะขึ้นแถวตัวแดงพร้อมลิงก์รูปให้คนกรอกเอง ไม่ให้รูปหายเงียบ
           log_("ERROR", "OCR ตั๋วเรือไม่สำเร็จ " + plate + "/" + f.getName() + ": " + err);
-          if (String(err).indexOf("rate limit") >= 0) break; // โดนจำกัดความถี่ — ไว้รอบหน้า
+          if (String(err).indexOf("rate limit") >= 0) { limited = true; break; } // โดนจำกัดความถี่ — ไว้รอบหน้า
         }
         sh.appendRow([
           Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
@@ -1570,7 +1577,7 @@ function scanShipTickets() {
         ]);
         done[f.getId()] = true;
         count++;
-        Utilities.sleep(1500);
+        Utilities.sleep(1000);
       }
     }
     if (count > 0) log_("INFO", "อ่านรูปตั๋วเรือใหม่ " + count + " รูป");
