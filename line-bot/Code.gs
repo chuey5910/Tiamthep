@@ -1487,7 +1487,7 @@ function cleanupOneShotTriggers_() {
 //     70-1931 /  …
 // 1 รูปมีตั๋วได้หลายใบ (ถ่ายรวม 4 ใบ) — เว็บเป็นคนแยกใบ (src/lib/ship-ticket-parse.ts)
 //
-// ทุก 10 นาที อ่านเฉพาะรูปใหม่ (ดูจาก fileId ในคอลัมน์ C) ด้วย OCR ของ Google แล้วต่อแถวลงแท็บ «ตั๋วเรือ»
+// ทุก 5 นาที อ่านเฉพาะรูปใหม่ (ดูจาก fileId ในคอลัมน์ C) ด้วย OCR ของ Google แล้วต่อแถวลงแท็บ «ตั๋วเรือ»
 // คอลัมน์ต้องตรงกับ src/lib/ship-ticket.ts: เวลา · ทะเบียน · fileId · ชื่อไฟล์ · ลิงก์รูป · ข้อความ OCR
 // ที่นี่ไม่ตัดสินอะไร — คนตรวจและกดยืนยันที่หน้า «ตั๋วเรือรอตรวจ» ในเว็บ
 
@@ -1508,7 +1508,7 @@ function shipFolder_() {
   return folder;
 }
 
-/** ตั้งค่าครั้งแรก: สร้างแท็บ «ตั๋วเรือ» + จำโฟลเดอร์ + ตั้งเวลาอ่านทุก 10 นาที */
+/** ตั้งค่าครั้งแรก: สร้างแท็บ «ตั๋วเรือ» + จำโฟลเดอร์ + ตั้งเวลาอ่านทุก 5 นาที */
 function setupShipTickets() {
   var ui = SpreadsheetApp.getUi();
   try {
@@ -1520,16 +1520,16 @@ function setupShipTickets() {
     ScriptApp.getProjectTriggers().forEach(function (t) {
       if (t.getHandlerFunction() === "scanShipTickets") ScriptApp.deleteTrigger(t);
     });
-    ScriptApp.newTrigger("scanShipTickets").timeBased().everyMinutes(10).create();
+    ScriptApp.newTrigger("scanShipTickets").timeBased().everyMinutes(5).create();
     ui.alert("ตั้งค่าอ่านตั๋วเรือเรียบร้อย ✅\n\nโฟลเดอร์: " + folder.getName() +
-      "\nระบบจะอ่านรูปใหม่ทุก 10 นาที แล้วขึ้นที่เว็บหน้า บันทึกประจำวัน › ตั๋วเรือรอตรวจ" +
+      "\nระบบจะอ่านรูปใหม่ทุก 5 นาที แล้วขึ้นที่เว็บหน้า บันทึกประจำวัน › ตั๋วเรือรอตรวจ" +
       "\n\nเก็บรูปในโฟลเดอร์ย่อยที่ตั้งชื่อเป็นทะเบียนรถ เช่น 70-1853");
   } catch (err) {
     ui.alert("ตั้งค่าไม่สำเร็จ ❌\n\n" + err.message);
   }
 }
 
-/** อ่านรูปตั๋วเรือใหม่ (ตัวตั้งเวลาเรียกทุก 10 นาที · กดจากเมนูได้) — กดซ้ำได้ ไม่เกิดแถวซ้ำ */
+/** อ่านรูปตั๋วเรือใหม่ (ตัวตั้งเวลาเรียกทุก 5 นาที · กดจากเมนูได้) — กดซ้ำได้ ไม่เกิดแถวซ้ำ */
 function scanShipTickets() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return; // รอบก่อนยังอ่านไม่เสร็จ

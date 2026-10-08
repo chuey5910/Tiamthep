@@ -276,12 +276,12 @@ export async function shipReview(): Promise<ShipPage> {
 }
 
 /**
- * ดึงรูปใหม่เบื้องหลังทุก 10 นาที — เรียกจากทุกหน้า (layout) ไม่รอผล หน้าไม่ช้าลง
+ * ดึงรูปใหม่เบื้องหลังทุก 5 นาที — เรียกจากทุกหน้า (layout) ไม่รอผล หน้าไม่ช้าลง
  * ตัวเลขข้างเมนูจึงขึ้นเองแม้ยังไม่มีใครเปิดหน้าตั๋วเรือ · ดึงซ้ำไม่เกิดแถวซ้ำ (ingestPhoto)
  */
 let lastPull = 0;
 export function pullShipTicketsInBackground(): void {
-  if (Date.now() - lastPull < 10 * 60 * 1000) return;
+  if (Date.now() - lastPull < 5 * 60 * 1000) return;
   if ("error" in sheetConfig()) return;
   lastPull = Date.now();
   pullShipTickets().catch(() => {});
