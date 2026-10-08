@@ -26,12 +26,13 @@ export function Shell({
   children,
   companyName,
   user,
-  pendingCount = 0,
+  badges = {},
 }: {
   children: React.ReactNode;
   companyName: string;
   user: SessionUser;
-  pendingCount?: number;
+  /** ตัวเลขสีส้มข้างเมนู (เช่น ผู้ใช้รออนุมัติ · ตั๋วเรือรอตรวจ) — href → จำนวน */
+  badges?: Record<string, number>;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -81,7 +82,7 @@ export function Shell({
                       item.href === "/"
                         ? pathname === "/"
                         : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const badge = item.href === "/admin/users" && pendingCount > 0 ? pendingCount : null;
+                    const badge = (badges[item.href] ?? 0) > 0 ? badges[item.href] : null;
                     return (
                       <Link
                         key={item.href}

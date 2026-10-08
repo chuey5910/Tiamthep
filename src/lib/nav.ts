@@ -22,6 +22,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/entry/jobs", icon: "🚚", label: "บันทึกงานขนส่ง" },
       { href: "/entry/line-jobs", icon: "💬", label: "งานจากไลน์ (ชีตสั่งงาน)" },
+      { href: "/entry/ship-tickets", icon: "🚢", label: "ตั๋วเรือรอตรวจ" },
       { href: "/entry/advances", icon: "💵", label: "เงินเดินทาง / ค่าทางด่วน" },
       { href: "/entry/expenses", icon: "🧾", label: "ค่าใช้จ่าย" },
       { href: "/entry/fuel", icon: "⛽", label: "การเติมน้ำมัน" },

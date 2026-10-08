@@ -86,6 +86,11 @@ b, strong, th { font-weight: 700; }
 .tbl tbody tr:hover td {
   background: #fafafa;
 }
+/* ตารางที่ข้อมูลอยู่กึ่งกลางคอลัมน์ทุกช่อง (หลักของเจ้าของ: ข้อมูลในตารางต้องอยู่กึ่งกลางเสมอ) */
+.tbl.tbl-center thead th,
+.tbl.tbl-center tbody td {
+  text-align: center;
+}
 /* แถวที่มีเอกสารใกล้หมดอายุ/หมดอายุแล้ว — แดงทั้งแถวจนกว่าจะต่อครบทุกรายการ */
 .tbl tbody tr.row-danger td {
   color: #b42318;

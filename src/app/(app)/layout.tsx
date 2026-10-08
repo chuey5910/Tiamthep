@@ -1,6 +1,7 @@
 import { Shell } from "@/components/Shell";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { shipPendingCount } from "@/lib/ship-ticket";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +25,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pendingCount =
     user.role === "ADMIN" ? await prisma.user.count({ where: { status: "PENDING" } }) : 0;
 
+  // ตัวเลขข้างเมนู — งานที่รอคนจัดการ
+  const badges: Record<string, number> = {
+    "/admin/users": pendingCount,
+    "/entry/ship-tickets": await shipPendingCount(),
+  };
+
   return (
-    <Shell companyName={companyName} user={user} pendingCount={pendingCount}>
+    <Shell companyName={companyName} user={user} badges={badges}>
       {children}
       <script
         dangerouslySetInnerHTML={{

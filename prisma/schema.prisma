@@ -638,3 +638,50 @@ model LoginLog {
   @@index([userId, at])
   @@index([action, at])
 }
+
+/// ตั๋วเรือ (ใบชั่ง ศรีราชาฮาร์เบอร์) ที่อ่านจากรูปในโฟลเดอร์ Google Drive «ตั๋วเรือฮาร์เบอร์»
+/// 1 รูปมีได้หลายใบ → 1 แถวต่อ 1 ใบ · รอคนตรวจแล้วกดยืนยันถึงจะกลายเป็นงาน (Job)
+/// ค่าที่อ่านได้เก็บดิบไว้ — สถานะ/คำเตือนคำนวณใหม่ทุกครั้งที่เปิดหน้า แก้ข้อมูลหลักแล้วอัปเดตเอง
+model ShipTicket {
+  id          Int      @id @default(autoincrement())
+  /// รูปใน Google Drive
+  fileId      String
+  fileName    String
+  photoUrl    String
+  /// ใบที่เท่าไรในรูป (เริ่ม 1)
+  part        Int
+  /// ชื่อโฟลเดอร์ย่อย = ทะเบียนรถ
+  folderPlate String
+  /// ข้อความ OCR ของใบนี้ (ไว้ตรวจย้อนหลัง)
+  ocrText     String
+
+  ticketNo    String?
+  ticketDate  DateTime?
+  /// น้ำหนัก (กิโลกรัม) ตามตั๋ว — เข้า / ออก / สุทธิ
+  weightIn    Float?
+  weightOut   Float?
+  weightNet   Float?
+  plateOnTicket String?
+  driverNameOnTicket String?
+
+  /// "รอตรวจ" | "ยืนยันแล้ว" | "ไม่ใช้"
+  status      String   @default("รอตรวจ")
+  jobId       Int?     @unique
+  decidedBy   String?
+  decidedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([fileId, part])
+  @@index([status])
+}
+
+/// คำที่ OCR อ่านได้ → ค่าที่ถูก ที่คนเคยเลือกไว้ (ระบบ "จำ" ครั้งหน้าไม่ต้องเลือกซ้ำ)
+/// kind: "driver" = ชื่อ พขร. ในตั๋ว → รหัส พขร.
+model OcrAlias {
+  id    Int    @id @default(autoincrement())
+  kind  String
+  raw   String
+  value String
+
+  @@unique([kind, raw])
+}

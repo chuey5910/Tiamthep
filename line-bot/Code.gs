@@ -33,6 +33,7 @@ var SHEET = {
   ALCOHOL: "แอลกอฮอล์",
   MASTER: "ฐานข้อมูล",
   LOG: "LOG",
+  SHIP: "ตั๋วเรือ",
 };
 
 // คอลัมน์ของแท็บ «งาน» (เลขคอลัมน์เริ่มที่ 1)
@@ -142,6 +143,9 @@ function onOpen() {
     .addSeparator()
     .addItem("ส่งแจ้งงานที่ค้างเดี๋ยวนี้ (วันนี้+พรุ่งนี้)", "sendMorningJobs")
     .addItem("ทดสอบส่งข้อความหาผู้ดูแล", "testNotifyAdmin")
+    .addSeparator()
+    .addItem("③ ตั้งค่าอ่านตั๋วเรือฮาร์เบอร์ (ครั้งแรกครั้งเดียว)", "setupShipTickets")
+    .addItem("อ่านรูปตั๋วเรือใหม่เดี๋ยวนี้", "scanShipTickets")
     .addSeparator()
     .addItem("สลับระบบรับรูปจากคนขับ (ตอนนี้: " + (photosEnabled_() ? "เปิด ✅" : "ปิด 📵") + ")", "togglePhotoSystem")
     .addToUi();
@@ -1471,6 +1475,109 @@ function cleanupOneShotTriggers_() {
 
   if (remain.length) props.setProperty("ONESHOT_TRIGGERS", JSON.stringify(remain));
   else props.deleteProperty("ONESHOT_TRIGGERS");
+}
+
+// ═════════════════════════════════════════════════════════════
+// ตั๋วเรือฮาร์เบอร์ — อ่านรูปตั๋วจากโฟลเดอร์ Drive แล้วส่งข้อความให้เว็บตรวจ
+// ═════════════════════════════════════════════════════════════
+//
+// โฟลเดอร์ใน Google Drive ของเจ้าของ:
+//   ตั๋วเรือฮาร์เบอร์ /
+//     70-1853 /  รูป1.jpg  รูป2.jpg …   ← ชื่อโฟลเดอร์ย่อย = ทะเบียนรถ (ต้องตรงกับในเว็บ)
+//     70-1931 /  …
+// 1 รูปมีตั๋วได้หลายใบ (ถ่ายรวม 4 ใบ) — เว็บเป็นคนแยกใบ (src/lib/ship-ticket-parse.ts)
+//
+// ทุก 10 นาที อ่านเฉพาะรูปใหม่ (ดูจาก fileId ในคอลัมน์ C) ด้วย OCR ของ Google แล้วต่อแถวลงแท็บ «ตั๋วเรือ»
+// คอลัมน์ต้องตรงกับ src/lib/ship-ticket.ts: เวลา · ทะเบียน · fileId · ชื่อไฟล์ · ลิงก์รูป · ข้อความ OCR
+// ที่นี่ไม่ตัดสินอะไร — คนตรวจและกดยืนยันที่หน้า «ตั๋วเรือรอตรวจ» ในเว็บ
+
+var SHIP_FOLDER_NAME = "ตั๋วเรือฮาร์เบอร์";
+var SHIP_HEADER = ["เวลา", "ทะเบียน (ชื่อโฟลเดอร์)", "fileId", "ชื่อไฟล์", "ลิงก์รูป", "ข้อความ OCR"];
+/** อ่านไม่เกินรอบละกี่รูป — OCR ของ Google จำกัดความถี่ ("User rate limit exceeded for OCR") */
+var SHIP_MAX_PER_RUN = 8;
+
+/** หาโฟลเดอร์ตั๋วเรือ: ใช้ SHIP_FOLDER_ID ถ้าตั้งไว้ ไม่งั้นหาจากชื่อ (ต้องมีชื่อนี้โฟลเดอร์เดียว) */
+function shipFolder_() {
+  var id = prop_("SHIP_FOLDER_ID");
+  if (id) return DriveApp.getFolderById(id);
+  var it = DriveApp.getFoldersByName(SHIP_FOLDER_NAME);
+  if (!it.hasNext()) throw new Error("ไม่พบโฟลเดอร์ «" + SHIP_FOLDER_NAME + "» ใน Google Drive — สร้างก่อน แล้วกดตั้งค่าใหม่");
+  var folder = it.next();
+  if (it.hasNext()) throw new Error("มีโฟลเดอร์ชื่อ «" + SHIP_FOLDER_NAME + "» มากกว่า 1 อัน — ลบ/เปลี่ยนชื่ออันที่ไม่ใช้ หรือใส่ SHIP_FOLDER_ID ใน Script Properties");
+  return folder;
+}
+
+/** ตั้งค่าครั้งแรก: สร้างแท็บ «ตั๋วเรือ» + จำโฟลเดอร์ + ตั้งเวลาอ่านทุก 10 นาที */
+function setupShipTickets() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var folder = shipFolder_();
+    PropertiesService.getScriptProperties().setProperty("SHIP_FOLDER_ID", folder.getId());
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ensureSheet_(ss, SHEET.SHIP, SHIP_HEADER);
+    sh.setColumnWidth(6, 400);
+    ScriptApp.getProjectTriggers().forEach(function (t) {
+      if (t.getHandlerFunction() === "scanShipTickets") ScriptApp.deleteTrigger(t);
+    });
+    ScriptApp.newTrigger("scanShipTickets").timeBased().everyMinutes(10).create();
+    ui.alert("ตั้งค่าอ่านตั๋วเรือเรียบร้อย ✅\n\nโฟลเดอร์: " + folder.getName() +
+      "\nระบบจะอ่านรูปใหม่ทุก 10 นาที แล้วขึ้นที่เว็บหน้า บันทึกประจำวัน › ตั๋วเรือรอตรวจ" +
+      "\n\nเก็บรูปในโฟลเดอร์ย่อยที่ตั้งชื่อเป็นทะเบียนรถ เช่น 70-1853");
+  } catch (err) {
+    ui.alert("ตั้งค่าไม่สำเร็จ ❌\n\n" + err.message);
+  }
+}
+
+/** อ่านรูปตั๋วเรือใหม่ (ตัวตั้งเวลาเรียกทุก 10 นาที · กดจากเมนูได้) — กดซ้ำได้ ไม่เกิดแถวซ้ำ */
+function scanShipTickets() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return; // รอบก่อนยังอ่านไม่เสร็จ
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(SHEET.SHIP) || ensureSheet_(ss, SHEET.SHIP, SHIP_HEADER);
+    var last = sh.getLastRow();
+    var done = {};
+    if (last >= 2) {
+      sh.getRange(2, 3, last - 1, 1).getValues().forEach(function (r) {
+        if (r[0]) done[String(r[0])] = true;
+      });
+    }
+
+    var folder = shipFolder_();
+    var count = 0;
+    var subs = folder.getFolders();
+    while (subs.hasNext() && count < SHIP_MAX_PER_RUN) {
+      var sub = subs.next();
+      var plate = sub.getName().trim();
+      var files = sub.getFiles();
+      while (files.hasNext() && count < SHIP_MAX_PER_RUN) {
+        var f = files.next();
+        if (done[f.getId()]) continue;
+        var mime = f.getMimeType();
+        if (mime.indexOf("image/") !== 0 && mime !== "application/pdf") continue;
+        var text = "";
+        try {
+          text = ocrImage_(f.getBlob());
+        } catch (err) {
+          // อ่านไม่ได้ก็ยังต้องส่งแถวไป — เว็บจะขึ้นแถวตัวแดงพร้อมลิงก์รูปให้คนกรอกเอง ไม่ให้รูปหายเงียบ
+          log_("ERROR", "OCR ตั๋วเรือไม่สำเร็จ " + plate + "/" + f.getName() + ": " + err);
+          if (String(err).indexOf("rate limit") >= 0) break; // โดนจำกัดความถี่ — ไว้รอบหน้า
+        }
+        sh.appendRow([
+          Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
+          plate, f.getId(), f.getName(), f.getUrl(), text.slice(0, 45000),
+        ]);
+        done[f.getId()] = true;
+        count++;
+        Utilities.sleep(1500);
+      }
+    }
+    if (count > 0) log_("INFO", "อ่านรูปตั๋วเรือใหม่ " + count + " รูป");
+  } catch (err) {
+    log_("ERROR", "อ่านตั๋วเรือไม่สำเร็จ: " + err);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function ensureSheet_(ss, name, header) {
