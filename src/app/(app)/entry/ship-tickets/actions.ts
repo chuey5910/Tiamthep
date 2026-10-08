@@ -134,3 +134,25 @@ export async function setShipTicketUnused(id: number, unused: boolean): Promise<
   revalidatePath("/", "layout");
   return r.count ? { ok: true, message: unused ? "ย้ายไป «ไม่ใช้» แล้ว" : "กลับมารอตรวจแล้ว" } : { ok: false, error: "สถานะเปลี่ยนไปแล้ว — กดโหลดหน้าใหม่" };
 }
+
+/**
+ * เอาตั๋วกลับมารอตรวจ — ได้เฉพาะใบที่กด «ไม่ใช้» หรือใบที่ยืนยันแล้วแต่งานถูกลบทิ้งไปแล้ว
+ * (ใบที่ยังมีงานอยู่ห้ามเปิดใหม่ ไม่งั้นได้งานซ้ำ)
+ */
+export async function reopenShipTicket(id: number): Promise<ShipResult> {
+  await requireWrite();
+  const t = await prisma.shipTicket.findUnique({ where: { id } });
+  if (!t) return { ok: false, error: "ไม่พบตั๋วนี้" };
+  if (t.status === "ยืนยันแล้ว" && t.jobId != null) {
+    const job = await prisma.job.findUnique({ where: { id: t.jobId }, select: { id: true } });
+    if (job) return { ok: false, error: `ตั๋วนี้เป็นงาน #${job.id} อยู่ — ถ้าจะแก้ ให้แก้ที่หน้า บันทึกงานขนส่ง` };
+  } else if (t.status !== "ไม่ใช้") {
+    return { ok: false, error: "ตั๋วนี้รอตรวจอยู่แล้ว" };
+  }
+  await prisma.shipTicket.update({
+    where: { id },
+    data: { status: "รอตรวจ", jobId: null, decidedBy: null, decidedAt: null },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true, message: "กลับมารอตรวจแล้ว" };
+}

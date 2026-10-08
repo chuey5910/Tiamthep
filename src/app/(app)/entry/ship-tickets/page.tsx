@@ -26,6 +26,11 @@ export default async function ShipTicketsPage() {
     }),
   ]);
   const blocked = data.notices.some((n) => n.startsWith("❌"));
+  // งานที่ยืนยันไปแล้วแต่ถูกลบทิ้งทีหลัง — ให้เอาตั๋วกลับมาตรวจใหม่ได้
+  const jobIds = recent.map((t) => t.jobId).filter((n): n is number => n != null);
+  const liveJobs = new Set(
+    (await prisma.job.findMany({ where: { id: { in: jobIds } }, select: { id: true } })).map((j) => j.id),
+  );
 
   return (
     <>
@@ -77,10 +82,12 @@ export default async function ShipTicketsPage() {
                     <td>{t.folderPlate}</td>
                     <td>{t.ticketDate ? formatThaiDate(t.ticketDate) : "-"}</td>
                     <td>
-                      {t.status === "ยืนยันแล้ว" ? (
+                      {t.status === "ยืนยันแล้ว" && t.jobId != null && liveJobs.has(t.jobId) ? (
                         <a className="font-bold text-emerald-700 underline" href={`/entry/jobs?edit=${t.jobId}`}>
                           ✅ งาน #{t.jobId}
                         </a>
+                      ) : t.status === "ยืนยันแล้ว" ? (
+                        <span className="font-bold text-amber-700">⚠️ งาน #{t.jobId} ถูกลบแล้ว</span>
                       ) : (
                         <span className="text-slate-500">ไม่ใช้</span>
                       )}
@@ -88,7 +95,11 @@ export default async function ShipTicketsPage() {
                     <td className="text-[12.5px] text-slate-600">
                       {t.decidedBy ?? "-"} · {formatThaiDateTime(t.decidedAt)}
                     </td>
-                    <td>{t.status === "ไม่ใช้" && canWrite(user) && <UndoUnused id={t.id} />}</td>
+                    <td>
+                      {canWrite(user) && (t.status === "ไม่ใช้" || (t.jobId != null && !liveJobs.has(t.jobId))) && (
+                        <UndoUnused id={t.id} />
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
