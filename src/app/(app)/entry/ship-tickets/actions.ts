@@ -5,7 +5,7 @@ import { requireWrite } from "@/lib/auth";
 import { buildContext, routeKey } from "@/lib/calc";
 import { parseDate, toInputDate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
-import { SHIP, pullShipTickets } from "@/lib/ship-ticket";
+import { SHIP, folderVehicle, pullShipTickets } from "@/lib/ship-ticket";
 import { nameKey } from "@/lib/ship-ticket-parse";
 
 export type ShipResult = { ok: true; message: string } | { ok: false; error: string };
@@ -39,8 +39,9 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
   const ctx = await buildContext();
   const customer = ctx.customers.find((c) => c.code.trim().toUpperCase() === SHIP.customerCode);
   if (!customer) return { ok: false, error: `❌ ไม่พบลูกค้ารหัส ${SHIP.customerCode} — เพิ่มที่หน้า ข้อมูลลูกค้า` };
-  const vehicle = ctx.vehicleByPlate.get(t.folderPlate);
-  if (!vehicle) return { ok: false, error: `❌ ไม่พบทะเบียน ${t.folderPlate} ในข้อมูลรถ` };
+  const found = folderVehicle(ctx.vehicleByPlate, t.folderPlate);
+  if (!found.vehicle) return { ok: false, error: found.error };
+  const vehicle = found.vehicle;
 
   const driverCode = input.driverCode.trim().toUpperCase();
   if (!driverCode) return { ok: false, error: "⚠️ เลือก พขร. ก่อน" };
@@ -61,8 +62,8 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
       data: {
         loadDate: date,
         unloadDate: date,
-        tripCode: `${t.folderPlate}-${toInputDate(date).split("-").reverse().join("")}`,
-        headPlate: t.folderPlate,
+        tripCode: `${vehicle.plate}-${toInputDate(date).split("-").reverse().join("")}`,
+        headPlate: vehicle.plate,
         trailerPlate: null, // รถเดี่ยว — ไม่มีหาง
         driverCode,
         customerId: customer.id,

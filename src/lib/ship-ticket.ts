@@ -125,6 +125,26 @@ export type ShipPage = {
   customerId: number | null;
 };
 
+/**
+ * ชื่อโฟลเดอร์ → รถในฐานข้อมูล
+ * ชื่อโฟลเดอร์อาจมีชื่อจังหวัดต่อท้าย (เช่น "70-1853 ลบ") — ตรงทุกตัวก่อน ไม่ตรงค่อยเทียบเฉพาะเลขทะเบียน
+ * เลขเดียวกันมีหลายคันในฐานข้อมูล = ไม่รู้ว่าคันไหน → ไม่เดา ให้แก้ชื่อโฟลเดอร์
+ */
+export function folderVehicle<V extends { plate: string }>(
+  vehicles: Map<string, V>,
+  folder: string,
+): { vehicle: V; error: null } | { vehicle: null; error: string } {
+  const name = folder.trim();
+  const exact = vehicles.get(name);
+  if (exact) return { vehicle: exact, error: null };
+  const key = plateKey(name);
+  const same = [...vehicles.values()].filter((v) => plateKey(v.plate) === key);
+  if (same.length === 1) return { vehicle: same[0], error: null };
+  if (same.length > 1)
+    return { vehicle: null, error: `❌ โฟลเดอร์ ${name} ตรงกับรถหลายคัน (${same.map((v) => v.plate).join(", ")}) — ตั้งชื่อโฟลเดอร์ให้ตรงทะเบียนในหน้า ข้อมูลรถ ทุกตัว` };
+  return { vehicle: null, error: `❌ ไม่พบทะเบียน ${name || "(ว่าง)"} ในข้อมูลรถ — ตั้งชื่อโฟลเดอร์ให้ตรงทะเบียน หรือเพิ่มรถที่หน้า ข้อมูลรถ` };
+}
+
 const fullName = (d: { firstName: string; lastName: string }) => `${d.firstName} ${d.lastName}`.trim();
 
 /**
@@ -179,9 +199,11 @@ export async function shipReview(): Promise<ShipPage> {
   const rows: ShipRow[] = tickets.map((t) => {
     const blockers: string[] = [];
     const warnings: string[] = [];
-    const plate = t.folderPlate;
-    const vehicle = ctx.vehicleByPlate.get(plate);
-    if (!vehicle) blockers.push(`❌ ไม่พบทะเบียน ${plate || "(ว่าง)"} ในข้อมูลรถ — ตั้งชื่อโฟลเดอร์ให้ตรงทะเบียน หรือเพิ่มรถที่หน้า ข้อมูลรถ`);
+    const found = folderVehicle(ctx.vehicleByPlate, t.folderPlate);
+    const vehicle = found.vehicle;
+    // ทะเบียนที่โชว์/บันทึก = ทะเบียนในฐานข้อมูล (ไม่ใช่ชื่อโฟลเดอร์ที่อาจมีชื่อจังหวัดต่อท้าย)
+    const plate = vehicle?.plate ?? t.folderPlate;
+    if (!vehicle) blockers.push(found.error ?? "❌ ไม่พบรถ");
     else if (!ctx.routeByKey.get(routeKey(SHIP.origin, SHIP.destination, vehicle.vehicleType)))
       noRoute.add(vehicle.vehicleType);
     if (t.plateOnTicket && plateKey(t.plateOnTicket) !== plateKey(plate))
