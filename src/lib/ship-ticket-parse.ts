@@ -38,7 +38,7 @@ export function normalizeOcr(text: string): string {
 }
 
 const HEADER = /ใบ\s*ชั่ง\s*น\s*้?\s*[ำา]?\s*หนัก/g;
-const TICKET_NO = /เลข\s*ที่\s*[:：.]?\s*(\d{8,12})(?!\d)/g;
+const TICKET_NO = /เลข\s*ที[่]?\s*[:：.]?\s*(\d{8,12})(?!\d)/g;
 
 /** แยกข้อความทั้งรูปเป็นทีละใบ — ใช้หัว "ใบชั่งน้ำหนัก" หรือ "เลขที่ …" เป็นจุดตัด (อันไหนเจอมากกว่า) */
 export function splitTickets(text: string): string[] {
@@ -117,7 +117,7 @@ function parseDate(t: string): Date | null {
 export function parseTicket(segment: string): ParsedTicket {
   const t = normalizeOcr(segment);
 
-  const noM = t.match(/เลข\s*ที่\s*[:：.]?\s*(\d{8,12})(?!\d)/) ?? t.match(/(?<![\d\-])(\d{10})(?![\d\-])/);
+  const noM = t.match(/เลข\s*ที[่]?\s*[:：.]?\s*(\d{8,12})(?!\d)/) ?? t.match(/(?<![\d\-])(\d{10})(?![\d\-])/);
   const plateM = t.match(/ทะเบียน\s*รถ\s*[:：]?\s*(\d{1,3})\s*-\s*(\d{3,4})/);
   const drvM = t.match(/(นางสาว|นาย|นาง|น\.ส\.)\s*([ก-๏]+)\s+([ก-๏]+)/);
 
@@ -292,6 +292,11 @@ function analyse(t: string) {
   // เลขที่ตั๋ว (ไม่ซ้ำ) ตามลำดับที่เจอในข้อความ
   const nosText: At<string>[] = [];
   for (const m of t.matchAll(TICKET_NO)) if (/^\d{10}$/.test(m[1]) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
+  // เลข 10 หลักที่ไม่มีคำว่า "เลขที่" นำหน้า (OCR อ่านคำหลุด) — ใช้เฉพาะที่ขึ้นต้น 6 หลักเหมือนเลขที่ใบอื่นในรูป
+  const prefixes = new Set(nosText.map((x) => x.v.slice(0, 6)));
+  for (const m of t.matchAll(/(?<![\d\-\/.,])(\d{10})(?![\d\-\/.,])/g))
+    if (prefixes.has(m[1].slice(0, 6)) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
+  nosText.sort((a, b) => a.at - b.at);
 
   // วัน-เวลาทั้งหมดในรูป (ไม่ซ้ำ)
   const allDt: At<Date>[] = [];
