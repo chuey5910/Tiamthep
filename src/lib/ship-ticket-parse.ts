@@ -346,9 +346,25 @@ function analyse(t: string) {
   if (nosText.length === n) {
     [...nosText.map((x) => x.v)].sort().forEach((v, k) => (nos[k] = v));
   } else if (entries && entryPos.length === n && nosText.length < n) {
-    const map = nosText.map((x, k) => ({ no: x.v, trip: entryPos[k] }));
-    const ok = map.every((a) => map.every((b) => a === b || Math.sign(Number(a.no) - Number(b.no)) === Math.sign(a.trip - b.trip)));
-    if (ok) for (const x of map) nos[x.trip] = x.no;
+    // ลองทุกวิธีจับคู่ที่เป็นไปได้ แล้วใช้ก็ต่อเมื่อมี "ทางเดียว" ที่ผ่านทั้งสองข้อ:
+    //   – เลขน้อย→มาก ต้องตรงกับเที่ยวเร็ว→ช้า (รถคันเดียว ท่าเรือออกเลขเรียงกัน)
+    //   – เวลาเข้าของใบนั้นต้องเป็น 1 ใน 2 เวลาเข้าแรกที่อยู่ "หลัง" เลขที่ในข้อความ
+    //     (เลขที่อยู่บนสุดของตั๋ว · แถวหนึ่งมีตั๋วไม่เกิน 2 ใบ ซ้าย-ขวา)
+    const entryAtOf = allDt.filter((d) => entries!.some((e) => e.getTime() === d.v.getTime()));
+    const tripAt = (trip: number) => entryAtOf.find((d) => d.v.getTime() === entries![trip].getTime())!.at;
+    const sortedNos = [...nosText].sort((a, b) => Number(a.v) - Number(b.v));
+    const allowed = (no: At<string>, trip: number) => {
+      const after = entryAtOf.filter((d) => d.at > no.at).sort((a, b) => a.at - b.at).slice(0, 2);
+      return after.some((d) => d.at === tripAt(trip));
+    };
+    const found: number[][] = [];
+    const pick = (i: number, from: number, acc: number[]) => {
+      if (found.length > 1) return;
+      if (i === sortedNos.length) return void found.push([...acc]);
+      for (let trip = from; trip < n; trip++) if (allowed(sortedNos[i], trip)) pick(i + 1, trip + 1, [...acc, trip]);
+    };
+    pick(0, 0, []);
+    if (found.length === 1) found[0].forEach((trip, i) => (nos[trip] = sortedNos[i].v));
   }
 
   // ชุดน้ำหนัก: แบบมีป้ายก่อน แล้วเติมด้วยแบบไม่พึ่งป้าย (ตัวเลขที่ใช้แล้วไม่หยิบซ้ำ)

@@ -45,9 +45,10 @@ export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: 
  * รุ่นของตัวอ่าน — เพิ่มเลขทุกครั้งที่ปรับวิธีอ่าน (ship-ticket-parse.ts)
  *   1 = ตัดทีละใบตาม "เลขที่" (ตั๋ว 2×2 อ่านสลับซ้าย-ขวา น้ำหนักผ่านแค่ ~9%)
  *   2 = อ่านทั้งรูป จัดเที่ยวจากเวลา (รูปจริง 226 รูป: น้ำหนักผ่าน ~92% · วันที่ 100%)
+ *   3 = เลขที่ตั๋วที่อ่านได้ไม่ครบ จับคู่เมื่อมีทางเดียวที่ลงตัว (ไม่ลงตัว = ว่าง ไม่เดา)
  * หลังจากนั้นตัวอ่านที่สอง (Tesseract) อ่านซ้ำเบื้องหลัง แล้วแทนที่ด้วยผลรวม 2 ตัวอ่าน (ShipPhoto.localStatus)
  */
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 export async function ingestPhoto(p: ShipPhoto): Promise<number> {
   // เก็บรูป + ข้อความของ Google ไว้เสมอ — ตัวอ่านที่สอง (Tesseract) จะมาอ่านซ้ำทีหลังจากคิวนี้
@@ -356,6 +357,11 @@ export async function shipReview(): Promise<ShipPage> {
     drivers.filter((d) => looseCount.get(looseName(fullName(d))) === 1).map((d) => [looseName(fullName(d)), d.code]),
   );
   const looseOfCode = new Map(drivers.map((d) => [d.code, looseName(fullName(d))]));
+  /** พขร. ที่ชื่อต่างจากชื่อในตั๋วไม่เกิน 1 ตัวอักษร — ต้องมีคนเดียวเท่านั้น */
+  const nearDriver = (loose: string): string | null => {
+    const near = drivers.filter((d) => editDistance(loose, looseOfCode.get(d.code) ?? "") <= 1);
+    return near.length === 1 ? near[0].code : null;
+  };
   const aliasByKey = new Map(aliases.map((a) => [a.raw, a.value]));
   const driverName = new Map(drivers.map((d) => [d.code, fullName(d)]));
 
@@ -408,6 +414,10 @@ export async function shipReview(): Promise<ShipPage> {
       driverNote = `⚠️ ชื่อในตั๋ว «${t.driverNameOnTicket}» ไม่ใช่คนในตารางจับคู่รถ (${driverName.get(paired) ?? paired}) — เลือกตามตั๋วไว้ให้ ตรวจแล้วกดยืนยัน`;
     } else if (paired) {
       driverNote = `⚠️ ชื่อในตั๋ว «${t.driverNameOnTicket}» ไม่ตรงตารางจับคู่รถ (${driverName.get(paired) ?? paired})`;
+    } else if (loose && nearDriver(loose)) {
+      // ชื่อในตั๋วใกล้เคียง พขร. ในระบบคนเดียว (ต่าง 1 ตัวอักษร) — เลือกไว้ให้ แต่ต้องให้คนดูก่อน
+      driverCode = nearDriver(loose);
+      driverNote = `⚠️ ชื่อในตั๋ว «${t.driverNameOnTicket}» ใกล้เคียง ${driverName.get(driverCode!) ?? driverCode} — ตรวจแล้วกดยืนยัน (ตารางจับคู่ไม่มีรถคันนี้)`;
     } else {
       driverNote = key
         ? `⚠️ ไม่รู้จักชื่อในตั๋ว «${t.driverNameOnTicket}» และตารางจับคู่ไม่มีรถคันนี้`
