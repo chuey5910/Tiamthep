@@ -15,6 +15,7 @@ export function SearchSelect({
   placeholder = "— เลือก —",
   invalid = false,
   disabled = false,
+  className = "",
 }: {
   options: SearchOption[];
   value: string;
@@ -23,6 +24,8 @@ export function SearchSelect({
   /** ยังไม่ได้เลือกแต่ต้องเลือก → กรอบแดง */
   invalid?: boolean;
   disabled?: boolean;
+  /** เช่น ให้กว้างเต็มช่องตาราง */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -53,7 +56,7 @@ export function SearchSelect({
   };
 
   return (
-    <div ref={box} className="relative inline-block min-w-[10rem] text-left">
+    <div ref={box} className={`relative inline-block min-w-[10rem] text-left ${className}`}>
       <button
         type="button"
         disabled={disabled}

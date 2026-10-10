@@ -284,6 +284,26 @@ export function folderVehicle<V extends { plate: string }>(
 
 const fullName = (d: { firstName: string; lastName: string }) => `${d.firstName} ${d.lastName}`.trim();
 
+/** ชื่อแบบหลวม: ตัดคำนำหน้า/ช่องว่าง + ตัดวรรณยุกต์ + ำ → า (OCR สับสนบ่อย) */
+export function looseName(name: string): string {
+  return nameKey(name).replace(/[\u0e48-\u0e4c\u0e4d]/g, "").replace(/\u0e33/g, "\u0e32");
+}
+
+/** จำนวนตัวอักษรที่ต้องแก้ให้สองคำเหมือนกัน (Levenshtein) */
+function editDistance(a: string, b: string): number {
+  const dp = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return dp[b.length];
+}
+
 /**
  * พขร. ประจำรถ ณ วันที่ในตั๋ว — งานตั๋วเรือวิ่งรถเดี่ยว (ไม่มีหาง)
  * คู่รถเดี่ยวก่อน ไม่มีค่อยใช้คู่ล่าสุดของหัวคันนั้น (พขร. ผูกกับหัว ไม่ใช่หาง)
@@ -328,6 +348,14 @@ export async function shipReview(): Promise<ShipPage> {
   ]);
 
   const driverByKey = new Map(drivers.map((d) => [nameKey(fullName(d)), d.code]));
+  // เทียบแบบหลวม — OCR ชอบอ่าน "อำมร" เป็น "อ่ามร" (ำ ↔ ่า) และวรรณยุกต์หลุด/เกิน
+  // ใช้เฉพาะเมื่อได้คนเดียว (ชื่อหลวมซ้ำกันหลายคน = ไม่ใช้ ไม่เดา)
+  const looseCount = new Map<string, number>();
+  for (const d of drivers) looseCount.set(looseName(fullName(d)), (looseCount.get(looseName(fullName(d))) ?? 0) + 1);
+  const driverByLoose = new Map(
+    drivers.filter((d) => looseCount.get(looseName(fullName(d))) === 1).map((d) => [looseName(fullName(d)), d.code]),
+  );
+  const looseOfCode = new Map(drivers.map((d) => [d.code, looseName(fullName(d))]));
   const aliasByKey = new Map(aliases.map((a) => [a.raw, a.value]));
   const driverName = new Map(drivers.map((d) => [d.code, fullName(d)]));
 
@@ -363,7 +391,10 @@ export async function shipReview(): Promise<ShipPage> {
     // พขร.: ตารางจับคู่รถ ณ วันที่ในตั๋ว เทียบกับชื่อท้ายตั๋ว (หรือชื่อที่คนเคยเลือกให้ไว้)
     const paired = date && vehicle ? pairedDriver(ctx.pairings, plate, date) : null;
     const key = t.driverNameOnTicket ? nameKey(t.driverNameOnTicket) : null;
-    const fromTicket = key ? (aliasByKey.get(key) ?? driverByKey.get(key) ?? null) : null;
+    const loose = t.driverNameOnTicket ? looseName(t.driverNameOnTicket) : null;
+    let fromTicket = key ? (aliasByKey.get(key) ?? driverByKey.get(key) ?? (loose ? driverByLoose.get(loose) : undefined) ?? null) : null;
+    // ชื่อในตั๋วต่างจากคนในตารางจับคู่แค่ 1 ตัวอักษร (หลังเทียบแบบหลวม) = OCR อ่านเพี้ยน ถือว่าคนเดียวกัน
+    if (paired && loose && !fromTicket && editDistance(loose, looseOfCode.get(paired) ?? "") <= 1) fromTicket = paired;
     let driverCode: string | null = null;
     let driverNote: string | null = null;
     if (paired && (!key || fromTicket === paired)) {

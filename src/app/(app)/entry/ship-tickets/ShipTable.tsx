@@ -92,16 +92,28 @@ export function ShipTable({
         {msg && <span className={`text-[13px] font-bold ${msg.ok ? "text-emerald-700" : "text-red-700"}`}>{msg.text}</span>}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="tbl [&_td]:whitespace-nowrap [&_td]:!px-2 [&_th]:!px-2">
+      {/* พอดีความกว้างจอเสมอ (ไม่มีแถบเลื่อนข้าง) — ตัวอักษรย่อ/ขยายตามความกว้าง ดู .ship-fit ใน globals.css */}
+      <div className="ship-fit">
+        <table className="tbl">
+          <colgroup>
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "8.5%" }} />
+            <col style={{ width: "8.5%" }} />
+            <col style={{ width: canEdit ? "15%" : "17%" }} />
+            <col style={{ width: canEdit ? "19%" : "28%" }} />
+            {canEdit && <col style={{ width: "11%" }} />}
+          </colgroup>
           <thead>
             <tr>
               <th>รูป</th>
               <th>เลขที่ตั๋ว</th>
               <th>ทะเบียน</th>
               <th>วันที่</th>
-              <th>น้ำหนักต้นทาง (ตัน)</th>
-              <th>น้ำหนักปลายทาง (ตัน)</th>
+              <th>น้ำหนักต้นทาง<br />(ตัน)</th>
+              <th>น้ำหนักปลายทาง<br />(ตัน)</th>
               <th>พขร.</th>
               <th>สถานะ</th>
               {canEdit && <th></th>}
@@ -115,7 +127,7 @@ export function ShipTable({
               return (
                 <tr key={r.id}>
                   <td>
-                    <a href={r.photoUrl} target="_blank" rel="noopener" className="btn btn-ghost px-2 py-1 text-[12px]" title={r.fileName}>
+                    <a href={r.photoUrl} target="_blank" rel="noopener" className="btn btn-ghost" title={r.fileName}>
                       {/* ไม่บอก "ใบที่" — ลำดับในระบบเรียงตามเวลา ไม่ตรงตำแหน่งในรูป ดูจากเลขที่ตั๋วแทน */}
                       ดูรูป
                     </a>
@@ -127,7 +139,6 @@ export function ShipTable({
                       <Fix>
                         <input
                           className={`inp text-center ${e.ticketNo ? "" : "border-red-400"}`}
-                          style={{ width: "8.5rem" }}
                           inputMode="numeric"
                           value={e.ticketNo}
                           onChange={(ev) => set(r, { ticketNo: ev.target.value.replace(/\D/g, "") })}
@@ -135,7 +146,7 @@ export function ShipTable({
                       </Fix>
                     )}
                   </td>
-                  <td>{r.plate}</td>
+                  <td className="nw">{r.plate}</td>
                   <td>
                     {r.dateLabel ? (
                       r.dateLabel
@@ -144,7 +155,6 @@ export function ShipTable({
                         <input
                           type="date"
                           className={`inp text-center ${e.date ? "" : "border-red-400"}`}
-                          style={{ width: "9rem" }}
                           value={e.date}
                           onChange={(ev) => set(r, { date: ev.target.value })}
                         />
@@ -158,7 +168,6 @@ export function ShipTable({
                       <Fix>
                         <input
                           className={`inp text-center ${e.net ? "" : "border-red-400"}`}
-                          style={{ width: "7rem" }}
                           inputMode="numeric"
                           title="กรอกเป็นกิโลกรัมตามที่พิมพ์ในตั๋ว เช่น 21210"
                           placeholder={r.weightHint ? `${r.weightHint.toLocaleString("th-TH")} ?` : "กก. ตามตั๋ว"}
@@ -178,9 +187,10 @@ export function ShipTable({
                       placeholder="⚠️ เลือก พขร."
                       invalid={!e.driver}
                       disabled={!canEdit}
+                      className="w-full !min-w-0"
                     />
                   </td>
-                  <td className="min-w-[11rem] max-w-[16rem] !whitespace-normal text-[12.5px] leading-relaxed">
+                  <td className="ship-status">
                     {r.blockers.map((b) => (
                       <div key={b} className="text-red-700">{b}</div>
                     ))}
@@ -206,7 +216,7 @@ export function ShipTable({
                     <td>
                       <button
                         type="button"
-                        className={`btn px-3 py-1 text-[12px] ${ok ? "btn-primary" : "btn-ghost"}`}
+                        className={`btn w-full ${ok ? "btn-primary" : "btn-ghost"}`}
                         disabled={pending || !ok}
                         onClick={() => confirmRow(r)}
                       >
@@ -214,7 +224,7 @@ export function ShipTable({
                       </button>
                       <button
                         type="button"
-                        className="mt-1 block w-full text-[11.5px] text-slate-500 underline"
+                        className="ship-small mt-1 block w-full text-slate-500 underline"
                         title="รูปซ้ำ / ไม่ใช่ตั๋ว — เอาออกจากหน้านี้ (กลับมาตรวจใหม่ได้)"
                         disabled={pending}
                         onClick={() => run(() => setShipTicketUnused(r.id, true))}
@@ -242,8 +252,8 @@ const tons = (kg: number) => (kg / 1000).toLocaleString("th-TH", { minimumFracti
 /** ช่องที่อ่านไม่ชัด: ป้ายแดง + ช่องกรอก */
 function Fix({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex flex-col items-center gap-1">
-      <span className="whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-[12px] font-bold text-red-700">❌ อ่านไม่ชัด</span>
+    <span className="flex w-full flex-col items-center gap-1">
+      <span className="ship-small whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 font-bold text-red-700">❌ อ่านไม่ชัด</span>
       {children}
     </span>
   );
