@@ -170,6 +170,8 @@ export async function downloadDriveFile(keyFile: string, fileId: string): Promis
   const token = await getAccessToken(keyFile, "https://www.googleapis.com/auth/drive.readonly");
   const res = await fetch(`${FILES_API}/${encodeURIComponent(fileId)}?alt=media&${SHARED}`, {
     headers: { Authorization: `Bearer ${token}` },
+    // รูปเดียวไม่ควรนานเกินนาที — เน็ตค้างแล้วคิวอ่านรูปจะไม่ติดอยู่ที่รูปนี้ตลอดไป
+    signal: AbortSignal.timeout(60_000),
   });
   if (res.status === 404 || res.status === 403) {
     throw new Error("NO_ACCESS");

@@ -105,12 +105,14 @@ async function createTickets(p: ShipPhoto, parsed: MergedTicket[]): Promise<numb
 // ─────────────────────────────────────────────────────────────
 
 let localRunning = false;
+let localStartedAt = 0;
 
 /** อ่านรูปที่ค้างในคิวจนหมด (หรือครบเวลา) — เรียกซ้ำระหว่างกำลังทำอยู่ จะไม่เริ่มซ้อน */
 export async function runLocalOcrQueue(
   opts: { maxMs?: number; fetchImage?: (fileId: string) => Promise<Buffer> } = {},
 ): Promise<{ done: number; error: string | null }> {
-  if (localRunning) return { done: 0, error: null };
+  // กำลังทำอยู่ → ไม่เริ่มซ้อน (เว้นแต่ค้างเกิน 10 นาที ถือว่ารอบก่อนพังกลางทาง)
+  if (localRunning && Date.now() - localStartedAt < 10 * 60 * 1000) return { done: 0, error: null };
   const maxMs = opts.maxMs ?? 4 * 60 * 1000;
   let fetchImage = opts.fetchImage;
   if (!fetchImage) {
@@ -119,6 +121,7 @@ export async function runLocalOcrQueue(
     fetchImage = (fileId) => downloadDriveFile(cfg.keyFile, fileId);
   }
   localRunning = true;
+  localStartedAt = Date.now();
   const started = Date.now();
   let done = 0;
   try {
