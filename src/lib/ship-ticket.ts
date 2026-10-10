@@ -181,6 +181,8 @@ async function createTickets(p: ShipPhoto, parsed: MergedTicket[]): Promise<numb
 
 /** ข้อความต้องคงเดิม — ใช้หาแถวที่เคยติดเรื่องสิทธิ์ เพื่อคืนเข้าคิวเมื่อแชร์แล้ว */
 const NO_ACCESS_MSG = "ระบบเปิดรูปใน Google Drive ไม่ได้ — แชร์โฟลเดอร์ «ตั๋วเรือ» ให้บัญชีระบบ (ผู้มีสิทธิ์อ่าน)";
+const DRIVE_API_MSG =
+  "ระบบเปิดรูปใน Google Drive ไม่ได้ — ยังไม่ได้เปิด Google Drive API ในโปรเจกต์ Google Cloud ของบัญชีระบบ (หน้า APIs & Services › Library › Google Drive API › เปิดใช้)";
 
 let localRunning = false;
 let localStartedAt = 0;
@@ -269,16 +271,17 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
     await mark(replaced ? "เสร็จ" : "ข้าม", null);
     // เปิด Drive ได้แล้ว → รูปที่เคยติดเรื่องสิทธิ์ กลับเข้าคิวทันที ไม่ต้องรอรอบชั่วโมง
     await prisma.shipPhoto.updateMany({
-      where: { localStatus: "ผิดพลาด", localError: NO_ACCESS_MSG },
+      where: { localStatus: "ผิดพลาด", localError: { in: [NO_ACCESS_MSG, DRIVE_API_MSG] } },
       data: { localStatus: "รอ", localError: null, localTries: 0 },
     });
     return null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (msg === "NO_ACCESS") {
-      // ทุกรูปจะติดเหมือนกัน — หยุดรอบนี้เลย ลองใหม่รอบหน้า (ไม่นับครั้ง รูปจึงไม่หมดสิทธิ์ลองระหว่างรอแชร์)
-      await mark("ผิดพลาด", NO_ACCESS_MSG, false);
-      return NO_ACCESS_MSG;
+    if (msg === "NO_ACCESS" || msg === "DRIVE_API_OFF") {
+      // ทุกรูปจะติดเหมือนกัน — หยุดรอบนี้เลย ลองใหม่รอบหน้า (ไม่นับครั้ง รูปจึงไม่หมดสิทธิ์ลองระหว่างรอแก้)
+      const why = msg === "NO_ACCESS" ? NO_ACCESS_MSG : DRIVE_API_MSG;
+      await mark("ผิดพลาด", why, false);
+      return why;
     }
     if (/ENOENT/.test(msg) && /tesseract/i.test(msg)) {
       await mark("ผิดพลาด", "เครื่องนี้ยังไม่ได้ลงตัวอ่าน Tesseract");

@@ -174,6 +174,9 @@ export async function downloadDriveFile(keyFile: string, fileId: string): Promis
     signal: AbortSignal.timeout(60_000),
   });
   if (res.status === 404 || res.status === 403) {
+    const body = await res.text();
+    // 403 มีได้ 2 สาเหตุ: ยังไม่ได้เปิด Drive API ในโปรเจกต์ของบัญชีระบบ / ยังไม่ได้แชร์โฟลเดอร์ — แก้คนละที่
+    if (/accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(body)) throw new Error("DRIVE_API_OFF");
     throw new Error("NO_ACCESS");
   }
   if (!res.ok) throw new Error(`Google Drive ตอบ ${res.status}: ${(await res.text()).slice(0, 200)}`);
