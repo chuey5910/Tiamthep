@@ -207,9 +207,16 @@ export async function runLocalOcrQueue(
   try {
     while (Date.now() - started < maxMs) {
       const retryAfter = new Date(Date.now() - 60 * 60 * 1000);
+      // ติดเรื่องสิทธิ์ Drive (ไม่ใช่ปัญหาของรูป) → ลองใหม่ทุก 5 นาที ไม่จำกัดครั้ง แก้สิทธิ์แล้วอ่านต่อได้เกือบทันที
+      // (รอบละ 1 รูป — ไม่ผ่านก็หยุดรอบ จึงไม่เปลือง)
+      const accessRetry = new Date(Date.now() - 5 * 60 * 1000);
       const photo = await prisma.shipPhoto.findFirst({
         where: {
-          OR: [{ localStatus: "รอ" }, { localStatus: "ผิดพลาด", localTries: { lt: 5 }, localAt: { lt: retryAfter } }],
+          OR: [
+            { localStatus: "รอ" },
+            { localStatus: "ผิดพลาด", localError: { in: [NO_ACCESS_MSG, DRIVE_API_MSG] }, localAt: { lt: accessRetry } },
+            { localStatus: "ผิดพลาด", localTries: { lt: 5 }, localAt: { lt: retryAfter } },
+          ],
         },
         orderBy: { createdAt: "asc" },
       });
@@ -299,9 +306,18 @@ export async function localOcrProgress() {
   const [waiting, failed, sampleError] = await Promise.all([
     prisma.shipPhoto.count({ where: { localStatus: "รอ" } }),
     prisma.shipPhoto.count({ where: { localStatus: "ผิดพลาด" } }),
-    prisma.shipPhoto.findFirst({ where: { localStatus: "ผิดพลาด" }, orderBy: { localAt: "desc" }, select: { localError: true } }),
+    prisma.shipPhoto.findFirst({ where: { localStatus: "ผิดพลาด" }, orderBy: { localAt: "desc" }, select: { localError: true, localAt: true } }),
   ]);
-  return { waiting, failed, error: sampleError?.localError ?? null };
+  const error = sampleError?.localError ?? null;
+  return {
+    waiting,
+    failed,
+    error,
+    /** ลองล่าสุดเมื่อไร — ให้เห็นว่าข้อความนี้ยังเป็นของตอนนี้ ไม่ใช่ค้างจากก่อนแก้ */
+    triedAt: sampleError?.localAt ?? null,
+    /** ติดเรื่องสิทธิ์ Drive = ลองใหม่ทุก 5 นาที · อื่นๆ = ทุกชั่วโมง */
+    retryEvery: error === NO_ACCESS_MSG || error === DRIVE_API_MSG ? "5 นาที" : "ชั่วโมง",
+  };
 }
 
 /** ดึงผล OCR ใหม่จากแท็บ «ตั๋วเรือ» */

@@ -62,7 +62,7 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
       )}
       {local.failed > 0 && (
         <p className="mb-3 text-[13px] font-bold text-amber-700">
-          ⚠️ ตัวอ่านที่สองอ่านไม่ได้ {local.failed} รูป — {local.error} (ระบบลองใหม่เองทุกชั่วโมง)
+          ⚠️ ตัวอ่านที่สองอ่านไม่ได้ {local.failed} รูป — {local.error} (ลองล่าสุด {local.triedAt ? formatThaiDateTime(local.triedAt) : "-"} · ระบบลองใหม่เองทุก {local.retryEvery})
         </p>
       )}
       {data.notices.map((n) => (
