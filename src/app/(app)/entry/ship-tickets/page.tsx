@@ -2,6 +2,7 @@ import { Card, Empty, Formula, PageHeader } from "@/components/ui";
 import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
+import type { SearchParams } from "@/lib/params";
 import { canWrite } from "@/lib/roles";
 import { SHIP_SETTINGS, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview } from "@/lib/ship-ticket";
 import { ShipTable } from "./ShipTable";
@@ -13,21 +14,24 @@ export const dynamic = "force-dynamic";
  * ตั๋วเรือรอตรวจ — ระบบอ่านรูปตั๋วจาก Google Drive ให้แล้ว คนตรวจทีละแถวแล้วกดยืนยันถึงจะเป็นงาน
  * ทุกครั้งที่เปิดหน้า ดึงรูปใหม่จากชีตให้เอง (ไม่ต้องกดปุ่ม)
  */
-export default async function ShipTicketsPage() {
+export default async function ShipTicketsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const sp = await searchParams;
   await requireAuth();
   const user = await getCurrentUser();
   const pulled = await pullShipTickets();
   // ตัวอ่านที่สองทำงานเบื้องหลัง ไม่รอ — เปิดหน้าใหม่ภายหลังจะเห็นผลที่อ่านเสร็จแล้ว
   runLocalOcrQueue().catch(() => {});
   const local = await localOcrProgress();
-  const [data, recent] = await Promise.all([
-    shipReview(),
-    prisma.shipTicket.findMany({
-      where: { status: { not: "รอตรวจ" } },
-      orderBy: { decidedAt: "desc" },
-      take: 30,
-    }),
-  ]);
+  const data = await shipReview();
+  // ตรวจทีละเส้นทาง — เส้นทางเดียวบนจอ ไม่ปนกัน (ระบบยังอ่านรูปทุกเส้นทางเบื้องหลัง สลับไปแล้วพร้อมตรวจทันที)
+  const want = typeof sp.route === "string" ? sp.route : null;
+  const route = data.routes.find((r) => r.folder === want) ?? data.routes[0] ?? null;
+  const rows = route ? data.rows.filter((x) => x.routeFolder === route.folder) : [];
+  const recent = await prisma.shipTicket.findMany({
+    where: { status: { not: "รอตรวจ" }, ...(route ? { routeFolder: route.folder } : {}) },
+    orderBy: { decidedAt: "desc" },
+    take: 30,
+  });
   // งานที่ยืนยันไปแล้วแต่ถูกลบทิ้งทีหลัง — ให้เอาตั๋วกลับมาตรวจใหม่ได้
   const jobIds = recent.map((t) => t.jobId).filter((n): n is number => n != null);
   const liveJobs = new Set(
@@ -67,37 +71,52 @@ export default async function ShipTicketsPage() {
         </p>
       ))}
 
-      {data.rows.length === 0 ? (
+      {data.routes.length > 1 && (
+        <div className="no-print mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-[14px] font-bold text-slate-700">เลือกเส้นทางที่จะตรวจ:</span>
+          {data.routes.map((r) => {
+            const n = data.rows.filter((x) => x.routeFolder === r.folder).length;
+            const on = r.folder === route?.folder;
+            return (
+              <a
+                key={r.folder}
+                href={`?route=${encodeURIComponent(r.folder)}`}
+                className={`btn ${on ? "btn-primary" : "btn-ghost"}`}
+                title={`โฟลเดอร์ «${r.folder}»`}
+              >
+                {r.problem ? "❌ " : ""}
+                {r.origin ?? r.folder} → {r.destination ?? "❓"} ({n})
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      {!route ? (
         <Card title="รอตรวจ 0 ใบ" className="mb-4" bodyClass="p-3">
           <Empty>✅ ไม่มีตั๋วรอตรวจ — ถ่ายรูปตั๋วเก็บเข้าโฟลเดอร์ทะเบียนรถใน Drive แล้วเปิดหน้านี้ใหม่</Empty>
         </Card>
       ) : (
-        // 1 กล่องต่อ 1 โฟลเดอร์เส้นทาง — หัวกล่องบอกเลยว่าตั๋วกลุ่มนี้จะเป็นงาน ต้นทาง → ปลายทาง ของลูกค้าไหน
-        data.routes.map((r, i) => {
-          const rows = data.rows.filter((x) => x.routeFolder === r.folder);
-          return (
-            <Card
-              key={r.folder}
-              title={
-                <>
-                  {r.origin ?? "❓ ต้นทาง"} → {r.destination ?? "❓ ปลายทาง"} · ลูกค้า {r.customer ?? "❓"}
-                  <span className="ml-2 text-[13px] font-normal text-slate-500">
-                    รอตรวจ {rows.length} ใบ · โฟลเดอร์ «{r.folder}» · {r.format}
-                  </span>
-                </>
-              }
-              className="mb-4"
-              bodyClass="p-3"
-            >
-              {r.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{r.problem}</p>}
-              <ShipTable rows={rows} drivers={data.drivers} canEdit={canWrite(user)} showRefresh={i === 0} />
-            </Card>
-          );
-        })
+        // หัวกล่องบอกเลยว่าตั๋วชุดนี้จะเป็นงาน ต้นทาง → ปลายทาง ของลูกค้าไหน
+        <Card
+          title={
+            <>
+              {route.origin ?? "❓ ต้นทาง"} → {route.destination ?? "❓ ปลายทาง"} · ลูกค้า {route.customer ?? "❓"}
+              <span className="ml-2 text-[13px] font-normal text-slate-500">
+                รอตรวจ {rows.length} ใบ · โฟลเดอร์ «{route.folder}» · {route.format}
+              </span>
+            </>
+          }
+          className="mb-4"
+          bodyClass="p-3"
+        >
+          {route.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{route.problem}</p>}
+          <ShipTable rows={rows} drivers={data.drivers} canEdit={canWrite(user)} />
+        </Card>
       )}
 
       {recent.length > 0 && (
-        <Card title="ตรวจแล้วล่าสุด" bodyClass="p-0">
+        <Card title={`ตรวจแล้วล่าสุด${data.routes.length > 1 && route ? ` · ${route.origin ?? route.folder} → ${route.destination ?? "❓"}` : ""}`} bodyClass="p-0">
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead>

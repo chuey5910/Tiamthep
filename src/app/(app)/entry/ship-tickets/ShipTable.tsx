@@ -16,13 +16,11 @@ export function ShipTable({
   rows,
   drivers,
   canEdit,
-  showRefresh,
 }: {
+  /** ตั๋วของเส้นทางเดียว — ปุ่มยืนยันทุกแถวจึงไม่ข้ามไปเส้นทางอื่น */
   rows: ShipRow[];
   drivers: { code: string; name: string }[];
   canEdit: boolean;
-  /** ปุ่ม 🔄 ดึงรูปใหม่ — โชว์กล่องแรกกล่องเดียว (ดึงทุกเส้นทางพร้อมกัน) */
-  showRefresh: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -83,7 +81,7 @@ export function ShipTable({
             ✅ ยืนยันทุกแถวที่ไม่มีตัวแดง ({clean.length})
           </button>
         )}
-        {canEdit && showRefresh && (
+        {canEdit && (
           <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => run(refreshShipTickets)}>
             🔄 ดึงรูปใหม่
           </button>
