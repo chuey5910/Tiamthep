@@ -79,6 +79,7 @@ export const NAV: NavGroup[] = [
       { href: "/settings/fuel-basis", icon: "📐", label: "เกณฑ์ราคาน้ำมันลูกค้า" },
       { href: "/settings/bands", icon: "📊", label: "ช่วงราคาน้ำมัน" },
       { href: "/settings/lookups", icon: "📋", label: "รายการตัวเลือก" },
+      { href: "/settings/ship-routes", icon: "🚢", label: "ตั๋วเรือ (โฟลเดอร์เส้นทาง)" },
     ],
   },
   {

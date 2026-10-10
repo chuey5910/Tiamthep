@@ -1,15 +1,16 @@
 /**
- * ตั๋วเรือรอตรวจ — งานขนเกลือจากท่าเรือศรีราชาฮาร์เบอร์ของลูกค้า BM
+ * ตั๋วเรือรอตรวจ — รองรับหลายเส้นทาง / หลายแบบตั๋ว
  *
  * ทางเดินของข้อมูล:
  *   1. คนขับ/ออฟฟิศถ่ายรูปตั๋ว (1 รูปได้หลายใบ) เก็บใน Google Drive
- *      โฟลเดอร์ «ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์» / <ทะเบียนรถ> / รูป
- *   2. Apps Script (line-bot/Code.gs → scanShipTickets) อ่านรูปใหม่ด้วย OCR ของ Google
+ *      โฟลเดอร์ «ตั๋วเรือ» / <ต้นทาง - ปลายทาง> / <ทะเบียนรถ> / รูป
+ *   2. Apps Script (line-bot/Code.gs → scanShipTickets) อ่านรูปใหม่ทุกโฟลเดอร์เส้นทางด้วย OCR ของ Google
  *      แล้วเขียนข้อความลงแท็บ «ตั๋วเรือ» ในชีตสั่งงาน (ทำในบัญชีเจ้าของ จึงใช้ OCR ฟรีของ Drive ได้)
- *   3. เว็บดึงแท็บนั้นมาแยกเป็นทีละใบ (ship-ticket-parse.ts) เก็บเป็น ShipTicket «รอตรวจ»
+ *   3. เว็บดึงแท็บนั้นมาแยกเป็นทีละใบ (ship-ticket-parse.ts ตามแบบตั๋วของเส้นทาง) เก็บเป็น ShipTicket «รอตรวจ»
  *   4. คนตรวจที่หน้า บันทึกประจำวัน › ตั๋วเรือรอตรวจ แล้วกดยืนยัน → กลายเป็นงาน (Job)
  *
- * ค่าที่ระบบรู้อยู่แล้วไม่อ่านจากรูป: ทะเบียน = ชื่อโฟลเดอร์ · ลูกค้า/ต้นทาง/ปลายทาง ตายตัว
+ * ค่าที่ระบบรู้อยู่แล้วไม่อ่านจากรูป: ทะเบียน = ชื่อโฟลเดอร์ทะเบียน
+ * · ต้นทาง/ปลายทาง/ลูกค้า/แบบตั๋ว = ค่าตั้งของโฟลเดอร์เส้นทาง (ShipRoute · หน้า ตั้งค่า › ตั๋วเรือ)
  * · พขร. จากตารางจับคู่รถ (ชื่อในตั๋วไว้เทียบ ไม่ตรง = ให้คนเลือก)
  * น้ำหนักปลายทาง = น้ำหนักต้นทาง ตามที่เจ้าของกำหนด
  */
@@ -19,26 +20,92 @@ import { formatThaiDate, toInputDate } from "./date";
 import { writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ShipPhoto as ShipPhotoRow } from "@prisma/client";
+import type { ShipPhoto as ShipPhotoRow, ShipRoute } from "@prisma/client";
 import { downloadDriveFile } from "./google-drive";
 import { readValues, sheetConfig } from "./google-sheets";
 import { readPhotoLocally } from "./ship-ocr-local";
 import { mergeReaders, type MergedTicket } from "./ship-ticket-merge";
+import { formatOf, validTicketNo, type TicketFormat } from "./ship-ticket-formats";
 import { nameKey, parseTicketPhoto, plateKey, weightVerified } from "./ship-ticket-parse";
 import { prisma } from "./prisma";
 
-export const SHIP = {
-  /** แท็บในชีตสั่งงานที่ Apps Script เขียนผล OCR ลงไว้ — คอลัมน์ต้องตรงกับ Code.gs (SHIP_TICKET_HEADER) */
-  tab: "ตั๋วเรือ",
-  customerCode: "BM",
-  origin: "ท่าเรือศรีราชาฮาร์เบอร์",
-  destination: "โกดัง ท่าเรือศรีราชาฮาร์เบอร์",
-} as const;
+/** แท็บในชีตสั่งงานที่ Apps Script เขียนผล OCR ลงไว้ — คอลัมน์ต้องตรงกับ Code.gs (SHIP_HEADER) */
+export const SHIP_TAB = "ตั๋วเรือ";
+/** โฟลเดอร์เส้นทางเดียวก่อนมีหลายเส้นทาง — แถวเก่าในชีตที่ยังไม่มีคอลัมน์ G ถือว่ามาจากโฟลเดอร์นี้ */
+export const LEGACY_ROUTE_FOLDER = "ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์";
+/** หน้าที่ตั้งค่าโฟลเดอร์เส้นทาง — ใช้ในข้อความบอกว่าต้องไปแก้ที่ไหน */
+export const SHIP_SETTINGS = "ตั้งค่า › ตั๋วเรือ (โฟลเดอร์เส้นทาง)";
 
-/** คอลัมน์ในแท็บ «ตั๋วเรือ»: เวลา · ทะเบียน(ชื่อโฟลเดอร์) · fileId · ชื่อไฟล์ · ลิงก์รูป · ข้อความ OCR */
-const COL = { plate: 1, fileId: 2, fileName: 3, url: 4, ocr: 5 };
+/** คอลัมน์ในแท็บ «ตั๋วเรือ»: เวลา · ทะเบียน(ชื่อโฟลเดอร์) · fileId · ชื่อไฟล์ · ลิงก์รูป · ข้อความ OCR · เส้นทาง(ชื่อโฟลเดอร์) */
+const COL = { plate: 1, fileId: 2, fileName: 3, url: 4, ocr: 5, route: 6 };
 
-export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: string; ocr: string };
+export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: string; ocr: string; route: string };
+
+// ─────────────────────────────────────────────────────────────
+// โฟลเดอร์เส้นทาง — 1 โฟลเดอร์ = ต้นทาง/ปลายทาง/ลูกค้า/แบบตั๋ว ชุดหนึ่ง
+// ─────────────────────────────────────────────────────────────
+
+const squash = (s: string) => s.replace(/\s+/g, "");
+
+/**
+ * ชื่อโฟลเดอร์ «ต้นทาง - ปลายทาง» → ชื่อสถานที่ในระบบ
+ * เทียบแบบไม่สนช่องว่าง (โฟลเดอร์เดิมเขียน «โกดังท่าเรือ…» ส่วนในระบบเป็น «โกดัง ท่าเรือ…»)
+ * ต้องตรงสถานที่เดียวเท่านั้น — ไม่ตรง/ตรงหลายที่ = null ให้คนเลือกเอง (ไม่เดา)
+ */
+export function routeFromFolder(folder: string, locations: string[]): { origin: string | null; destination: string | null } {
+  const parts = folder.split(/\s+-\s+/);
+  if (parts.length !== 2) return { origin: null, destination: null };
+  const find = (name: string) => {
+    const hit = locations.filter((l) => squash(l) === squash(name));
+    return hit.length === 1 ? hit[0] : null;
+  };
+  return { origin: find(parts[0]), destination: find(parts[1]) };
+}
+
+/**
+ * ทุกโฟลเดอร์เส้นทางที่เจอต้องมีแถวค่าตั้ง — โฟลเดอร์ใหม่เพิ่มให้เอง (ลูกค้ายังว่าง = ❌ รอคนเลือก)
+ * ต้นทาง/ปลายทางที่ยังว่าง ลองเติมจากชื่อโฟลเดอร์ใหม่ทุกรอบ (เพิ่มสถานที่ทีหลังก็เติมเอง)
+ */
+export async function ensureShipRoutes(folders: string[]): Promise<Map<string, ShipRoute>> {
+  const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
+  const [routes, locs] = await Promise.all([
+    prisma.shipRoute.findMany(),
+    prisma.lookup.findMany({ where: { kind: "location" }, select: { value: true } }),
+  ]);
+  const locations = locs.map((l) => l.value);
+  const byName = new Map(routes.map((r) => [r.folderName, r]));
+  for (const name of names) {
+    if (byName.has(name)) continue;
+    const guess = routeFromFolder(name, locations);
+    const created = await prisma.shipRoute.upsert({
+      where: { folderName: name },
+      update: {},
+      create: { folderName: name, origin: guess.origin, destination: guess.destination },
+    });
+    byName.set(name, created);
+  }
+  for (const r of byName.values()) {
+    if (r.origin && r.destination) continue;
+    const guess = routeFromFolder(r.folderName, locations);
+    const data = { origin: r.origin ?? guess.origin, destination: r.destination ?? guess.destination };
+    if (data.origin !== r.origin || data.destination !== r.destination)
+      byName.set(r.folderName, await prisma.shipRoute.update({ where: { id: r.id }, data }));
+  }
+  return byName;
+}
+
+/** ค่าตั้งของเส้นทางยังไม่ครบ → ข้อความ ❌ บอกว่าขาดอะไร แก้ที่ไหน (ครบ = null) */
+export function routeProblem(folder: string, route: ShipRoute | undefined, customerOk: boolean): string | null {
+  if (!route) return `❌ โฟลเดอร์ «${folder}» ยังไม่มีค่าตั้ง — เปิดหน้า ${SHIP_SETTINGS}`;
+  const miss: string[] = [];
+  if (!route.origin) miss.push("ต้นทาง");
+  if (!route.destination) miss.push("ปลายทาง");
+  if (!customerOk) miss.push("ลูกค้า");
+  if (miss.length === 0) return null;
+  const nameHint =
+    !route.origin || !route.destination ? " (ชื่อโฟลเดอร์ไม่ตรงชื่อสถานที่ในระบบ — แก้ชื่อโฟลเดอร์ใน Drive เป็น «ต้นทาง - ปลายทาง» หรือเลือกเอง)" : "";
+  return `❌ โฟลเดอร์ «${folder}» ยังไม่ได้ตั้ง${miss.join(" / ")}${nameHint} — ตั้งที่หน้า ${SHIP_SETTINGS}`;
+}
 
 /** รูป 1 รูป → ตั๋วรอตรวจทีละใบ · รูปที่เคยรับแล้วข้าม (กดดึงซ้ำกี่ครั้งก็ไม่เกิดแถวซ้ำ) */
 /**
@@ -51,25 +118,31 @@ export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: 
  */
 export const PARSER_VERSION = 3;
 
-export async function ingestPhoto(p: ShipPhoto): Promise<number> {
+export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number> {
+  const before = await prisma.shipPhoto.findUnique({ where: { fileId: p.fileId }, select: { format: true } });
   // เก็บรูป + ข้อความของ Google ไว้เสมอ — ตัวอ่านที่สอง (Tesseract) จะมาอ่านซ้ำทีหลังจากคิวนี้
+  const info = { googleText: p.ocr, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim(), routeFolder: p.route };
   await prisma.shipPhoto.upsert({
     where: { fileId: p.fileId },
-    update: { googleText: p.ocr, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim() },
-    create: { fileId: p.fileId, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim(), googleText: p.ocr },
+    update: info,
+    create: { fileId: p.fileId, ...info },
   });
 
   const seen = await prisma.shipTicket.findMany({ where: { fileId: p.fileId }, select: { status: true, parserVersion: true } });
   if (seen.length > 0) {
-    // อ่านด้วยตัวอ่านรุ่นเก่า และทั้งรูปยังไม่มีใครตัดสิน → ลบแล้วอ่านใหม่ด้วยรุ่นปัจจุบัน
+    // อ่านด้วยตัวอ่านรุ่นเก่า หรือเปลี่ยนแบบตั๋วของเส้นทางนี้ และทั้งรูปยังไม่มีใครตัดสิน → ลบแล้วอ่านใหม่
     // รูปที่มีใบยืนยัน/ไม่ใช้ไปแล้ว ไม่แตะ (กันงานซ้ำ และไม่ทับสิ่งที่คนตัดสินไปแล้ว)
-    const redo = seen.every((x) => x.status === "รอตรวจ" && x.parserVersion < PARSER_VERSION);
+    const stale = seen.some((x) => x.parserVersion < PARSER_VERSION) || before?.format !== f.key;
+    const redo = stale && seen.every((x) => x.status === "รอตรวจ");
     if (!redo) return 0;
     await prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } });
-    // ตัวอ่านที่สองต้องอ่านรูปนี้ใหม่ด้วย
-    await prisma.shipPhoto.update({ where: { fileId: p.fileId }, data: { localStatus: "รอ", localError: null, localTries: 0 } });
   }
-  return createTickets(p, parseTicketPhoto(p.ocr).map((t) => ({ ...t, readNote: null })));
+  // ตัวอ่านที่สองต้องอ่านรูปนี้ (ใหม่) ด้วยแบบตั๋วเดียวกัน — แบบที่ไม่มีจุดยึดแบ่งช่อง ใช้ตัวอ่านเดียว ไม่ต้องเข้าคิว
+  await prisma.shipPhoto.update({
+    where: { fileId: p.fileId },
+    data: { format: f.key, localStatus: f.localAnchor ? "รอ" : "ข้าม", localError: null, localTries: 0 },
+  });
+  return createTickets(p, parseTicketPhoto(p.ocr, f).map((t) => ({ ...t, readNote: null })));
 }
 
 /** สร้างแถวตั๋วรอตรวจของรูปหนึ่ง — อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ */
@@ -81,6 +154,7 @@ function ticketRows(p: ShipPhoto, parsed: MergedTicket[]) {
     photoUrl: p.url,
     part: i + 1,
     folderPlate: p.plate.trim(),
+    routeFolder: p.route,
     ocrText: t?.text ?? p.ocr,
     ticketNo: t?.ticketNo ?? null,
     ticketDate: t?.date ?? null,
@@ -160,12 +234,26 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
     return null;
   }
 
+  // แบบตั๋วที่ใช้อ่านรูปนี้ (ตั้งตอนรับรูป) — แบบที่ไม่มีจุดยึดให้แบ่งช่อง ใช้ตัวอ่านเดียว (Google)
+  const f = formatOf(photo.format);
+  if (!f.localAnchor) {
+    await mark("ข้าม", null);
+    return null;
+  }
+
   const file = join(tmpdir(), `ship-${photo.fileId}.img`);
   try {
     writeFileSync(file, await fetchImage(photo.fileId));
-    const local = await readPhotoLocally(file);
-    const merged = mergeReaders(parseTicketPhoto(photo.googleText), local);
-    const p: ShipPhoto = { fileId: photo.fileId, fileName: photo.fileName, url: photo.photoUrl, plate: photo.folderPlate, ocr: photo.googleText };
+    const local = await readPhotoLocally(file, f);
+    const merged = mergeReaders(parseTicketPhoto(photo.googleText, f), local, f);
+    const p: ShipPhoto = {
+      fileId: photo.fileId,
+      fileName: photo.fileName,
+      url: photo.photoUrl,
+      plate: photo.folderPlate,
+      ocr: photo.googleText,
+      route: photo.routeFolder,
+    };
     // แทนที่ทั้งรูปในครั้งเดียว — ระหว่างอ่าน ถ้ามีคนตัดสินใบในรูปนี้ไปแล้ว ไม่แทนที่ (กันงานซ้ำ)
     const replaced = await prisma.$transaction(async (tx) => {
       const nowDecided = await tx.shipTicket.count({ where: { fileId: photo.fileId, status: { not: "รอตรวจ" } } });
@@ -209,24 +297,31 @@ export async function pullShipTickets(): Promise<{ ok: true; added: number } | {
   // ข้อความทางเทคนิคของ sheetConfig พูดถึงไลน์/ไฟล์ตั้งค่า — หน้านี้บอกแค่สิ่งที่ผู้ใช้ต้องรู้
   if ("error" in cfg) return { ok: false, error: "เว็บเครื่องนี้ยังไม่ได้เชื่อมกับ Google Sheet ที่เก็บผลอ่านรูปตั๋ว" };
   try {
-    const rows = await readValues(cfg.keyFile, cfg.sheetId, `${SHIP.tab}!A2:F`);
+    const rows = await readValues(cfg.keyFile, cfg.sheetId, `${SHIP_TAB}!A2:G`);
+    const routeOf = (r: string[]) => (r[COL.route] ?? "").trim() || LEGACY_ROUTE_FOLDER;
+    const routes = await ensureShipRoutes(rows.filter((r) => (r[COL.fileId] ?? "").trim()).map(routeOf));
     let added = 0;
     for (const r of rows) {
       const fileId = (r[COL.fileId] ?? "").trim();
       if (!fileId) continue;
-      added += await ingestPhoto({
-        fileId,
-        fileName: (r[COL.fileName] ?? "").trim(),
-        url: (r[COL.url] ?? "").trim(),
-        plate: (r[COL.plate] ?? "").trim(),
-        ocr: r[COL.ocr] ?? "",
-      });
+      const route = routeOf(r);
+      added += await ingestPhoto(
+        {
+          fileId,
+          fileName: (r[COL.fileName] ?? "").trim(),
+          url: (r[COL.url] ?? "").trim(),
+          plate: (r[COL.plate] ?? "").trim(),
+          ocr: r[COL.ocr] ?? "",
+          route,
+        },
+        formatOf(routes.get(route)?.format),
+      );
     }
     return { ok: true, added };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/Unable to parse range/i.test(msg)) {
-      return { ok: false, error: `ชีตยังไม่มีแท็บ «${SHIP.tab}» — วางโค้ด Apps Script ใหม่แล้วกดเรียก setupShipTickets 1 ครั้ง` };
+      return { ok: false, error: `ชีตยังไม่มีแท็บ «${SHIP_TAB}» — วางโค้ด Apps Script ใหม่แล้วกดเรียก setupShipTickets 1 ครั้ง` };
     }
     return { ok: false, error: msg };
   }
@@ -238,6 +333,8 @@ export type ShipRow = {
   fileName: string;
   part: number;
   plate: string;
+  /** โฟลเดอร์เส้นทาง (ShipRoute.folderName) — หน้าตรวจแยกกลุ่มตามนี้ */
+  routeFolder: string;
   /** null = อ่านไม่ได้/ไม่ชัด → ตัวแดง เว้นว่างให้กรอก */
   ticketNo: string | null;
   date: string | null;
@@ -259,12 +356,23 @@ export type ShipRow = {
   warnings: string[];
 };
 
+/** หัวกลุ่มของแต่ละโฟลเดอร์เส้นทางในหน้าตรวจ */
+export type ShipRouteInfo = {
+  folder: string;
+  origin: string | null;
+  destination: string | null;
+  customer: string | null;
+  format: string;
+  /** ❌ ค่าตั้งยังไม่ครบ (ยืนยันตั๋วในโฟลเดอร์นี้ไม่ได้) */
+  problem: string | null;
+};
+
 export type ShipPage = {
   rows: ShipRow[];
+  routes: ShipRouteInfo[];
   drivers: { code: string; name: string }[];
-  /** ปัญหาระดับทั้งหน้า (เช่น ไม่มีลูกค้า BM) */
+  /** ข้อความระดับทั้งหน้า (เช่น ยังไม่ตั้งราคาเส้นทาง) */
   notices: string[];
-  customerId: number | null;
 };
 
 /**
@@ -331,7 +439,7 @@ function pairedDriver(
 
 /** เตรียมแถวรอตรวจ — คำนวณสถานะใหม่ทุกครั้ง แก้ข้อมูลหลัก (รถ/จับคู่/พขร.) แล้วผลอัปเดตเอง */
 export async function shipReview(): Promise<ShipPage> {
-  const [tickets, ctx, drivers, aliases] = await Promise.all([
+  const [tickets, ctx, drivers, aliases, routeRows] = await Promise.all([
     prisma.shipTicket.findMany({
       where: { status: "รอตรวจ" },
       orderBy: [{ ticketDate: "asc" }, { ticketNo: "asc" }, { id: "asc" }],
@@ -339,11 +447,30 @@ export async function shipReview(): Promise<ShipPage> {
     buildContext(),
     prisma.driver.findMany({ where: { active: true } }),
     prisma.ocrAlias.findMany({ where: { kind: "driver" } }),
+    prisma.shipRoute.findMany(),
   ]);
 
   const notices: string[] = [];
-  const customer = ctx.customers.find((c) => c.code.trim().toUpperCase() === SHIP.customerCode);
-  if (!customer) notices.push(`❌ ไม่พบลูกค้ารหัส ${SHIP.customerCode} — เพิ่มที่หน้า ฐานข้อมูล › ข้อมูลลูกค้า ก่อน ถึงจะยืนยันได้`);
+  // ค่าตั้งของแต่ละโฟลเดอร์เส้นทาง — ไม่ครบ = ❌ ทุกแถวของโฟลเดอร์นั้น พร้อมบอกว่าไปตั้งที่ไหน
+  const routeByFolder = new Map(routeRows.map((r) => [r.folderName, r]));
+  const customerById = new Map(ctx.customers.map((c) => [c.id, c]));
+  const routes = new Map<string, ShipRouteInfo>();
+  const routeInfo = (folder: string): ShipRouteInfo => {
+    const hit = routes.get(folder);
+    if (hit) return hit;
+    const r = routeByFolder.get(folder);
+    const customer = r?.customerId != null ? customerById.get(r.customerId) : undefined;
+    const info: ShipRouteInfo = {
+      folder,
+      origin: r?.origin ?? null,
+      destination: r?.destination ?? null,
+      customer: customer ? `${customer.code} — ${customer.name}` : null,
+      format: formatOf(r?.format).label,
+      problem: routeProblem(folder, r, !!customer),
+    };
+    routes.set(folder, info);
+    return info;
+  };
 
   // เลขที่ตั๋วที่มีอยู่แล้ว (ในงาน + ในตั๋วแถวอื่น) — ซ้ำ = เตือนให้คนตัดสิน ไม่ตัดทิ้งเอง
   const nos = tickets.map((t) => t.ticketNo).filter((n): n is string => !!n);
@@ -374,20 +501,24 @@ export async function shipReview(): Promise<ShipPage> {
   const rows: ShipRow[] = tickets.map((t) => {
     const blockers: string[] = [];
     const warnings: string[] = [];
+    const route = routeInfo(t.routeFolder);
+    // ข้อความเต็มอยู่หัวกล่องของเส้นทาง — ในแถวบอกสั้นๆ ว่าไปแก้ที่ไหน
+    if (route.problem) blockers.push(`❌ เส้นทางนี้ยังตั้งค่าไม่ครบ — ตั้งที่หน้า ${SHIP_SETTINGS}`);
     const found = folderVehicle(ctx.vehicleByPlate, t.folderPlate);
     const vehicle = found.vehicle;
     // ทะเบียนที่โชว์/บันทึก = ทะเบียนในฐานข้อมูล (ไม่ใช่ชื่อโฟลเดอร์ที่อาจมีชื่อจังหวัดต่อท้าย)
     const plate = vehicle?.plate ?? t.folderPlate;
     if (!vehicle) blockers.push(found.error ?? "❌ ไม่พบรถ");
-    else if (!ctx.routeByKey.get(routeKey(SHIP.origin, SHIP.destination, vehicle.vehicleType)))
-      noRoute.add(vehicle.vehicleType);
+    else if (route.origin && route.destination && !ctx.routeByKey.get(routeKey(route.origin, route.destination, vehicle.vehicleType)))
+      noRoute.add(`${route.origin} → ${route.destination} สำหรับ${vehicle.vehicleType}`);
     if (t.plateOnTicket && plateKey(t.plateOnTicket) !== plateKey(plate))
       warnings.push(`⚠️ ทะเบียนในตั๋ว ${t.plateOnTicket} ไม่ตรงโฟลเดอร์ ${plate} — ตรวจว่าเก็บรูปผิดโฟลเดอร์ไหม`);
 
     // ตัวอ่าน 2 ตัวอ่านได้ไม่ตรงกัน ฯลฯ — ให้คนดูรูปก่อน
     if (t.readNote) warnings.push(...t.readNote.split(" · "));
 
-    const ticketNo = t.ticketNo && /^\d{10}$/.test(t.ticketNo) ? t.ticketNo : null;
+    // เลขที่ต้องถูกรูปแบบตามแบบตั๋วของเส้นทางนี้ (จำนวนหลัก)
+    const ticketNo = validTicketNo(t.ticketNo, formatOf(routeByFolder.get(t.routeFolder)?.format)) ? t.ticketNo : null;
     if (ticketNo) {
       const job = jobsWithNo.find((j) => j.ticketOrigin === ticketNo);
       const other = othersWithNo.find((o) => o.ticketNo === ticketNo && o.id !== t.id);
@@ -434,6 +565,7 @@ export async function shipReview(): Promise<ShipPage> {
       fileName: t.fileName,
       part: t.part,
       plate,
+      routeFolder: t.routeFolder,
       ticketNo,
       date: date ? toInputDate(date) : null,
       dateLabel: date ? formatThaiDate(date) : null,
@@ -447,16 +579,16 @@ export async function shipReview(): Promise<ShipPage> {
     };
   });
 
-  for (const vt of noRoute)
-    notices.push(`⚠️ ยังไม่มีเส้นทาง ${SHIP.origin} → ${SHIP.destination} สำหรับ${vt} — ยืนยันได้ แต่ค่าบรรทุกจะยังไม่ขึ้น ไปตั้งราคาที่หน้า ฐานข้อมูล › เส้นทาง ระยะทาง ราคา`);
+  for (const r of noRoute)
+    notices.push(`⚠️ ยังไม่มีเส้นทาง ${r} — ยืนยันได้ แต่ค่าบรรทุกจะยังไม่ขึ้น ไปตั้งราคาที่หน้า ฐานข้อมูล › เส้นทาง ระยะทาง ราคา`);
 
   return {
     rows,
+    routes: [...routes.values()].sort((a, b) => a.folder.localeCompare(b.folder, "th")),
     drivers: drivers
       .map((d) => ({ code: d.code, name: fullName(d) }))
       .sort((a, b) => a.name.localeCompare(b.name, "th")),
     notices,
-    customerId: customer?.id ?? null,
   };
 }
 

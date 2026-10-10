@@ -16,13 +16,13 @@ export function ShipTable({
   rows,
   drivers,
   canEdit,
-  blocked,
+  showRefresh,
 }: {
   rows: ShipRow[];
   drivers: { code: string; name: string }[];
   canEdit: boolean;
-  /** ปัญหาทั้งหน้าที่ทำให้ยืนยันไม่ได้ (เช่น ไม่มีลูกค้า BM) */
-  blocked: boolean;
+  /** ปุ่ม 🔄 ดึงรูปใหม่ — โชว์กล่องแรกกล่องเดียว (ดึงทุกเส้นทางพร้อมกัน) */
+  showRefresh: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -48,7 +48,7 @@ export function ShipTable({
     if (!e.driver) m.push("พขร.");
     return m;
   };
-  const ready = (r: ShipRow) => !blocked && r.blockers.length === 0 && missing(r).length === 0;
+  const ready = (r: ShipRow) => r.blockers.length === 0 && missing(r).length === 0;
   // ปุ่มรวม: เฉพาะแถวที่ระบบอ่านครบเองทุกช่องและไม่มีคำเตือน — แถวที่ต้องให้คนตัดสินต้องกดทีละแถว
   const clean = rows.filter(
     (r) => ready(r) && r.warnings.length === 0 && r.ticketNo && r.date && r.weightKg != null && r.driverCode && !needsDriver(r),
@@ -83,7 +83,7 @@ export function ShipTable({
             ✅ ยืนยันทุกแถวที่ไม่มีตัวแดง ({clean.length})
           </button>
         )}
-        {canEdit && (
+        {canEdit && showRefresh && (
           <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => run(refreshShipTickets)}>
             🔄 ดึงรูปใหม่
           </button>

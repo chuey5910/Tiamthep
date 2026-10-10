@@ -6,7 +6,11 @@
  */
 
 import { prisma } from "./prisma";
+import { FORMATS } from "./ship-ticket-formats";
 import { sortOptionsThaiFirst } from "./sort";
+
+const SHIP_FORMAT_KEYS = Object.keys(FORMATS);
+const SHIP_FORMAT_LABELS = Object.fromEntries(Object.values(FORMATS).map((f) => [f.key, f.label]));
 
 export type FieldType = "text" | "number" | "date" | "select" | "textarea" | "checkbox";
 
@@ -427,6 +431,39 @@ export const RESOURCES: Record<string, Resource> = {
       { name: "minPrice", label: "มากกว่า (บาท/ลิตร)", type: "number", required: true, step: "0.01", format: "num", span: 1 },
       { name: "maxPrice", label: "ถึง (บาท/ลิตร)", type: "number", required: true, step: "0.01", format: "num", span: 1 },
       { name: "sort", label: "ลำดับ", type: "number", format: "num", span: 1 },
+    ],
+  },
+
+  "ship-routes": {
+    key: "ship-routes",
+    model: "shipRoute",
+    title: "ตั๋วเรือ (โฟลเดอร์เส้นทาง)",
+    subtitle:
+      "1 แถว = 1 โฟลเดอร์ใต้ «ตั๋วเรือ» ใน Google Drive — ตั๋วในโฟลเดอร์นั้นจะเป็นงานของ ต้นทาง → ปลายทาง และลูกค้าที่ตั้งไว้ที่นี่",
+    idField: "id",
+    idType: "number",
+    orderBy: { folderName: "asc" },
+    searchFields: ["folderName", "origin", "destination"],
+    notes: [
+      "สร้างโฟลเดอร์ใหม่ใน Drive ชื่อ «ต้นทาง - ปลายทาง» แล้วข้างในสร้างโฟลเดอร์ย่อยชื่อทะเบียนรถ — ระบบเพิ่มแถวที่นี่ให้เองเมื่อเจอรูปแรก",
+      "ต้นทาง/ปลายทาง: ระบบเติมให้เองถ้าชื่อโฟลเดอร์ตรงกับชื่อสถานที่ใน รายการตัวเลือก (ไม่สนช่องว่าง) — ไม่ตรงให้เลือกเอง",
+      "ลูกค้า: ต้องเลือกเองทุกครั้ง (ระบบไม่เดา) · ยังไม่เลือก = ยืนยันตั๋วในโฟลเดอร์นี้ไม่ได้",
+      "แบบตั๋ว: ตั๋วแบบใหม่ที่ยังไม่มีในรายการ ให้ใช้ «แบบทั่วไป» ไปก่อน แล้วส่งรูปตัวอย่างมาเพิ่มแบบ · เปลี่ยนแบบแล้วรูปที่ยังรอตรวจจะถูกอ่านใหม่เอง",
+    ],
+    fields: [
+      { name: "folderName", label: "ชื่อโฟลเดอร์ใน Drive", type: "text", required: true, immutable: true, span: 4, help: "ต้องตรงกับชื่อโฟลเดอร์ใต้ «ตั๋วเรือ» ทุกตัวอักษร" },
+      { name: "origin", label: "ต้นทาง", type: "select", options: { kind: "locations" }, allowEmpty: true, span: 2 },
+      { name: "destination", label: "ปลายทาง", type: "select", options: { kind: "locations" }, allowEmpty: true, span: 2 },
+      { name: "customerId", label: "ลูกค้า", type: "select", options: { kind: "customers" }, allowEmpty: true, span: 2 },
+      {
+        name: "format",
+        label: "แบบตั๋ว",
+        type: "select",
+        required: true,
+        options: { kind: "static", values: SHIP_FORMAT_KEYS, labels: SHIP_FORMAT_LABELS },
+        span: 2,
+      },
+      { name: "note", label: "หมายเหตุ", type: "text", span: 4, hideInTable: true },
     ],
   },
 

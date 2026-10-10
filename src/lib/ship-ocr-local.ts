@@ -10,6 +10,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { validTicketNo, type TicketFormat } from "./ship-ticket-formats";
 
 const run = promisify(execFile);
 
@@ -48,7 +49,6 @@ export async function tesseractWords(imagePath: string): Promise<OcrWord[]> {
   return words;
 }
 
-const TEN = /^\d{10}$/;
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
   return s.length ? s[Math.floor(s.length / 2)] : 0;
@@ -68,11 +68,12 @@ function clusters(values: number[], gap: number): number[] {
 
 /**
  * แบ่งคำในรูปเป็นช่องตามตั๋ว
- * จุดยึด = เลขที่ตั๋ว 10 หลัก (อยู่มุมซ้ายบนของทุกใบ) → ได้ตำแหน่งคอลัมน์และแถวของตั๋ว
+ * จุดยึด = เลขที่ตั๋ว (อยู่มุมบนของทุกใบ · จำนวนหลักตามแบบตั๋ว) → ได้ตำแหน่งคอลัมน์และแถวของตั๋ว
  * ใบที่อ่านเลขที่ไม่ออก ยังมีช่องของตัวเอง เพราะคอลัมน์/แถวมาจากใบอื่น
  */
-export function splitByPosition(words: OcrWord[]): OcrWord[][] {
-  const anchors = words.filter((w) => TEN.test(w.text));
+export function splitByPosition(words: OcrWord[], f: TicketFormat): OcrWord[][] {
+  const isNo = (w: OcrWord) => validTicketNo(w.text, f);
+  const anchors = words.filter(isNo);
   if (anchors.length === 0) return [];
   const h = median(words.map((w) => w.h)) || 20;
   const width = Math.max(...words.map((w) => w.x + w.w));
@@ -96,7 +97,7 @@ export function splitByPosition(words: OcrWord[]): OcrWord[][] {
     if (c >= 0 && r >= 0) cells[r * cols.length + c].push(w);
   }
   // ช่องที่ไม่มีอะไรเลย (เช่น รูปมีตั๋ว 3 ใบในตาราง 2×2) ตัดทิ้ง
-  return cells.filter((c) => c.some((w) => /\d{1,2}:\d{2}/.test(w.text) || TEN.test(w.text)));
+  return cells.filter((c) => c.some((w) => /\d{1,2}:\d{2}/.test(w.text) || isNo(w)));
 }
 
 /** เรียงคำในช่องเป็นบรรทัด (ซ้าย→ขวา บน→ล่าง) */
@@ -141,7 +142,7 @@ function weightCandidates(s: string): number[] {
 }
 
 /** อ่านตั๋ว 1 ใบจากคำในช่องของมัน */
-export function readCell(cell: OcrWord[]): LocalTicket {
+export function readCell(cell: OcrWord[], f: TicketFormat): LocalTicket {
   const lines = linesOf(cell);
   // Tesseract แยกอักษรไทยเป็นทีละตัว ("น า ย อ น ุ ศร") → ต่อคำที่อยู่ชิดกัน เว้นวรรคเฉพาะช่องว่างจริงในรูป
   const h = median(cell.map((w) => w.h)) || 20;
@@ -149,7 +150,7 @@ export function readCell(cell: OcrWord[]): LocalTicket {
     l.map((w, i) => (i > 0 && w.x - (l[i - 1].x + l[i - 1].w) > h * 0.45 ? " " : "") + w.text).join("");
   const text = lines.map(lineText).join("\n");
 
-  const ticketNo = cell.find((w) => TEN.test(w.text))?.text ?? null;
+  const ticketNo = cell.find((w) => validTicketNo(w.text, f))?.text ?? null;
 
   // วัน-เวลา: วันที่กับเวลาอยู่บรรทัดเดียวกัน · ใบหนึ่งมี 2 ชุด (เข้า บน · ออก ล่าง)
   // บรรทัดที่อ่านวันที่หลุด แต่เวลายังอยู่ → ใช้วันที่ของอีกชุดในใบเดียวกัน (ถ้ามีวันเดียว)
@@ -217,7 +218,7 @@ export function readCell(cell: OcrWord[]): LocalTicket {
 }
 
 /** ทั้งรูป → ตั๋วทีละใบ (ตามตำแหน่งจริงในรูป) */
-export async function readPhotoLocally(imagePath: string): Promise<LocalTicket[]> {
+export async function readPhotoLocally(imagePath: string, f: TicketFormat): Promise<LocalTicket[]> {
   const words = await tesseractWords(imagePath);
-  return splitByPosition(words).map(readCell);
+  return splitByPosition(words, f).map((cell) => readCell(cell, f));
 }

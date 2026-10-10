@@ -5,7 +5,7 @@ import { requireWrite } from "@/lib/auth";
 import { buildContext, routeKey } from "@/lib/calc";
 import { parseDate, toInputDate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
-import { SHIP, folderVehicle, pullShipTickets } from "@/lib/ship-ticket";
+import { folderVehicle, pullShipTickets, routeProblem } from "@/lib/ship-ticket";
 import { nameKey } from "@/lib/ship-ticket-parse";
 
 export type ShipResult = { ok: true; message: string } | { ok: false; error: string };
@@ -37,8 +37,12 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
   if (!(netKg > 0 && netKg < 90000)) return { ok: false, error: "❌ กรอกน้ำหนักสุทธิ (กก.) ก่อน" };
 
   const ctx = await buildContext();
-  const customer = ctx.customers.find((c) => c.code.trim().toUpperCase() === SHIP.customerCode);
-  if (!customer) return { ok: false, error: `❌ ไม่พบลูกค้ารหัส ${SHIP.customerCode} — เพิ่มที่หน้า ข้อมูลลูกค้า` };
+  // ต้นทาง/ปลายทาง/ลูกค้า มาจากค่าตั้งของโฟลเดอร์เส้นทางของตั๋วใบนี้
+  const shipRoute = (await prisma.shipRoute.findUnique({ where: { folderName: t.routeFolder } })) ?? undefined;
+  const customer = shipRoute?.customerId != null ? ctx.customers.find((c) => c.id === shipRoute.customerId) : undefined;
+  const problem = routeProblem(t.routeFolder, shipRoute, !!customer);
+  if (problem || !shipRoute?.origin || !shipRoute.destination || !customer) return { ok: false, error: problem ?? "❌ ค่าตั้งเส้นทางไม่ครบ" };
+  const { origin, destination } = shipRoute;
   const found = folderVehicle(ctx.vehicleByPlate, t.folderPlate);
   if (!found.vehicle) return { ok: false, error: found.error };
   const vehicle = found.vehicle;
@@ -48,7 +52,7 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
   const driver = await prisma.driver.findUnique({ where: { code: driverCode } });
   if (!driver) return { ok: false, error: `❌ ไม่พบ พขร. รหัส ${driverCode}` };
 
-  const route = ctx.routeByKey.get(routeKey(SHIP.origin, SHIP.destination, vehicle.vehicleType)) ?? null;
+  const route = ctx.routeByKey.get(routeKey(origin, destination, vehicle.vehicleType)) ?? null;
   const tons = Math.round(netKg) / 1000;
 
   const job = await prisma.$transaction(async (tx) => {
@@ -67,8 +71,8 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
         trailerPlate: null, // รถเดี่ยว — ไม่มีหาง
         driverCode,
         customerId: customer.id,
-        origin: SHIP.origin,
-        destination: SHIP.destination,
+        origin,
+        destination,
         // น้ำหนักปลายทาง = น้ำหนักต้นทาง ตามที่เจ้าของกำหนดสำหรับงานตั๋วเรือ
         weightOrigin: tons,
         weightDest: tons,

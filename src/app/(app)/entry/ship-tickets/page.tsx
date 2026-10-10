@@ -3,7 +3,7 @@ import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { canWrite } from "@/lib/roles";
-import { SHIP, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview } from "@/lib/ship-ticket";
+import { SHIP_SETTINGS, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview } from "@/lib/ship-ticket";
 import { ShipTable } from "./ShipTable";
 import { UndoUnused } from "./UndoUnused";
 
@@ -28,7 +28,6 @@ export default async function ShipTicketsPage() {
       take: 30,
     }),
   ]);
-  const blocked = data.notices.some((n) => n.startsWith("❌"));
   // งานที่ยืนยันไปแล้วแต่ถูกลบทิ้งทีหลัง — ให้เอาตั๋วกลับมาตรวจใหม่ได้
   const jobIds = recent.map((t) => t.jobId).filter((n): n is number => n != null);
   const liveJobs = new Set(
@@ -39,7 +38,7 @@ export default async function ShipTicketsPage() {
     <>
       <PageHeader
         title="ตั๋วเรือรอตรวจ"
-        subtitle={`ลูกค้า ${SHIP.customerCode} · ${SHIP.origin} → ${SHIP.destination} · ระบบอ่านรูปจากโฟลเดอร์ «ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์» ใน Google Drive ให้แล้ว`}
+        subtitle="ระบบอ่านรูปจากโฟลเดอร์ «ตั๋วเรือ» ใน Google Drive ให้แล้ว — แยกกลุ่มตามโฟลเดอร์เส้นทาง (ต้นทาง - ปลายทาง)"
       />
 
       <Formula>
@@ -47,7 +46,8 @@ export default async function ShipTicketsPage() {
         <br />– ❌ ตัวแดง = อ่านไม่ชัด ระบบเว้นว่างไว้ กด «ดูรูป» แล้วกรอกเอง · กรอกครบแล้วปุ่มยืนยันเปลี่ยนเป็นสีแดง
         <br />– <b>น้ำหนักต้นทาง</b> อ่านจากตั๋ว · <b>น้ำหนักปลายทาง</b> = ค่าเดียวกับต้นทาง · ช่องว่างให้กรอกเป็นกิโลกรัมตามตั๋ว
         <br />– อ่านด้วย 2 ตัวอ่าน (Google + ตัวอ่านบนเครื่อง) ตรงกันถึงใส่ให้เอง · อ่านได้ไม่ตรงกัน = ⚠️ ว่างไว้ให้ดูรูป
-        <br />– ทะเบียน = ชื่อโฟลเดอร์ · พขร. จากตารางจับคู่รถ ถ้าชื่อในตั๋วไม่ตรงให้เลือกเอง (ระบบจำไว้ ครั้งหน้าไม่ต้องเลือกซ้ำ)
+        <br />– ทะเบียน = ชื่อโฟลเดอร์ทะเบียน · พขร. จากตารางจับคู่รถ ถ้าชื่อในตั๋วไม่ตรงให้เลือกเอง (ระบบจำไว้ ครั้งหน้าไม่ต้องเลือกซ้ำ)
+        <br />– ต้นทาง / ปลายทาง / ลูกค้า / แบบตั๋ว ตั้งครั้งเดียวต่อโฟลเดอร์เส้นทาง ที่หน้า <a className="font-bold underline" href="/settings/ship-routes">{SHIP_SETTINGS}</a>
       </Formula>
 
       {!pulled.ok && <p className="mb-3 text-[13px] font-bold text-amber-700">⚠️ ดึงรูปตั๋วใหม่ไม่ได้ — {pulled.error}</p>}
@@ -67,13 +67,34 @@ export default async function ShipTicketsPage() {
         </p>
       ))}
 
-      <Card title={`รอตรวจ ${data.rows.length} ใบ`} className="mb-4" bodyClass="p-3">
-        {data.rows.length === 0 ? (
+      {data.rows.length === 0 ? (
+        <Card title="รอตรวจ 0 ใบ" className="mb-4" bodyClass="p-3">
           <Empty>✅ ไม่มีตั๋วรอตรวจ — ถ่ายรูปตั๋วเก็บเข้าโฟลเดอร์ทะเบียนรถใน Drive แล้วเปิดหน้านี้ใหม่</Empty>
-        ) : (
-          <ShipTable rows={data.rows} drivers={data.drivers} canEdit={canWrite(user)} blocked={blocked} />
-        )}
-      </Card>
+        </Card>
+      ) : (
+        // 1 กล่องต่อ 1 โฟลเดอร์เส้นทาง — หัวกล่องบอกเลยว่าตั๋วกลุ่มนี้จะเป็นงาน ต้นทาง → ปลายทาง ของลูกค้าไหน
+        data.routes.map((r, i) => {
+          const rows = data.rows.filter((x) => x.routeFolder === r.folder);
+          return (
+            <Card
+              key={r.folder}
+              title={
+                <>
+                  {r.origin ?? "❓ ต้นทาง"} → {r.destination ?? "❓ ปลายทาง"} · ลูกค้า {r.customer ?? "❓"}
+                  <span className="ml-2 text-[13px] font-normal text-slate-500">
+                    รอตรวจ {rows.length} ใบ · โฟลเดอร์ «{r.folder}» · {r.format}
+                  </span>
+                </>
+              }
+              className="mb-4"
+              bodyClass="p-3"
+            >
+              {r.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{r.problem}</p>}
+              <ShipTable rows={rows} drivers={data.drivers} canEdit={canWrite(user)} showRefresh={i === 0} />
+            </Card>
+          );
+        })
+      )}
 
       {recent.length > 0 && (
         <Card title="ตรวจแล้วล่าสุด" bodyClass="p-0">

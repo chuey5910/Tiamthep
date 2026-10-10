@@ -1,5 +1,6 @@
 /**
- * อ่านค่าจากข้อความ OCR ของ "ตั๋วเรือ" (ใบชั่งน้ำหนัก บริษัท ศรีราชา ฮาร์เบอร์)
+ * อ่านค่าจากข้อความ OCR ของ "ตั๋วเรือ" (ใบชั่งน้ำหนัก) — ตัวอ่านกลาง ใช้ได้กับตั๋วทุกแบบ
+ * ส่วนที่ต่างกันของแต่ละแบบ (เลขที่กี่หลัก อยู่ตรงไหน) มาจากค่าตั้งใน ship-ticket-formats.ts ห้ามฝังที่นี่
  *
  * 1 รูปมีตั๋วได้หลายใบ (ถ่ายรวม 4 ใบ) → แยกเป็นทีละใบก่อน แล้วอ่าน:
  *   เลขที่ตั๋ว · วันที่ (วัน-เวลาเข้า) · นน.เข้า / นน.ออก / นน.สุทธิ · ทะเบียนในตั๋ว · ชื่อ พขร.
@@ -8,6 +9,8 @@
  * น้ำหนักต้องผ่านสูตร นน.ออก − นน.เข้า = นน.สุทธิ ถึงจะนับว่าอ่านถูก (ตรวจที่ ship-ticket.ts)
  * ไฟล์นี้ไม่แตะฐานข้อมูล — ทดสอบได้ด้วยข้อความล้วน
  */
+
+import { validTicketNo, type TicketFormat } from "./ship-ticket-formats";
 
 export type ParsedTicket = {
   /** ข้อความของใบนี้ (หลังแยกใบแล้ว) */
@@ -38,7 +41,8 @@ export function normalizeOcr(text: string): string {
 }
 
 const HEADER = /ใบ\s*ชั่ง\s*น\s*้?\s*[ำา]?\s*หนัก/g;
-const TICKET_NO = /เลข\s*ที[่]?\s*[:：.]?\s*(\d{8,12})(?!\d)/g;
+/** "เลขที่ …" — เก็บกว้างไว้ก่อน แล้วค่อยตรวจจำนวนหลักตามแบบตั๋ว (validTicketNo) */
+const TICKET_NO = /เลข\s*ที[่]?\s*[:：.]?\s*(\d{6,12})(?!\d)/g;
 
 /** แยกข้อความทั้งรูปเป็นทีละใบ — ใช้หัว "ใบชั่งน้ำหนัก" หรือ "เลขที่ …" เป็นจุดตัด (อันไหนเจอมากกว่า) */
 export function splitTickets(text: string): string[] {
@@ -114,10 +118,14 @@ function parseDate(t: string): Date | null {
   return date.getUTCDate() === d ? date : null;
 }
 
-export function parseTicket(segment: string): ParsedTicket {
+export function parseTicket(segment: string, f: TicketFormat): ParsedTicket {
   const t = normalizeOcr(segment);
 
-  const noM = t.match(/เลข\s*ที[่]?\s*[:：.]?\s*(\d{8,12})(?!\d)/) ?? t.match(/(?<![\d\-])(\d{10})(?![\d\-])/);
+  // เลขที่: มีคำว่า "เลขที่" นำหน้า · ไม่เจอ และแบบนี้เลขที่ยาวตายตัว → ตัวเลขที่ยาวพอดี (ใบเดียวในท่อนนี้)
+  const [lo, hi] = f.noDigits;
+  const noM =
+    [...t.matchAll(TICKET_NO)].find((m) => validTicketNo(m[1], f)) ??
+    (f.bareNoSingle ? t.match(new RegExp(`(?<![\\d\\-])(\\d{${lo},${hi}})(?![\\d\\-])`)) : null);
   const plateM = t.match(/ทะเบียน\s*รถ\s*[:：]?\s*(\d{1,3})\s*-\s*(\d{3,4})/);
   const drvM = t.match(/(นางสาว|นาย|นาง|น\.ส\.)\s*([ก-๏]+)\s+([ก-๏]+)/);
 
@@ -146,17 +154,17 @@ export function parseTicket(segment: string): ParsedTicket {
   };
 }
 
-/** ทั้งรูป → รายการตั๋วทีละใบ */
-export function parseTicketPhoto(text: string): ParsedTicket[] {
+/** ทั้งรูป → รายการตั๋วทีละใบ (ตามแบบตั๋วของโฟลเดอร์เส้นทาง) */
+export function parseTicketPhoto(text: string, f: TicketFormat): ParsedTicket[] {
   const t = normalizeOcr(text);
-  const whole = analyse(t);
+  const whole = analyse(t, f);
   // จัดเที่ยวจากเวลาได้ → ใช้วิธีอ่านทั้งรูป (ทนต่อการอ่านสลับซ้าย-ขวา)
   if (whole?.entries) return whole.tickets;
   // ตั๋วเรียงแนวตั้ง (ไม่สลับ) → ตัดทีละใบตาม "เลขที่" ได้ตรงๆ
   // แต่ถ้าข้อความสลับซ้าย-ขวา (เลขที่สองใบติดกันโดยไม่มีวัน-เวลาคั่น) ตัดท่อนแล้วน้ำหนักจะตกผิดใบ
   // → ใช้ผลอ่านทั้งรูปที่น้ำหนักว่าง (ให้คนกรอก) แทน ไม่เดา
   if (whole && interleaved(t)) return whole.tickets;
-  return splitTickets(text).map(parseTicket);
+  return splitTickets(text).map((seg) => parseTicket(seg, f));
 }
 
 /** ตั๋วซ้าย-ขวาถูกอ่านสลับกันไหม — มี "เลขที่" สองตัวติดกันโดยไม่มีวัน-เวลาคั่นกลาง */
@@ -284,20 +292,25 @@ function looseTriples(t: string, taken: Set<number>): Triple[] {
 }
 
 /** ค่ากลางของการอ่านทั้งรูป — ใช้ดูว่าทำไมใบไหนอ่านไม่ผ่าน (ไว้ปรับตัวอ่านจากรูปจริง) */
-export function inspectPhoto(text: string) {
-  return analyse(normalizeOcr(text));
+export function inspectPhoto(text: string, f: TicketFormat) {
+  return analyse(normalizeOcr(text), f);
 }
 
-function analyse(t: string) {
+function analyse(t: string, f: TicketFormat) {
   // เลขที่ตั๋ว (ไม่ซ้ำ) ตามลำดับที่เจอในข้อความ
   const nosText: At<string>[] = [];
-  for (const m of t.matchAll(TICKET_NO)) if (/^\d{10}$/.test(m[1]) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
-  // เลข 10 หลักที่คำว่า "เลขที่" ถูก OCR อ่านเพี้ยน ("เกมที่" "เลย" "เกษ" …) — คุมแคบ 2 ชั้น ไม่ให้ไปหยิบเลขตรงอื่น:
-  //   1. ขึ้นต้น 6 หลักเหมือนเลขที่ใบอื่นในรูป
-  //   2. บรรทัดถัดไปต้องเป็น "Shipment" — ตำแหน่งเลขที่ตั๋วบนใบจริง (ตรวจรูปจริง 226 รูป: 20 ตัว ถูกทั้งหมด)
-  const prefixes = new Set(nosText.map((x) => x.v.slice(0, 6)));
-  for (const m of t.matchAll(/(?<![\d\-\/.,])(\d{10})[ \t]*\n[ \t|_.-]*Sh/gi))
-    if (prefixes.has(m[1].slice(0, 6)) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
+  for (const m of t.matchAll(TICKET_NO)) if (validTicketNo(m[1], f) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
+  // เลขที่ที่คำว่า "เลขที่" ถูก OCR อ่านเพี้ยน ("เกมที่" "เลย" "เกษ" …) — ใช้เฉพาะแบบที่บอกตำแหน่งเลขที่บนใบไว้
+  // คุมแคบ 2 ชั้น ไม่ให้ไปหยิบเลขตรงอื่น:
+  //   1. ขึ้นต้นเหมือนเลขที่ใบอื่นในรูป (จำนวนหลักตามแบบตั๋ว)
+  //   2. บรรทัดถัดไปตรงกับบรรทัดใต้เลขที่ของแบบนั้น (ศรีราชาฮาร์เบอร์ = "Shipment" · ตรวจรูปจริง 226 รูป: 20 ตัว ถูกทั้งหมด)
+  if (f.noLineBelow && f.samePrefix > 0) {
+    const [lo, hi] = f.noDigits;
+    const prefixes = new Set(nosText.map((x) => x.v.slice(0, f.samePrefix)));
+    for (const m of t.matchAll(new RegExp(`(?<![\\d\\-\\/.,])(\\d{${lo},${hi}})[ \\t]*\\n([^\\n]*)`, "g")))
+      if (f.noLineBelow.test(m[2]) && prefixes.has(m[1].slice(0, f.samePrefix)) && !nosText.some((x) => x.v === m[1]))
+        nosText.push({ v: m[1], at: m.index! });
+  }
   nosText.sort((a, b) => a.at - b.at);
 
   // วัน-เวลาทั้งหมดในรูป (ไม่ซ้ำ)

@@ -144,7 +144,7 @@ function onOpen() {
     .addItem("ส่งแจ้งงานที่ค้างเดี๋ยวนี้ (วันนี้+พรุ่งนี้)", "sendMorningJobs")
     .addItem("ทดสอบส่งข้อความหาผู้ดูแล", "testNotifyAdmin")
     .addSeparator()
-    .addItem("③ ตั้งค่าอ่านตั๋วเรือฮาร์เบอร์ (ครั้งแรกครั้งเดียว)", "setupShipTickets")
+    .addItem("③ ตั้งค่าอ่านตั๋วเรือ (ครั้งแรกครั้งเดียว)", "setupShipTickets")
     .addItem("อ่านรูปตั๋วเรือใหม่เดี๋ยวนี้", "scanShipTickets")
     .addSeparator()
     .addItem("สลับระบบรับรูปจากคนขับ (ตอนนี้: " + (photosEnabled_() ? "เปิด ✅" : "ปิด 📵") + ")", "togglePhotoSystem")
@@ -1478,22 +1478,23 @@ function cleanupOneShotTriggers_() {
 }
 
 // ═════════════════════════════════════════════════════════════
-// ตั๋วเรือฮาร์เบอร์ — อ่านรูปตั๋วจากโฟลเดอร์ Drive แล้วส่งข้อความให้เว็บตรวจ
+// ตั๋วเรือ — อ่านรูปตั๋วจากโฟลเดอร์ Drive แล้วส่งข้อความให้เว็บตรวจ (ทุกเส้นทาง)
 // ═════════════════════════════════════════════════════════════
 //
 // โฟลเดอร์ใน Google Drive ของเจ้าของ:
-//   ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์ /
-//     70-1853 /  รูป1.jpg  รูป2.jpg …   ← ชื่อโฟลเดอร์ย่อย = ทะเบียนรถ (ต้องตรงกับในเว็บ)
-//     70-1931 /  …
-// 1 รูปมีตั๋วได้หลายใบ (ถ่ายรวม 4 ใบ) — เว็บเป็นคนแยกใบ (src/lib/ship-ticket-parse.ts)
+//   ตั๋วเรือ /
+//     ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์ /   ← โฟลเดอร์เส้นทาง «ต้นทาง - ปลายทาง»
+//       70-1853 /  รูป1.jpg  รูป2.jpg …                       ← ชื่อโฟลเดอร์ย่อย = ทะเบียนรถ (ต้องตรงกับในเว็บ)
+//       70-1931 /  …
+//     <เส้นทางใหม่> /  <ทะเบียน> / …                          ← เพิ่มเส้นทางใหม่ได้เลย ไม่ต้องแก้โค้ด
+// ลูกค้า/แบบตั๋วของแต่ละเส้นทาง ตั้งในเว็บ (ตั้งค่า › ตั๋วเรือ) · 1 รูปมีตั๋วได้หลายใบ — เว็บเป็นคนแยกใบ
 //
 // ทุก 5 นาที อ่านเฉพาะรูปใหม่ (ดูจาก fileId ในคอลัมน์ C) ด้วย OCR ของ Google แล้วต่อแถวลงแท็บ «ตั๋วเรือ»
-// คอลัมน์ต้องตรงกับ src/lib/ship-ticket.ts: เวลา · ทะเบียน · fileId · ชื่อไฟล์ · ลิงก์รูป · ข้อความ OCR
+// คอลัมน์ต้องตรงกับ src/lib/ship-ticket.ts (COL): เวลา · ทะเบียน · fileId · ชื่อไฟล์ · ลิงก์รูป · ข้อความ OCR · เส้นทาง
 // ที่นี่ไม่ตัดสินอะไร — คนตรวจและกดยืนยันที่หน้า «ตั๋วเรือรอตรวจ» ในเว็บ
 
-// ชื่อบอกเส้นทาง (ต้นทาง - ปลายทาง) กันสับสนกับสถานที่อื่นที่ชื่อคล้ายกัน
-var SHIP_FOLDER_NAME = "ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์";
-var SHIP_HEADER = ["เวลา", "ทะเบียน (ชื่อโฟลเดอร์)", "fileId", "ชื่อไฟล์", "ลิงก์รูป", "ข้อความ OCR"];
+var SHIP_ROOT_NAME = "ตั๋วเรือ";
+var SHIP_HEADER = ["เวลา", "ทะเบียน (ชื่อโฟลเดอร์)", "fileId", "ชื่อไฟล์", "ลิงก์รูป", "ข้อความ OCR", "เส้นทาง (ชื่อโฟลเดอร์)"];
 /**
  * อ่านต่อเนื่องได้รอบละกี่วินาที — Apps Script ให้รันได้ครั้งละไม่เกิน 6 นาที จึงหยุดที่ 4.5 นาที
  * (ตัวตั้งเวลาเรียกทุก 5 นาที รูปค้างเยอะก็อ่านต่อเนื่องเกือบตลอด)
@@ -1501,23 +1502,44 @@ var SHIP_HEADER = ["เวลา", "ทะเบียน (ชื่อโฟล
  */
 var SHIP_MAX_SECONDS = 270;
 
-/** หาโฟลเดอร์ตั๋วเรือ: ใช้ SHIP_FOLDER_ID ถ้าตั้งไว้ ไม่งั้นหาจากชื่อ (ต้องมีชื่อนี้โฟลเดอร์เดียว) */
-function shipFolder_() {
-  var id = prop_("SHIP_FOLDER_ID");
+/**
+ * หาโฟลเดอร์แม่ «ตั๋วเรือ»: ใช้ SHIP_ROOT_ID ถ้าตั้งไว้
+ * ไม่งั้น ถ้าเคยตั้งค่าแบบเดิม (SHIP_FOLDER_ID = โฟลเดอร์เส้นทางเดียว) ใช้โฟลเดอร์แม่ของมัน — ไม่ต้องกดตั้งค่าใหม่
+ * ไม่งั้นหาจากชื่อ (ต้องมีชื่อนี้โฟลเดอร์เดียว)
+ */
+function shipRoot_() {
+  var id = prop_("SHIP_ROOT_ID");
   if (id) return DriveApp.getFolderById(id);
-  var it = DriveApp.getFoldersByName(SHIP_FOLDER_NAME);
-  if (!it.hasNext()) throw new Error("ไม่พบโฟลเดอร์ «" + SHIP_FOLDER_NAME + "» ใน Google Drive — สร้างก่อน แล้วกดตั้งค่าใหม่");
+  var old = prop_("SHIP_FOLDER_ID");
+  if (old) {
+    var parents = DriveApp.getFolderById(old).getParents();
+    var parent = parents.hasNext() ? parents.next() : null;
+    if (parent && parent.getName().trim() === SHIP_ROOT_NAME) {
+      PropertiesService.getScriptProperties().setProperty("SHIP_ROOT_ID", parent.getId());
+      return parent;
+    }
+  }
+  var it = DriveApp.getFoldersByName(SHIP_ROOT_NAME);
+  if (!it.hasNext()) throw new Error("ไม่พบโฟลเดอร์ «" + SHIP_ROOT_NAME + "» ใน Google Drive — สร้างก่อน แล้วกดตั้งค่าใหม่");
   var folder = it.next();
-  if (it.hasNext()) throw new Error("มีโฟลเดอร์ชื่อ «" + SHIP_FOLDER_NAME + "» มากกว่า 1 อัน — ลบ/เปลี่ยนชื่ออันที่ไม่ใช้ หรือใส่ SHIP_FOLDER_ID ใน Script Properties");
+  if (it.hasNext()) throw new Error("มีโฟลเดอร์ชื่อ «" + SHIP_ROOT_NAME + "» มากกว่า 1 อัน — ลบ/เปลี่ยนชื่ออันที่ไม่ใช้ หรือใส่ SHIP_ROOT_ID ใน Script Properties");
   return folder;
+}
+
+/** แท็บ «ตั๋วเรือ» — แท็บเดิมที่ยังไม่มีหัวคอลัมน์ใหม่ (เส้นทาง) เติมหัวให้ */
+function shipSheet_(ss) {
+  var sh = ss.getSheetByName(SHEET.SHIP);
+  if (!sh) return ensureSheet_(ss, SHEET.SHIP, SHIP_HEADER);
+  if (sh.getRange(1, SHIP_HEADER.length).getValue() !== SHIP_HEADER[SHIP_HEADER.length - 1]) ensureSheet_(ss, SHEET.SHIP, SHIP_HEADER);
+  return sh;
 }
 
 /** ตั้งค่าครั้งแรก: สร้างแท็บ «ตั๋วเรือ» + จำโฟลเดอร์ + ตั้งเวลาอ่านทุก 5 นาที */
 function setupShipTickets() {
   var ui = SpreadsheetApp.getUi();
   try {
-    var folder = shipFolder_();
-    PropertiesService.getScriptProperties().setProperty("SHIP_FOLDER_ID", folder.getId());
+    var folder = shipRoot_();
+    PropertiesService.getScriptProperties().setProperty("SHIP_ROOT_ID", folder.getId());
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ensureSheet_(ss, SHEET.SHIP, SHIP_HEADER);
     sh.setColumnWidth(6, 400);
@@ -1527,7 +1549,8 @@ function setupShipTickets() {
     ScriptApp.newTrigger("scanShipTickets").timeBased().everyMinutes(5).create();
     ui.alert("ตั้งค่าอ่านตั๋วเรือเรียบร้อย ✅\n\nโฟลเดอร์: " + folder.getName() +
       "\nระบบจะอ่านรูปใหม่ทุก 5 นาที แล้วขึ้นที่เว็บหน้า บันทึกประจำวัน › ตั๋วเรือรอตรวจ" +
-      "\n\nเก็บรูปในโฟลเดอร์ย่อยที่ตั้งชื่อเป็นทะเบียนรถ เช่น 70-1853");
+      "\n\nเก็บรูปใน ตั๋วเรือ / <ต้นทาง - ปลายทาง> / <ทะเบียนรถ> เช่น 70-1853" +
+      "\nเส้นทางใหม่: สร้างโฟลเดอร์ใหม่ได้เลย แล้วเลือกลูกค้าที่เว็บ ตั้งค่า › ตั๋วเรือ");
   } catch (err) {
     ui.alert("ตั้งค่าไม่สำเร็จ ❌\n\n" + err.message);
   }
@@ -1539,7 +1562,7 @@ function scanShipTickets() {
   if (!lock.tryLock(5000)) return; // รอบก่อนยังอ่านไม่เสร็จ
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sh = ss.getSheetByName(SHEET.SHIP) || ensureSheet_(ss, SHEET.SHIP, SHIP_HEADER);
+    var sh = shipSheet_(ss);
     var last = sh.getLastRow();
     var done = {};
     if (last >= 2) {
@@ -1548,36 +1571,42 @@ function scanShipTickets() {
       });
     }
 
-    var folder = shipFolder_();
+    var root = shipRoot_();
     var count = 0;
     var started = Date.now();
     var timeUp = function () { return (Date.now() - started) / 1000 > SHIP_MAX_SECONDS; };
     var limited = false;
-    var subs = folder.getFolders();
-    while (subs.hasNext() && !timeUp() && !limited) {
-      var sub = subs.next();
-      var plate = sub.getName().trim();
-      var files = sub.getFiles();
-      while (files.hasNext() && !timeUp() && !limited) {
-        var f = files.next();
-        if (done[f.getId()]) continue;
-        var mime = f.getMimeType();
-        if (mime.indexOf("image/") !== 0 && mime !== "application/pdf") continue;
-        var text = "";
-        try {
-          text = ocrImage_(f.getBlob());
-        } catch (err) {
-          // อ่านไม่ได้ก็ยังต้องส่งแถวไป — เว็บจะขึ้นแถวตัวแดงพร้อมลิงก์รูปให้คนกรอกเอง ไม่ให้รูปหายเงียบ
-          log_("ERROR", "OCR ตั๋วเรือไม่สำเร็จ " + plate + "/" + f.getName() + ": " + err);
-          if (String(err).indexOf("rate limit") >= 0) { limited = true; break; } // โดนจำกัดความถี่ — ไว้รอบหน้า
+    // ตั๋วเรือ / <เส้นทาง> / <ทะเบียน> / รูป
+    var routes = root.getFolders();
+    while (routes.hasNext() && !timeUp() && !limited) {
+      var routeFolder = routes.next();
+      var route = routeFolder.getName().trim();
+      var subs = routeFolder.getFolders();
+      while (subs.hasNext() && !timeUp() && !limited) {
+        var sub = subs.next();
+        var plate = sub.getName().trim();
+        var files = sub.getFiles();
+        while (files.hasNext() && !timeUp() && !limited) {
+          var f = files.next();
+          if (done[f.getId()]) continue;
+          var mime = f.getMimeType();
+          if (mime.indexOf("image/") !== 0 && mime !== "application/pdf") continue;
+          var text = "";
+          try {
+            text = ocrImage_(f.getBlob());
+          } catch (err) {
+            // อ่านไม่ได้ก็ยังต้องส่งแถวไป — เว็บจะขึ้นแถวตัวแดงพร้อมลิงก์รูปให้คนกรอกเอง ไม่ให้รูปหายเงียบ
+            log_("ERROR", "OCR ตั๋วเรือไม่สำเร็จ " + route + "/" + plate + "/" + f.getName() + ": " + err);
+            if (String(err).indexOf("rate limit") >= 0) { limited = true; break; } // โดนจำกัดความถี่ — ไว้รอบหน้า
+          }
+          sh.appendRow([
+            Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
+            plate, f.getId(), f.getName(), f.getUrl(), text.slice(0, 45000), route,
+          ]);
+          done[f.getId()] = true;
+          count++;
+          Utilities.sleep(1000);
         }
-        sh.appendRow([
-          Utilities.formatDate(new Date(), TZ, "dd/MM/yyyy HH:mm:ss"),
-          plate, f.getId(), f.getName(), f.getUrl(), text.slice(0, 45000),
-        ]);
-        done[f.getId()] = true;
-        count++;
-        Utilities.sleep(1000);
       }
     }
     if (count > 0) log_("INFO", "อ่านรูปตั๋วเรือใหม่ " + count + " รูป");

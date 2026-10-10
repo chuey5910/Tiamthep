@@ -10,6 +10,7 @@
  */
 
 import type { LocalTicket } from "./ship-ocr-local";
+import { validTicketNo, type TicketFormat } from "./ship-ticket-formats";
 import type { ParsedTicket } from "./ship-ticket-parse";
 
 export type MergedTicket = ParsedTicket & { readNote: string | null };
@@ -18,7 +19,7 @@ const minute = (d: Date | null | undefined) => (d ? Math.floor(d.getTime() / 600
 const dayOf = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 const kg = (n: number) => n.toLocaleString("th-TH");
 
-export function mergeReaders(google: ParsedTicket[], local: LocalTicket[]): MergedTicket[] {
+export function mergeReaders(google: ParsedTicket[], local: LocalTicket[], f: TicketFormat): MergedTicket[] {
   const usedG = new Set<number>();
   const pairs: { g: ParsedTicket | null; l: LocalTicket | null }[] = [];
 
@@ -39,10 +40,12 @@ export function mergeReaders(google: ParsedTicket[], local: LocalTicket[]): Merg
   const leftoverBoth = pairs.some((p) => !p.g) && google.some((_, i) => !usedG.has(i));
   google.forEach((g, i) => !usedG.has(i) && pairs.push({ g, l: null }));
 
-  // เลขที่ตั๋วในรูปเดียวกันต้องขึ้นต้นเหมือนกัน (ท่าเรือเดียวกัน ออกเลขเรียงกัน) — เลขที่หลุดรูปแบบ = อ่านพลาด
-  const allNos = pairs.flatMap((p) => [p.g?.ticketNo, p.l?.ticketNo]).filter((n): n is string => !!n && /^\d{10}$/.test(n));
+  // เลขที่ตั๋วในรูปเดียวกันต้องขึ้นต้นเหมือนกัน (ท่าเดียวกัน ออกเลขเรียงกัน) — เลขที่หลุดรูปแบบ = อ่านพลาด
+  // กี่หลักตามแบบตั๋ว · แบบที่ไม่ได้บอกไว้ (samePrefix 0) ไม่ตรวจข้อนี้
+  const allNos = pairs.flatMap((p) => [p.g?.ticketNo, p.l?.ticketNo]).filter((n): n is string => validTicketNo(n, f));
   const prefixCount = new Map<string, number>();
-  for (const n of allNos) prefixCount.set(n.slice(0, 6), (prefixCount.get(n.slice(0, 6)) ?? 0) + 1);
+  if (f.samePrefix > 0)
+    for (const n of allNos) prefixCount.set(n.slice(0, f.samePrefix), (prefixCount.get(n.slice(0, f.samePrefix)) ?? 0) + 1);
   const mainPrefix = [...prefixCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 
   return pairs.map(({ g, l }) => {
@@ -52,7 +55,7 @@ export function mergeReaders(google: ParsedTicket[], local: LocalTicket[]): Merg
 
     // เลขที่ตั๋ว
     let ticketNo: string | null = null;
-    const gNo = g?.ticketNo && /^\d{10}$/.test(g.ticketNo) ? g.ticketNo : null;
+    const gNo = validTicketNo(g?.ticketNo, f) ? g!.ticketNo : null;
     const lNo = l?.ticketNo ?? null;
     if (gNo && lNo && gNo !== lNo) notes.push(`⚠️ เลขที่ตั๋วอ่านได้ 2 แบบ: ${gNo} / ${lNo} — ดูรูปแล้วกรอกเอง`);
     else ticketNo = gNo ?? lNo;
