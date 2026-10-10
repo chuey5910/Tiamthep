@@ -116,7 +116,8 @@ export function ShipTable({
                 <tr key={r.id}>
                   <td>
                     <a href={r.photoUrl} target="_blank" rel="noopener" className="btn btn-ghost px-2 py-1 text-[12px]" title={r.fileName}>
-                      ดูรูป{r.part > 1 ? ` · ใบที่ ${r.part}` : ""}
+                      {/* ไม่บอก "ใบที่" — ลำดับในระบบเรียงตามเวลา ไม่ตรงตำแหน่งในรูป ดูจากเลขที่ตั๋วแทน */}
+                      ดูรูป
                     </a>
                   </td>
                   <td>
@@ -179,7 +180,7 @@ export function ShipTable({
                       disabled={!canEdit}
                     />
                   </td>
-                  <td className="min-w-[14rem] max-w-[18rem] !whitespace-normal text-[12.5px] leading-relaxed">
+                  <td className="min-w-[11rem] max-w-[16rem] !whitespace-normal text-[12.5px] leading-relaxed">
                     {r.blockers.map((b) => (
                       <div key={b} className="text-red-700">{b}</div>
                     ))}

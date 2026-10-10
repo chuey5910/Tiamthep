@@ -664,6 +664,9 @@ model ShipTicket {
   plateOnTicket String?
   driverNameOnTicket String?
 
+  /// รุ่นของตัวอ่าน (ship-ticket-parse.ts) ที่แยกใบนี้ — ตัวอ่านใหม่กว่า = รูปที่ยังรอตรวจทั้งรูปถูกอ่านใหม่เอง
+  parserVersion Int     @default(1)
+
   /// "รอตรวจ" | "ยืนยันแล้ว" | "ไม่ใช้"
   status      String   @default("รอตรวจ")
   jobId       Int?     @unique

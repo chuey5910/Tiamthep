@@ -34,9 +34,22 @@ const COL = { plate: 1, fileId: 2, fileName: 3, url: 4, ocr: 5 };
 export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: string; ocr: string };
 
 /** รูป 1 รูป → ตั๋วรอตรวจทีละใบ · รูปที่เคยรับแล้วข้าม (กดดึงซ้ำกี่ครั้งก็ไม่เกิดแถวซ้ำ) */
+/**
+ * รุ่นของตัวอ่าน — เพิ่มเลขทุกครั้งที่ปรับวิธีอ่าน (ship-ticket-parse.ts)
+ *   1 = ตัดทีละใบตาม "เลขที่" (ตั๋ว 2×2 อ่านสลับซ้าย-ขวา น้ำหนักผ่านแค่ ~9%)
+ *   2 = อ่านทั้งรูป จัดเที่ยวจากเวลา (รูปจริง 226 รูป: น้ำหนักผ่าน ~92% · วันที่ 100%)
+ */
+export const PARSER_VERSION = 2;
+
 export async function ingestPhoto(p: ShipPhoto): Promise<number> {
-  const seen = await prisma.shipTicket.count({ where: { fileId: p.fileId } });
-  if (seen > 0) return 0;
+  const seen = await prisma.shipTicket.findMany({ where: { fileId: p.fileId }, select: { status: true, parserVersion: true } });
+  if (seen.length > 0) {
+    // อ่านด้วยตัวอ่านรุ่นเก่า และทั้งรูปยังไม่มีใครตัดสิน → ลบแล้วอ่านใหม่ด้วยรุ่นปัจจุบัน
+    // รูปที่มีใบยืนยัน/ไม่ใช้ไปแล้ว ไม่แตะ (กันงานซ้ำ และไม่ทับสิ่งที่คนตัดสินไปแล้ว)
+    const redo = seen.every((x) => x.status === "รอตรวจ" && x.parserVersion < PARSER_VERSION);
+    if (!redo) return 0;
+    await prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } });
+  }
   const parsed = parseTicketPhoto(p.ocr);
   // อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ
   const tickets = parsed.length > 0 ? parsed : [null];
@@ -55,6 +68,7 @@ export async function ingestPhoto(p: ShipPhoto): Promise<number> {
       weightNet: t?.weightNet ?? null,
       plateOnTicket: t?.plate ?? null,
       driverNameOnTicket: t?.driverName ?? null,
+      parserVersion: PARSER_VERSION,
     })),
     skipDuplicates: true,
   });

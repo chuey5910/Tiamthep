@@ -53,7 +53,7 @@ export function SearchSelect({
   };
 
   return (
-    <div ref={box} className="relative inline-block min-w-[11rem] text-left">
+    <div ref={box} className="relative inline-block min-w-[10rem] text-left">
       <button
         type="button"
         disabled={disabled}
