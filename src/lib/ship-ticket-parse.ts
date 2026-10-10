@@ -292,9 +292,11 @@ function analyse(t: string) {
   // เลขที่ตั๋ว (ไม่ซ้ำ) ตามลำดับที่เจอในข้อความ
   const nosText: At<string>[] = [];
   for (const m of t.matchAll(TICKET_NO)) if (/^\d{10}$/.test(m[1]) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
-  // เลข 10 หลักที่ไม่มีคำว่า "เลขที่" นำหน้า (OCR อ่านคำหลุด) — ใช้เฉพาะที่ขึ้นต้น 6 หลักเหมือนเลขที่ใบอื่นในรูป
+  // เลข 10 หลักที่คำว่า "เลขที่" ถูก OCR อ่านเพี้ยน ("เกมที่" "เลย" "เกษ" …) — คุมแคบ 2 ชั้น ไม่ให้ไปหยิบเลขตรงอื่น:
+  //   1. ขึ้นต้น 6 หลักเหมือนเลขที่ใบอื่นในรูป
+  //   2. บรรทัดถัดไปต้องเป็น "Shipment" — ตำแหน่งเลขที่ตั๋วบนใบจริง (ตรวจรูปจริง 226 รูป: 20 ตัว ถูกทั้งหมด)
   const prefixes = new Set(nosText.map((x) => x.v.slice(0, 6)));
-  for (const m of t.matchAll(/(?<![\d\-\/.,])(\d{10})(?![\d\-\/.,])/g))
+  for (const m of t.matchAll(/(?<![\d\-\/.,])(\d{10})[ \t]*\n[ \t|_.-]*Sh/gi))
     if (prefixes.has(m[1].slice(0, 6)) && !nosText.some((x) => x.v === m[1])) nosText.push({ v: m[1], at: m.index! });
   nosText.sort((a, b) => a.at - b.at);
 
