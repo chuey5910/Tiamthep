@@ -55,6 +55,8 @@
   คอลัมน์แท็บนี้ต้องตรงกันระหว่าง `src/lib/ship-ticket.ts` (COL) กับ `SHIP_HEADER` ใน Code.gs
   ปรับวิธีอ่าน (`ship-ticket-parse.ts`) แล้วต้องเพิ่ม `PARSER_VERSION` — รูปที่ยังรอตรวจทั้งรูปจะถูกอ่านใหม่เอง
   ตั๋ว 4 ใบในรูป OCR อ่านสลับซ้าย-ขวา: จัดเที่ยวจากเวลา (รถคันเดียว เรียงเวลาแล้วเป็น เข้า-ออก สลับกัน) ห้ามตัดท่อนตาม "เลขที่"
+  ตัวอ่านที่สอง: เว็บดึงรูปจาก Drive (service account ต้องได้สิทธิ์อ่านโฟลเดอร์ «ตั๋วเรือ») แล้วอ่านด้วย Tesseract บนเครื่อง (`ship-ocr-local.ts` แบ่งช่องตามตำแหน่งตั๋ว)
+  รวมผลที่ `ship-ticket-merge.ts`: ตรงกัน/ได้ตัวเดียว = ใช้ · ไม่ตรงกัน = ว่าง + readNote ⚠️ · คิวอยู่ที่ตาราง ShipPhoto (localStatus)
 - สำรองข้อมูลอัตโนมัติ **ทุกวันอังคารและวันศุกร์ 00:00 น.** + ทุกครั้งที่สั่ง update
   (กล่อง `tiamthep-backup` รัน `scripts/backup-daemon.ts` · ตารางอยู่ที่ `scripts/backup-schedule.ts`
   ตั้งผ่าน `BACKUP_DAYS` / `BACKUP_TIME` ใน .env — ตัวเก่า `BACKUP_TIMES` เลิกใช้แล้ว)

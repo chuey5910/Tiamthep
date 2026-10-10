@@ -161,3 +161,19 @@ export async function pruneDrive(keyFile: string, folderId: string, keepDays: nu
   }
   return removed;
 }
+
+/**
+ * ดาวน์โหลดไฟล์จาก Drive (อ่านอย่างเดียว) — ใช้ดึงรูปตั๋วเรือมาอ่านด้วยตัวอ่านบนเครื่อง
+ * ไฟล์ต้องอยู่ในโฟลเดอร์ที่แชร์ให้ service account แล้ว ไม่งั้น Google ตอบ 404
+ */
+export async function downloadDriveFile(keyFile: string, fileId: string): Promise<Buffer> {
+  const token = await getAccessToken(keyFile, "https://www.googleapis.com/auth/drive.readonly");
+  const res = await fetch(`${FILES_API}/${encodeURIComponent(fileId)}?alt=media&${SHARED}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404 || res.status === 403) {
+    throw new Error("NO_ACCESS");
+  }
+  if (!res.ok) throw new Error(`Google Drive ตอบ ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return Buffer.from(await res.arrayBuffer());
+}

@@ -16,7 +16,14 @@
 
 import { buildContext, resolveDriver, routeKey } from "./calc";
 import { formatThaiDate, toInputDate } from "./date";
+import { writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ShipPhoto as ShipPhotoRow } from "@prisma/client";
+import { downloadDriveFile } from "./google-drive";
 import { readValues, sheetConfig } from "./google-sheets";
+import { readPhotoLocally } from "./ship-ocr-local";
+import { mergeReaders, type MergedTicket } from "./ship-ticket-merge";
 import { nameKey, parseTicketPhoto, plateKey, weightVerified } from "./ship-ticket-parse";
 import { prisma } from "./prisma";
 
@@ -38,10 +45,18 @@ export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: 
  * รุ่นของตัวอ่าน — เพิ่มเลขทุกครั้งที่ปรับวิธีอ่าน (ship-ticket-parse.ts)
  *   1 = ตัดทีละใบตาม "เลขที่" (ตั๋ว 2×2 อ่านสลับซ้าย-ขวา น้ำหนักผ่านแค่ ~9%)
  *   2 = อ่านทั้งรูป จัดเที่ยวจากเวลา (รูปจริง 226 รูป: น้ำหนักผ่าน ~92% · วันที่ 100%)
+ * หลังจากนั้นตัวอ่านที่สอง (Tesseract) อ่านซ้ำเบื้องหลัง แล้วแทนที่ด้วยผลรวม 2 ตัวอ่าน (ShipPhoto.localStatus)
  */
 export const PARSER_VERSION = 2;
 
 export async function ingestPhoto(p: ShipPhoto): Promise<number> {
+  // เก็บรูป + ข้อความของ Google ไว้เสมอ — ตัวอ่านที่สอง (Tesseract) จะมาอ่านซ้ำทีหลังจากคิวนี้
+  await prisma.shipPhoto.upsert({
+    where: { fileId: p.fileId },
+    update: { googleText: p.ocr, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim() },
+    create: { fileId: p.fileId, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim(), googleText: p.ocr },
+  });
+
   const seen = await prisma.shipTicket.findMany({ where: { fileId: p.fileId }, select: { status: true, parserVersion: true } });
   if (seen.length > 0) {
     // อ่านด้วยตัวอ่านรุ่นเก่า และทั้งรูปยังไม่มีใครตัดสิน → ลบแล้วอ่านใหม่ด้วยรุ่นปัจจุบัน
@@ -49,30 +64,138 @@ export async function ingestPhoto(p: ShipPhoto): Promise<number> {
     const redo = seen.every((x) => x.status === "รอตรวจ" && x.parserVersion < PARSER_VERSION);
     if (!redo) return 0;
     await prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } });
+    // ตัวอ่านที่สองต้องอ่านรูปนี้ใหม่ด้วย
+    await prisma.shipPhoto.update({ where: { fileId: p.fileId }, data: { localStatus: "รอ", localError: null, localTries: 0 } });
   }
-  const parsed = parseTicketPhoto(p.ocr);
-  // อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ
+  return createTickets(p, parseTicketPhoto(p.ocr).map((t) => ({ ...t, readNote: null })));
+}
+
+/** สร้างแถวตั๋วรอตรวจของรูปหนึ่ง — อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ */
+function ticketRows(p: ShipPhoto, parsed: MergedTicket[]) {
   const tickets = parsed.length > 0 ? parsed : [null];
-  await prisma.shipTicket.createMany({
-    data: tickets.map((t, i) => ({
-      fileId: p.fileId,
-      fileName: p.fileName,
-      photoUrl: p.url,
-      part: i + 1,
-      folderPlate: p.plate.trim(),
-      ocrText: t?.text ?? p.ocr,
-      ticketNo: t?.ticketNo ?? null,
-      ticketDate: t?.date ?? null,
-      weightIn: t?.weightIn ?? null,
-      weightOut: t?.weightOut ?? null,
-      weightNet: t?.weightNet ?? null,
-      plateOnTicket: t?.plate ?? null,
-      driverNameOnTicket: t?.driverName ?? null,
-      parserVersion: PARSER_VERSION,
-    })),
-    skipDuplicates: true,
-  });
-  return tickets.length;
+  return tickets.map((t, i) => ({
+    fileId: p.fileId,
+    fileName: p.fileName,
+    photoUrl: p.url,
+    part: i + 1,
+    folderPlate: p.plate.trim(),
+    ocrText: t?.text ?? p.ocr,
+    ticketNo: t?.ticketNo ?? null,
+    ticketDate: t?.date ?? null,
+    weightIn: t?.weightIn ?? null,
+    weightOut: t?.weightOut ?? null,
+    weightNet: t?.weightNet ?? null,
+    plateOnTicket: t?.plate ?? null,
+    driverNameOnTicket: t?.driverName ?? null,
+    readNote: t?.readNote ?? null,
+    parserVersion: PARSER_VERSION,
+  }));
+}
+
+async function createTickets(p: ShipPhoto, parsed: MergedTicket[]): Promise<number> {
+  const data = ticketRows(p, parsed);
+  await prisma.shipTicket.createMany({ data, skipDuplicates: true });
+  return data.length;
+}
+
+// ─────────────────────────────────────────────────────────────
+// ตัวอ่านที่สอง — อ่านรูปซ้ำด้วย Tesseract บนเครื่อง แล้วรวมผลกับของ Google
+// ทำเบื้องหลังทีละรูป (รูปละ ~5–15 วินาที) ไม่ให้หน้าเว็บช้า
+// ─────────────────────────────────────────────────────────────
+
+let localRunning = false;
+
+/** อ่านรูปที่ค้างในคิวจนหมด (หรือครบเวลา) — เรียกซ้ำระหว่างกำลังทำอยู่ จะไม่เริ่มซ้อน */
+export async function runLocalOcrQueue(
+  opts: { maxMs?: number; fetchImage?: (fileId: string) => Promise<Buffer> } = {},
+): Promise<{ done: number; error: string | null }> {
+  if (localRunning) return { done: 0, error: null };
+  const maxMs = opts.maxMs ?? 4 * 60 * 1000;
+  let fetchImage = opts.fetchImage;
+  if (!fetchImage) {
+    const cfg = sheetConfig();
+    if ("error" in cfg) return { done: 0, error: null };
+    fetchImage = (fileId) => downloadDriveFile(cfg.keyFile, fileId);
+  }
+  localRunning = true;
+  const started = Date.now();
+  let done = 0;
+  try {
+    while (Date.now() - started < maxMs) {
+      const retryAfter = new Date(Date.now() - 60 * 60 * 1000);
+      const photo = await prisma.shipPhoto.findFirst({
+        where: {
+          OR: [{ localStatus: "รอ" }, { localStatus: "ผิดพลาด", localTries: { lt: 5 }, localAt: { lt: retryAfter } }],
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!photo) break;
+      const stop = await readOnePhoto(photo, fetchImage);
+      done++;
+      if (stop) return { done, error: stop };
+    }
+    return { done, error: null };
+  } finally {
+    localRunning = false;
+  }
+}
+
+/** อ่านรูปเดียว — คืนข้อความ ถ้าเป็นปัญหาที่ทำให้อ่านรูปอื่นต่อไม่ได้ด้วย (เช่น ยังไม่ได้ลงตัวอ่าน) */
+async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) => Promise<Buffer>): Promise<string | null> {
+  const mark = (localStatus: string, localError: string | null) =>
+    prisma.shipPhoto.update({
+      where: { fileId: photo.fileId },
+      data: { localStatus, localError, localAt: new Date(), localTries: { increment: localStatus === "ผิดพลาด" ? 1 : 0 } },
+    });
+
+  // มีใบที่คนตัดสินไปแล้ว (ยืนยัน/ไม่ใช้) → ไม่แตะรูปนี้ กันงานซ้ำ
+  const decided = await prisma.shipTicket.count({ where: { fileId: photo.fileId, status: { not: "รอตรวจ" } } });
+  if (decided > 0) {
+    await mark("ข้าม", null);
+    return null;
+  }
+
+  const file = join(tmpdir(), `ship-${photo.fileId}.img`);
+  try {
+    writeFileSync(file, await fetchImage(photo.fileId));
+    const local = await readPhotoLocally(file);
+    const merged = mergeReaders(parseTicketPhoto(photo.googleText), local);
+    const p: ShipPhoto = { fileId: photo.fileId, fileName: photo.fileName, url: photo.photoUrl, plate: photo.folderPlate, ocr: photo.googleText };
+    // แทนที่ทั้งรูปในครั้งเดียว — ระหว่างอ่าน ถ้ามีคนตัดสินใบในรูปนี้ไปแล้ว ไม่แทนที่ (กันงานซ้ำ)
+    const replaced = await prisma.$transaction(async (tx) => {
+      const nowDecided = await tx.shipTicket.count({ where: { fileId: photo.fileId, status: { not: "รอตรวจ" } } });
+      if (nowDecided > 0) return false;
+      await tx.shipTicket.deleteMany({ where: { fileId: photo.fileId } });
+      await tx.shipTicket.createMany({ data: ticketRows(p, merged) });
+      return true;
+    });
+    await mark(replaced ? "เสร็จ" : "ข้าม", null);
+    return null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "NO_ACCESS") {
+      await mark("ผิดพลาด", "ระบบเปิดรูปใน Google Drive ไม่ได้ — แชร์โฟลเดอร์ «ตั๋วเรือ» ให้บัญชีระบบ (ผู้มีสิทธิ์อ่าน)");
+      return null;
+    }
+    if (/ENOENT/.test(msg) && /tesseract/i.test(msg)) {
+      await mark("ผิดพลาด", "เครื่องนี้ยังไม่ได้ลงตัวอ่าน Tesseract");
+      return "เครื่องนี้ยังไม่ได้ลงตัวอ่าน Tesseract";
+    }
+    await mark("ผิดพลาด", msg.slice(0, 300));
+    return null;
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+
+/** ความคืบหน้าของตัวอ่านที่สอง — โชว์บนหน้าตั๋วเรือ */
+export async function localOcrProgress() {
+  const [waiting, failed, sampleError] = await Promise.all([
+    prisma.shipPhoto.count({ where: { localStatus: "รอ" } }),
+    prisma.shipPhoto.count({ where: { localStatus: "ผิดพลาด" } }),
+    prisma.shipPhoto.findFirst({ where: { localStatus: "ผิดพลาด" }, orderBy: { localAt: "desc" }, select: { localError: true } }),
+  ]);
+  return { waiting, failed, error: sampleError?.localError ?? null };
 }
 
 /** ดึงผล OCR ใหม่จากแท็บ «ตั๋วเรือ» */
@@ -223,6 +346,9 @@ export async function shipReview(): Promise<ShipPage> {
     if (t.plateOnTicket && plateKey(t.plateOnTicket) !== plateKey(plate))
       warnings.push(`⚠️ ทะเบียนในตั๋ว ${t.plateOnTicket} ไม่ตรงโฟลเดอร์ ${plate} — ตรวจว่าเก็บรูปผิดโฟลเดอร์ไหม`);
 
+    // ตัวอ่าน 2 ตัวอ่านได้ไม่ตรงกัน ฯลฯ — ให้คนดูรูปก่อน
+    if (t.readNote) warnings.push(...t.readNote.split(" · "));
+
     const ticketNo = t.ticketNo && /^\d{10}$/.test(t.ticketNo) ? t.ticketNo : null;
     if (ticketNo) {
       const job = jobsWithNo.find((j) => j.ticketOrigin === ticketNo);
@@ -298,7 +424,10 @@ export function pullShipTicketsInBackground(): void {
   if (Date.now() - lastPull < 5 * 60 * 1000) return;
   if ("error" in sheetConfig()) return;
   lastPull = Date.now();
-  pullShipTickets().catch(() => {});
+  // ดึงข้อความใหม่จากชีตก่อน แล้วให้ตัวอ่านที่สองอ่านรูปที่ค้างต่อ (ทั้งหมดไม่รอผล หน้าไม่ช้า)
+  pullShipTickets()
+    .catch(() => {})
+    .finally(() => runLocalOcrQueue().catch(() => {}));
 }
 
 /** ตั๋วรอตรวจกี่ใบ — ตัวเลขข้างเมนู */

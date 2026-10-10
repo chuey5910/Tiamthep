@@ -22,6 +22,8 @@ export type ParsedTicket = {
   plate: string | null;
   /** ชื่อ พขร. ที่พิมพ์ท้ายตั๋ว เช่น "นายเมือง ศรีสะพุง" */
   driverName: string | null;
+  /** วัน-เวลาเข้าเต็ม (ถ้ารู้) — ไว้จับคู่กับผลของตัวอ่านที่สอง */
+  entryAt?: Date | null;
 };
 
 /** ปรับข้อความ OCR ให้เทียบง่าย: สระ ำ ที่แยกร่าง · เลขไทย · จุลภาคเต็มความกว้าง · อักขระล่องหน */
@@ -436,6 +438,7 @@ function analyse(t: string) {
     text: t.trim(),
     ticketNo: no,
     date: entries ? dayOf(entries[k]) : oneDay,
+    entryAt: entries ? entries[k] : null,
     weightIn: weightOf[k]?.in ?? null,
     weightOut: weightOf[k]?.out ?? null,
     weightNet: weightOf[k]?.net ?? null,

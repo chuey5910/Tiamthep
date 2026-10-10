@@ -15,6 +15,7 @@ FROM node:22-bookworm-slim
 #   (ของ Debian bookworm เป็นรุ่น 15 ซึ่ง pg_dump จะปฏิเสธการดัมป์จากเซิร์ฟเวอร์ที่ใหม่กว่า)
 # chromium + ฟอนต์ไทย — ตัวทำไฟล์ PDF ใบวางบิล (src/app/api/pdf) ให้ออกมาเหมือนที่พิมพ์ทุกประการ
 #   fonts-noto-core มี Noto Sans Thai (อยู่ในชุดฟอนต์ของเว็บ) · fonts-thai-tlwg เป็นตัวสำรอง
+# tesseract-ocr + ภาษาไทย — ตัวอ่านที่สองของตั๋วเรือ (src/lib/ship-ocr-local.ts) รู้ตำแหน่งตัวเลขในรูป
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates tzdata curl gnupg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -24,6 +25,7 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-16 \
     chromium fonts-noto-core fonts-thai-tlwg fontconfig \
+    tesseract-ocr tesseract-ocr-tha \
  && apt-get purge -y curl gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 

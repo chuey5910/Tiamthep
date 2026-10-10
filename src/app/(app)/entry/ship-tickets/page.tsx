@@ -3,7 +3,7 @@ import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { canWrite } from "@/lib/roles";
-import { SHIP, pullShipTickets, shipReview } from "@/lib/ship-ticket";
+import { SHIP, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview } from "@/lib/ship-ticket";
 import { ShipTable } from "./ShipTable";
 import { UndoUnused } from "./UndoUnused";
 
@@ -17,6 +17,9 @@ export default async function ShipTicketsPage() {
   await requireAuth();
   const user = await getCurrentUser();
   const pulled = await pullShipTickets();
+  // ตัวอ่านที่สองทำงานเบื้องหลัง ไม่รอ — เปิดหน้าใหม่ภายหลังจะเห็นผลที่อ่านเสร็จแล้ว
+  runLocalOcrQueue().catch(() => {});
+  const local = await localOcrProgress();
   const [data, recent] = await Promise.all([
     shipReview(),
     prisma.shipTicket.findMany({
@@ -43,10 +46,21 @@ export default async function ShipTicketsPage() {
         <b>ดูทีละแถว ถูกแล้วกด ✅ ยืนยัน</b> จึงจะกลายเป็นงานในระบบ
         <br />– ❌ ตัวแดง = อ่านไม่ชัด ระบบเว้นว่างไว้ กด «ดูรูป» แล้วกรอกเอง · กรอกครบแล้วปุ่มยืนยันเปลี่ยนเป็นสีแดง
         <br />– <b>น้ำหนักต้นทาง</b> อ่านจากตั๋ว · <b>น้ำหนักปลายทาง</b> = ค่าเดียวกับต้นทาง · ช่องว่างให้กรอกเป็นกิโลกรัมตามตั๋ว
+        <br />– อ่านด้วย 2 ตัวอ่าน (Google + ตัวอ่านบนเครื่อง) ตรงกันถึงใส่ให้เอง · อ่านได้ไม่ตรงกัน = ⚠️ ว่างไว้ให้ดูรูป
         <br />– ทะเบียน = ชื่อโฟลเดอร์ · พขร. จากตารางจับคู่รถ ถ้าชื่อในตั๋วไม่ตรงให้เลือกเอง (ระบบจำไว้ ครั้งหน้าไม่ต้องเลือกซ้ำ)
       </Formula>
 
       {!pulled.ok && <p className="mb-3 text-[13px] font-bold text-amber-700">⚠️ ดึงรูปตั๋วใหม่ไม่ได้ — {pulled.error}</p>}
+      {local.waiting > 0 && (
+        <p className="mb-3 text-[13px] font-bold text-sky-800">
+          🔍 ตัวอ่านที่สองกำลังอ่านรูปซ้ำ — เหลือ {local.waiting} รูป · ใบในรูปเหล่านั้นจะเติมค่าให้เองเมื่ออ่านเสร็จ (เปิดหน้านี้ใหม่เพื่อดูผล)
+        </p>
+      )}
+      {local.failed > 0 && (
+        <p className="mb-3 text-[13px] font-bold text-amber-700">
+          ⚠️ ตัวอ่านที่สองอ่านไม่ได้ {local.failed} รูป — {local.error} (ระบบลองใหม่เองทุกชั่วโมง)
+        </p>
+      )}
       {data.notices.map((n) => (
         <p key={n} className={`mb-3 text-[13px] font-bold ${n.startsWith("❌") ? "text-red-700" : "text-amber-700"}`}>
           {n}

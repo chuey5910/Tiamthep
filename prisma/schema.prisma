@@ -667,6 +667,9 @@ model ShipTicket {
   /// รุ่นของตัวอ่าน (ship-ticket-parse.ts) ที่แยกใบนี้ — ตัวอ่านใหม่กว่า = รูปที่ยังรอตรวจทั้งรูปถูกอ่านใหม่เอง
   parserVersion Int     @default(1)
 
+  /// ตัวอ่าน 2 ตัวอ่านได้ไม่ตรงกัน / ข้อสังเกตตอนอ่าน — โชว์เป็น ⚠️ ในหน้าตรวจ
+  readNote    String?
+
   /// "รอตรวจ" | "ยืนยันแล้ว" | "ไม่ใช้"
   status      String   @default("รอตรวจ")
   jobId       Int?     @unique
@@ -687,4 +690,22 @@ model OcrAlias {
   value String
 
   @@unique([kind, raw])
+}
+
+/// รูปตั๋วเรือ 1 รูป — เก็บข้อความ OCR ของ Google ไว้ และสถานะการอ่านซ้ำด้วยตัวอ่านที่สอง (Tesseract บนเครื่อง)
+model ShipPhoto {
+  fileId      String    @id
+  fileName    String
+  photoUrl    String
+  folderPlate String
+  /// ข้อความ OCR ของ Google ทั้งรูป (จากแท็บ «ตั๋วเรือ»)
+  googleText  String
+  /// "รอ" | "เสร็จ" | "ข้าม" (มีใบตัดสินแล้ว ไม่แตะ) | "ผิดพลาด"
+  localStatus String    @default("รอ")
+  localError  String?
+  localTries  Int       @default(0)
+  localAt     DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([localStatus])
 }
