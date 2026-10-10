@@ -179,6 +179,9 @@ async function createTickets(p: ShipPhoto, parsed: MergedTicket[]): Promise<numb
 // ทำเบื้องหลังทีละรูป (รูปละ ~5–15 วินาที) ไม่ให้หน้าเว็บช้า
 // ─────────────────────────────────────────────────────────────
 
+/** ข้อความต้องคงเดิม — ใช้หาแถวที่เคยติดเรื่องสิทธิ์ เพื่อคืนเข้าคิวเมื่อแชร์แล้ว */
+const NO_ACCESS_MSG = "ระบบเปิดรูปใน Google Drive ไม่ได้ — แชร์โฟลเดอร์ «ตั๋วเรือ» ให้บัญชีระบบ (ผู้มีสิทธิ์อ่าน)";
+
 let localRunning = false;
 let localStartedAt = 0;
 
@@ -221,10 +224,11 @@ export async function runLocalOcrQueue(
 
 /** อ่านรูปเดียว — คืนข้อความ ถ้าเป็นปัญหาที่ทำให้อ่านรูปอื่นต่อไม่ได้ด้วย (เช่น ยังไม่ได้ลงตัวอ่าน) */
 async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) => Promise<Buffer>): Promise<string | null> {
-  const mark = (localStatus: string, localError: string | null) =>
+  // countTry = false: ปัญหาที่ไม่ใช่ของรูปนี้ (เช่น ยังไม่ได้แชร์โฟลเดอร์) ไม่นับเป็นครั้งที่ลอง — แก้แล้วต้องอ่านได้ทุกรูป
+  const mark = (localStatus: string, localError: string | null, countTry = localStatus === "ผิดพลาด") =>
     prisma.shipPhoto.update({
       where: { fileId: photo.fileId },
-      data: { localStatus, localError, localAt: new Date(), localTries: { increment: localStatus === "ผิดพลาด" ? 1 : 0 } },
+      data: { localStatus, localError, localAt: new Date(), localTries: { increment: countTry ? 1 : 0 } },
     });
 
   // มีใบที่คนตัดสินไปแล้ว (ยืนยัน/ไม่ใช้) → ไม่แตะรูปนี้ กันงานซ้ำ
@@ -263,12 +267,18 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
       return true;
     });
     await mark(replaced ? "เสร็จ" : "ข้าม", null);
+    // เปิด Drive ได้แล้ว → รูปที่เคยติดเรื่องสิทธิ์ กลับเข้าคิวทันที ไม่ต้องรอรอบชั่วโมง
+    await prisma.shipPhoto.updateMany({
+      where: { localStatus: "ผิดพลาด", localError: NO_ACCESS_MSG },
+      data: { localStatus: "รอ", localError: null, localTries: 0 },
+    });
     return null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "NO_ACCESS") {
-      await mark("ผิดพลาด", "ระบบเปิดรูปใน Google Drive ไม่ได้ — แชร์โฟลเดอร์ «ตั๋วเรือ» ให้บัญชีระบบ (ผู้มีสิทธิ์อ่าน)");
-      return null;
+      // ทุกรูปจะติดเหมือนกัน — หยุดรอบนี้เลย ลองใหม่รอบหน้า (ไม่นับครั้ง รูปจึงไม่หมดสิทธิ์ลองระหว่างรอแชร์)
+      await mark("ผิดพลาด", NO_ACCESS_MSG, false);
+      return NO_ACCESS_MSG;
     }
     if (/ENOENT/.test(msg) && /tesseract/i.test(msg)) {
       await mark("ผิดพลาด", "เครื่องนี้ยังไม่ได้ลงตัวอ่าน Tesseract");
