@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui";
 import { baht, num } from "@/lib/format";
 import { createRecord, deleteRecord, updateRecord } from "../../crud/actions";
 import type { Option } from "@/lib/crud";
+import { needsReorder } from "@/lib/stock-rules";
 
 export type MoveView = {
   id: number;
@@ -50,11 +51,13 @@ const fold = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/
 export function StockHub({
   items,
   units,
+  categories,
   suppliers,
   vehicles,
 }: {
   items: ItemView[];
   units: Option[];
+  categories: Option[];
   suppliers: Option[];
   vehicles: Option[];
 }) {
@@ -66,7 +69,7 @@ export function StockHub({
   const shown = useMemo(() => {
     const fq = fold(q);
     return items.filter((it) => {
-      if (only === "low" && !(it.balance <= it.reorderPoint)) return false;
+      if (only === "low" && !needsReorder(it.balance, it.reorderPoint)) return false;
       if (only === "moved" && it.moves.length === 0) return false;
       if (!fq) return true;
       return [it.code, it.name, it.category, it.unit, it.trackingType, it.note].some((v) => fold(v).includes(fq));
@@ -131,7 +134,7 @@ export function StockHub({
               </tr>
             )}
             {shown.map((it) => {
-              const low = it.balance <= it.reorderPoint;
+              const low = needsReorder(it.balance, it.reorderPoint);
               return (
                 <tr key={it.code} className={low ? "row-danger" : undefined}>
                   <td className="font-bold">{it.code}</td>
@@ -310,14 +313,14 @@ export function StockHub({
         >
           {(item = dialog.item) => (
             <>
-              <F label="รหัสสินค้า" required>
+              <F label="รหัสสินค้า (บาร์โค้ด)" required>
                 <input name="code" className="inp" defaultValue={item?.code ?? ""} required disabled={!!item} />
               </F>
               <F label="ชื่อสินค้า" required wide2>
                 <input name="name" className="inp" defaultValue={item?.name ?? ""} required />
               </F>
               <F label="หมวดหมู่">
-                <input name="category" className="inp" defaultValue={item?.category ?? ""} />
+                <Select name="category" options={categories} empty="— ไม่ระบุ —" value={item?.category ?? undefined} />
               </F>
               <F label="หน่วยนับ">
                 <Select name="unit" options={units} empty="— ไม่ระบุ —" value={item?.unit} />
@@ -328,7 +331,7 @@ export function StockHub({
                   <option value="รายชิ้น">รายชิ้น</option>
                 </select>
               </F>
-              <F label="จุดสั่งซื้อขั้นต่ำ" help="คงเหลือต่ำกว่านี้จะขึ้นเตือน">
+              <F label="จุดสั่งซื้อขั้นต่ำ" help="คงเหลือเท่านี้หรือต่ำกว่าจะขึ้นเตือน · 0 = ไม่เตือน">
                 <input type="number" step="1" min="0" name="reorderPoint" className="inp" defaultValue={item?.reorderPoint ?? 0} />
               </F>
               <F label="หมายเหตุ" wide>
@@ -467,10 +470,13 @@ function Select({
   empty: string;
   value?: string;
 }) {
+  // ค่าเดิมที่ไม่อยู่ในรายการ (เช่น หน่วย/หมวดหมู่ที่ถูกลบออกจากตัวเลือกไปแล้ว) ต้องยังเลือกอยู่
+  // ไม่งั้นกดบันทึกแล้วค่าเดิมหายเงียบๆ
+  const all = value && !options.some((o) => o.value === value) ? [{ value, label: value }, ...options] : options;
   return (
     <select name={name} className="inp" defaultValue={value ?? ""}>
       <option value="">{empty}</option>
-      {options.map((o) => (
+      {all.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
         </option>

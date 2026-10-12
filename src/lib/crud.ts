@@ -295,12 +295,12 @@ export const RESOURCES: Record<string, Resource> = {
       "'จำนวน' ใช้กับของสิ้นเปลือง (น้ำมันเครื่อง/ไส้กรอง)",
     ],
     fields: [
-      { name: "code", label: "รหัสสินค้า", type: "text", required: true, immutable: true, span: 1 },
+      { name: "code", label: "รหัสสินค้า (บาร์โค้ด)", type: "text", required: true, immutable: true, span: 1 },
       { name: "name", label: "ชื่อสินค้า", type: "text", required: true, span: 2 },
-      { name: "category", label: "หมวดหมู่", type: "text", span: 1 },
+      { name: "category", label: "หมวดหมู่", type: "select", options: { kind: "lookup", lookupKind: "stockCategory" }, allowEmpty: true, span: 1 },
       { name: "unit", label: "หน่วยนับ", type: "select", options: { kind: "lookup", lookupKind: "unit" }, span: 1 },
       { name: "trackingType", label: "ประเภทการติดตาม", type: "select", options: { kind: "static", values: ["จำนวน", "รายชิ้น"] }, span: 1 },
-      { name: "reorderPoint", label: "จุดสั่งซื้อขั้นต่ำ", type: "number", step: "1", format: "num", span: 1, help: "คงเหลือต่ำกว่านี้จะขึ้นเตือนให้สั่งซื้อ" },
+      { name: "reorderPoint", label: "จุดสั่งซื้อขั้นต่ำ", type: "number", step: "1", format: "num", span: 1, help: "คงเหลือเท่านี้หรือต่ำกว่าจะขึ้นเตือนให้สั่งซื้อ · 0 = ไม่เตือน" },
       { name: "note", label: "หมายเหตุ", type: "text", span: 4, hideInTable: true },
     ],
   },
@@ -474,7 +474,7 @@ export const RESOURCES: Record<string, Resource> = {
     key: "lookups",
     model: "lookup",
     title: "รายการตัวเลือก (dropdown)",
-    subtitle: "ประเภทรถ ประเภทค่าใช้จ่าย สถานที่ ผู้ให้บริการ หน่วยนับ ประเภทสินค้า",
+    subtitle: "ประเภทรถ ประเภทค่าใช้จ่าย สถานที่ ผู้ให้บริการ หน่วยนับ ประเภทสินค้า หมวดหมู่อะไหล่",
     idField: "id",
     idType: "number",
     orderBy: [{ kind: "asc" }, { sort: "asc" }],
@@ -488,7 +488,7 @@ export const RESOURCES: Record<string, Resource> = {
         required: true,
         options: {
           kind: "static",
-          values: ["vehicleType", "expenseCategory", "location", "supplier", "unit", "cargoType"],
+          values: ["vehicleType", "expenseCategory", "location", "supplier", "unit", "cargoType", "stockCategory"],
           // ให้เห็นเป็นภาษาไทย ไม่ใช่ชื่อตัวแปรในระบบ
           labels: {
             vehicleType: "ประเภทรถ",
@@ -497,6 +497,7 @@ export const RESOURCES: Record<string, Resource> = {
             supplier: "ผู้ให้บริการ / อู่ / ร้านค้า",
             unit: "หน่วยนับ",
             cargoType: "ประเภทสินค้า",
+            stockCategory: "หมวดหมู่อะไหล่ (คลังอะไหล่)",
           },
         },
         span: 1,

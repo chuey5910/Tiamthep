@@ -9,6 +9,7 @@
  */
 
 import { prisma } from "./prisma";
+import { needsReorder } from "./stock-rules";
 import {
   buildContext,
   computeFuelBonuses,
@@ -917,7 +918,7 @@ export async function stockBalance(): Promise<StockBalanceRow[]> {
       outQty: round2(outQty),
       balance,
       reorderPoint: it.reorderPoint,
-      needsReorder: balance <= it.reorderPoint,
+      needsReorder: needsReorder(balance, it.reorderPoint),
     };
   });
 }

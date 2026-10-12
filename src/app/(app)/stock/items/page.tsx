@@ -3,6 +3,7 @@ import { formatThaiDate } from "@/lib/date";
 import { baht } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { sortOptionsThaiFirst } from "@/lib/sort";
+import { needsReorder } from "@/lib/stock-rules";
 import { StockHub, type ItemView, type MoveView } from "./StockHub";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +13,15 @@ export const dynamic = "force-dynamic";
  * เดิมแยกเป็น 3 หน้า ทำให้ต้องจำว่าอะไรอยู่หน้าไหน และดูคงเหลือตอนจะเบิกไม่ได้
  */
 export default async function StockItemsPage() {
-  const [items, ins, outs, unitLookups, supplierLookups, vehicles] = await Promise.all([
+  const [items, ins, outs, unitLookups, supplierLookups, vehicles, categoryLookups] = await Promise.all([
     prisma.inventoryItem.findMany({ orderBy: { code: "asc" } }),
     prisma.stockIn.findMany({ orderBy: [{ date: "asc" }, { id: "asc" }] }),
     prisma.stockOut.findMany({ orderBy: [{ date: "asc" }, { id: "asc" }] }),
     prisma.lookup.findMany({ where: { kind: "unit" }, orderBy: [{ sort: "asc" }, { value: "asc" }] }),
     prisma.lookup.findMany({ where: { kind: "supplier" }, orderBy: [{ sort: "asc" }, { value: "asc" }] }),
     prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: "asc" } }),
+    // หมวดหมู่เรียงตามที่ตั้งไว้ (ตรงกับอักษรนำหน้ารหัสสินค้า A ของเหลว · B ช่วงล่าง …)
+    prisma.lookup.findMany({ where: { kind: "stockCategory" }, orderBy: [{ sort: "asc" }, { value: "asc" }] }),
   ]);
 
   // เก็บเวลาจริงไว้เรียงก่อน แล้วค่อยแปลงวันที่เป็นข้อความตอนส่งให้หน้าจอ
@@ -96,7 +99,7 @@ export default async function StockItemsPage() {
 
   const totals = {
     items: views.length,
-    low: views.filter((v) => v.balance <= v.reorderPoint).length,
+    low: views.filter((v) => needsReorder(v.balance, v.reorderPoint)).length,
     value: views.reduce((a, v) => a + v.value, 0),
     moves: ins.length + outs.length,
   };
@@ -112,7 +115,7 @@ export default async function StockItemsPage() {
         <b>คงเหลือ</b> = รับเข้าสะสม − เบิกออกสะสม ·&nbsp;
         <b>มูลค่าคงเหลือ</b> = คงเหลือ × ราคาทุนต่อหน่วยครั้งล่าสุดที่รับเข้า ·&nbsp;
         <b>ต้นทุนที่เบิก</b> เข้ารายงานกำไรขาดทุนของรถคันที่เลือกให้อัตโนมัติ ·&nbsp;
-        แถวสีแดง = คงเหลือถึงจุดสั่งซื้อแล้ว
+        แถวสีแดง = คงเหลือถึงจุดสั่งซื้อแล้ว (เฉพาะสินค้าที่ตั้งจุดสั่งซื้อไว้ · 0 = ไม่เตือน)
       </Formula>
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -132,6 +135,7 @@ export default async function StockItemsPage() {
           <StockHub
             items={views}
             units={sortOptionsThaiFirst(unitLookups.map((l) => ({ value: l.value, label: l.value })))}
+            categories={categoryLookups.map((l) => ({ value: l.value, label: l.value }))}
             suppliers={sortOptionsThaiFirst(supplierLookups.map((l) => ({ value: l.value, label: l.value })))}
             vehicles={vehicles.map((v) => ({ value: v.plate, label: `${v.plate} (${v.vehicleType})` }))}
           />
