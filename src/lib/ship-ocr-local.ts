@@ -9,6 +9,9 @@
  */
 
 import { execFile } from "node:child_process";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { validTicketNo, type TicketFormat } from "./ship-ticket-formats";
 
@@ -217,8 +220,99 @@ export function readCell(cell: OcrWord[], f: TicketFormat): LocalTicket {
   };
 }
 
-/** ทั้งรูป → ตั๋วทีละใบ (ตามตำแหน่งจริงในรูป) */
+/**
+ * อ่านข้อความในช่องของแม่แบบ (วัน-เวลา + น้ำหนัก) — ตัวเลขล้วน บรรทัดละค่า เรียงบนลงล่าง
+ *   วัน-เวลาเข้า · นน.เข้า · วัน-เวลาออก · นน.ออก · นน.สุทธิ
+ * เศษจากป้ายข้างเคียง (เช่น "2" จาก "[2]") ไม่เป็นไร — หยิบค่าท้ายบรรทัด และน้ำหนักต้องผ่านสูตรเสมอ
+ */
+export function parseTemplateText(
+  text: string,
+  f: TicketFormat,
+): { entryAt: Date | null; exitAt: Date | null; weight: { in: number; out: number; net: number } | null } {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const dts: Date[] = [];
+  const nums: number[] = [];
+  for (const l of lines) {
+    const d = l.match(/(\d{1,2})\D{0,2}(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})/);
+    if (d) {
+      let y = Number(d[3]);
+      if (y > 2400) y -= 543;
+      const [dd, mm, hh, mi, ss] = [d[1], d[2], d[4], d[5], d[6]].map(Number);
+      const dt = new Date(Date.UTC(y, mm - 1, dd, hh, mi, ss));
+      if (mm >= 1 && mm <= 12 && dt.getUTCDate() === dd && hh < 24 && mi < 60 && ss < 60 && y >= 2020 && y <= 2100) dts.push(dt);
+      continue;
+    }
+    const w = [...l.matchAll(/(?<!\d)(\d{1,2},\d{3})(?![\d,])/g)].map((m) => Number(m[1].replace(",", "")));
+    if (w.length) nums.push(w[w.length - 1]);
+  }
+  const entryAt = dts[0] ?? null;
+  let exitAt: Date | null = dts[1] ?? null;
+  if (entryAt && exitAt && (exitAt < entryAt || exitAt.getTime() - entryAt.getTime() > 48 * 3600 * 1000)) exitAt = null;
+  // เข้า → ออก → สุทธิ ตามลำดับบนตั๋ว · ต้องได้ชุดเดียวที่ลบกันลงตัว
+  const found: { in: number; out: number; net: number }[] = [];
+  for (let i = 0; i < nums.length; i++)
+    for (let j = i + 1; j < nums.length; j++)
+      for (let k = j + 1; k < nums.length; k++) {
+        const [a, b, c] = [nums[i], nums[j], nums[k]];
+        if ((f.netRule === "inMinusOut" ? a - b : b - a) === c && c > 0) found.push({ in: a, out: b, net: c });
+      }
+  const uniq = new Map(found.map((x) => [`${x.in}|${x.out}|${x.net}`, x]));
+  return { entryAt, exitAt, weight: uniq.size === 1 ? [...uniq.values()][0] : null };
+}
+
+/** ตัดช่องแม่แบบของตั๋วใบหนึ่งออกมาอ่าน (ขยาย 2 เท่า + ขาวดำ ให้ตัวอ่านเห็นชัด) */
+async function readTemplate(imagePath: string, anchor: OcrWord, f: TicketFormat): Promise<string | null> {
+  const t = f.template!;
+  // โหลดตัวตัดรูปตอนใช้ — เครื่องไหนโหลดไม่ได้ ข้ามไปใช้ผลอ่านทั้งช่องแบบเดิม (หน้าเว็บต้องไม่ล่มเพราะเรื่องนี้)
+  let sharp: typeof import("sharp");
+  try {
+    sharp = (await import("sharp")).default;
+  } catch {
+    return null;
+  }
+  const meta = await sharp(imagePath).metadata();
+  const u = anchor.w;
+  const left = Math.max(0, Math.round(anchor.x + t.dx * u));
+  const top = Math.max(0, Math.round(anchor.y + t.dy * u));
+  const width = Math.min(Math.round(t.w * u), (meta.width ?? 0) - left);
+  const height = Math.min(Math.round(t.h * u), (meta.height ?? 0) - top);
+  if (width < 20 || height < 20) return null; // ช่องหลุดขอบรูป
+  const file = join(tmpdir(), `tpl-${process.pid}-${anchor.x}-${anchor.y}.png`);
+  try {
+    await sharp(imagePath).extract({ left, top, width, height }).resize({ width: width * 2 }).grayscale().normalise().toFile(file);
+    const bin = process.env.TESSERACT_PATH || "tesseract";
+    const { stdout } = await run(bin, [file, "stdout", "--psm", "6", "-c", "tessedit_char_whitelist=0123456789,/: "], {
+      timeout: 60_000,
+      env: { ...process.env, OMP_THREAD_LIMIT: process.env.OMP_THREAD_LIMIT || "2" },
+    });
+    return stdout;
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+
+/**
+ * ทั้งรูป → ตั๋วทีละใบ (ตามตำแหน่งจริงในรูป)
+ * แบบตั๋วที่มีแม่แบบตำแหน่ง: วัน-เวลา/น้ำหนัก อ่านจากช่องแม่แบบก่อน (แม่นกว่า) · ช่องอ่านไม่ผ่าน = ใช้ผลอ่านทั้งช่องตั๋วแบบเดิม
+ */
 export async function readPhotoLocally(imagePath: string, f: TicketFormat): Promise<LocalTicket[]> {
   const words = await tesseractWords(imagePath);
-  return splitByPosition(words, f).map((cell) => readCell(cell, f));
+  const tickets = splitByPosition(words, f).map((cell) => readCell(cell, f));
+  if (!f.template) return tickets;
+  for (const t of tickets) {
+    const anchor = t.ticketNo ? words.find((w) => w.text === t.ticketNo) : undefined;
+    if (!anchor) continue;
+    const text = await readTemplate(imagePath, anchor, f);
+    if (!text) continue;
+    const r = parseTemplateText(text, f);
+    if (r.entryAt) t.entryAt = r.entryAt;
+    if (r.exitAt) t.exitAt = r.exitAt;
+    if (r.weight) {
+      t.weightIn = r.weight.in;
+      t.weightOut = r.weight.out;
+      t.weightNet = r.weight.net;
+    }
+    t.text += `\n— ช่องแม่แบบ —\n${text.trim()}`;
+  }
+  return tickets;
 }

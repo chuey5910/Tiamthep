@@ -50,6 +50,12 @@ export type TicketFormat = {
   hasDriverName: boolean;
   /** ข้อความที่ต้องมีในตั๋วแบบนี้ (หัวบริษัท) — ไม่เจอ = ⚠️ อาจเป็นตั๋วผิดโฟลเดอร์ */
   mustContain?: { re: RegExp; label: string };
+  /**
+   * แม่แบบตำแหน่ง (ตัวอ่านที่สอง) — ช่อง วัน-เวลาเข้า · นน.เข้า · วัน-เวลาออก · นน.ออก · นน.สุทธิ บนตั๋ว
+   * วัดจากมุมซ้ายบนของเลขที่ตั๋ว หน่วย = ความกว้างของเลขที่ (ตั๋วพิมพ์จากแม่แบบเดียวกัน ย่อ/ขยายตามรูปได้)
+   * ตัดเฉพาะช่องนี้มาอ่านเป็นตัวเลขอย่างเดียว — ป้ายเพี้ยนแค่ไหนก็ไม่กระทบ
+   */
+  template?: { dx: number; dy: number; w: number; h: number };
 };
 
 /** ป้ายของท่าเรือในช่องหมายเหตุของตั๋วโรงงาน (Port In Date / Port In Date time / Port In Weight (Kg)) */
@@ -80,6 +86,8 @@ export const FORMATS: Record<string, TicketFormat> = {
     noLineBelow: /^[ \t|_.-]*Sh/i,
     bareNoSingle: true,
     localAnchor: true,
+    // วัดจากรูปจริง 3 รูป 12 ใบ (มือถือ + สแกน): ทุกช่องอ่านถูก 12/12
+    template: { dx: 0.95, dy: 3.4, w: 2.1, h: 1.85 },
     layout: "trips",
     netRule: "outMinusIn",
     plateFrom: "folder",
