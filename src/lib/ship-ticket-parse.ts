@@ -225,10 +225,10 @@ function labeledAll(t: string, label: RegExp): (At<number> & { vat: number })[] 
 
 // ป้ายที่ OCR อ่านเพี้ยนบ่อย: นน.เข้า → นน.เขา / นน.เช้า · นน.ออก → นบ.ออก
 // ป้ายที่ OCR อ่านเพี้ยนบ่อย: นน.→นบ./นพ./บน. · เข้า→เขา/เช้า/เข่า/เฒ่า (วรรณยุกต์สลับ ่/้ หรือหลุด)
-const LBL_IN = /(?:น[นบพ]|บน|น\.น)\s*\.?\s*เ[ขชบฒ]\s*[่้]?\s*า/g;
+const LBL_IN = /(?:น[นบพ]|บ[บน]|มบ|น\.น)\s*\.?\s*เ[ขชบฒป]\s*[่้]?\s*า/g;
 const LBL_OUT = /(?:น[นบพ]|บน|น\.น)\s*\.?\s*ออ/g;
 const LBL_NET = /(?:น[นบพ]|บน|น\.น)\s*\.?\s*สุ/g;
-const LBL_ENTRY = /เวลา\s*เ[ขชบฒ]\s*[่้]?\s*า/g;
+const LBL_ENTRY = /เวลา\s*เ[ขชบฒป]\s*[่้]?\s*า/g;
 
 /**
  * ตัวเลขน้ำหนักที่ OCR ใส่จุด/จุลภาคเพี้ยน เช่น "11,380" → "1.1.,380" — นับเมื่อหลังสุดเป็น 3 หลักหลังเครื่องหมายคั่น
@@ -446,8 +446,9 @@ function analyse(t: string, f: TicketFormat) {
   // ตัวเลขที่ชุดมีป้ายใช้ไปแล้ว — แบบไม่พึ่งป้ายห้ามหยิบซ้ำ (กันเฉพาะตัวเลขนั้นจริงๆ ไม่กันทั้งช่วง)
   for (const tr of labeledT) for (const p of tr.pos) taken.add(p);
   const tare = estimateTare(t);
+  // ชุดซ้ำ = ตัวเลขตำแหน่งเดียวกันในข้อความ (ไม่ใช่ค่าเท่ากัน) — รถวิ่งเที่ยวเดิมแล้วน้ำหนักเท่ากันเป๊ะมีจริง ต้องนับเป็น 2 ใบ
   const triples = [...labeledT, ...looseTriples(t, taken, tare)].filter(
-    (tr, i, all) => all.findIndex((x) => x.in === tr.in && x.out === tr.out && x.net === tr.net) === i,
+    (tr, i, all) => all.findIndex((x) => x.pos.join() === tr.pos.join()) === i,
   );
 
   // ชุดน้ำหนักเป็นของเที่ยวไหน
@@ -506,7 +507,7 @@ function analyse(t: string, f: TicketFormat) {
       });
       // เหลือใบเดียวที่ยังไม่มีน้ำหนัก และเหลือชุดน้ำหนักชุดเดียว → เป็นของใบนั้นแน่นอน
       const empty = weightOf.map((w, i) => (w ? -1 : i)).filter((i) => i >= 0);
-      const left = triples.filter((tr) => !weightOf.some((w) => w && same(w, tr)));
+      const left = triples.filter((tr) => !weightOf.includes(tr));
       if (empty.length === 1 && left.length === 1 && triples.length === n) weightOf[empty[0]] = left[0];
     }
   }
