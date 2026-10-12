@@ -369,9 +369,21 @@ function analyse(t: string, f: TicketFormat) {
     const d = toDateTime(m);
     if (d && !rawDt.some((x) => x.v.getTime() === d.getTime())) rawDt.push({ v: d, at: m.index! });
   }
-  // OCR อ่านปีเพี้ยน (เช่น 2026 → 2013/2020) — รถคันเดียวในรูปเดียว เวลาห่างจากค่ากลางของรูปเกิน 7 วันเป็นไปไม่ได้ ไม่นับ
-  const mid = [...rawDt].sort((a, b) => a.v.getTime() - b.v.getTime())[Math.floor(rawDt.length / 2)]?.v.getTime() ?? 0;
-  const allDt = rawDt.filter((d) => Math.abs(d.v.getTime() - mid) <= 7 * 86400 * 1000);
+  // OCR อ่านปีเพี้ยน (เช่น 2026 → 2025/2020/2013) — รถคันเดียวในรูปเดียว เวลาห่างจากค่ากลางของรูปเกิน 7 วันเป็นไปไม่ได้
+  // วัน/เดือน/เวลาเหมือนเดิมแต่ปีเพี้ยน → ใช้ปีของรูป ถ้าแล้วเข้าช่วงเวลาของรูปพอดี · ไม่เข้า = ไม่นับ
+  const WEEK = 7 * 86400 * 1000;
+  const midDt = [...rawDt].sort((a, b) => a.v.getTime() - b.v.getTime())[Math.floor(rawDt.length / 2)]?.v;
+  const mid = midDt?.getTime() ?? 0;
+  const allDt: At<Date>[] = [];
+  for (const d of rawDt) {
+    let v = d.v;
+    if (Math.abs(v.getTime() - mid) > WEEK && midDt) {
+      const fixed = new Date(Date.UTC(midDt.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), v.getUTCHours(), v.getUTCMinutes(), v.getUTCSeconds()));
+      if (Math.abs(fixed.getTime() - mid) > WEEK) continue;
+      v = fixed;
+    }
+    if (!allDt.some((x) => x.v.getTime() === v.getTime())) allDt.push({ v, at: d.at });
+  }
   const sortedDt = [...allDt].sort((a, b) => a.v.getTime() - b.v.getTime());
 
   // รถคันเดียววิ่งทีละเที่ยว → เรียงเวลาแล้วต้องเป็น เข้า ออก เข้า ออก …
