@@ -614,10 +614,22 @@ function parseBlock(part: string, f: TicketFormat): ParsedTicket[] {
   if (nos.length > 1)
     return nos.map((no) => ({ text: t, ticketNo: no, date: null, weightIn: null, weightOut: null, weightNet: null, plate: null, driverName: null, note: "⚠️ แยกตั๋วในรูปนี้ไม่ออก — ดูรูปแล้วกรอกวันที่/น้ำหนัก/ทะเบียนเอง" }));
 
-  // วัน-เวลาเข้า: แรกสุดหลังป้ายเข้า (Gate In) · ไม่มีป้าย = แรกสุดในใบ ถ้าทุกเวลาเป็นวันเดียวกัน · ไม่งั้นว่าง (ไม่เดา)
+  // วัน-เวลาเข้า (Gate In) — ใบหนึ่งมีเวลาของใบเอง 2 ตัว (เข้า · ออก) และเข้าก่อนออกเสมอ
+  // OCR วางค่าก่อนหรือหลังป้ายก็ได้ (เคยเจอ: ค่า Gate In อยู่เหนือป้าย → หยิบ "แรกสุดหลังป้าย" ได้ Gate Out ข้ามเที่ยงคืน)
+  // จึงเอา 2 ตัวที่อยู่ใกล้ป้ายที่สุด แล้วใช้ตัวที่เวลาก่อน · หาไม่ได้ = แรกสุดหลังป้าย · ไม่มีป้าย = แรกสุดในใบ ถ้าทุกเวลาวันเดียวกัน
   let entry: Date | null = null;
   const lbl = f.entryLabel ? t.search(f.entryLabel) : -1;
   if (lbl >= 0) {
+    const own: { at: number; d: Date }[] = [];
+    for (const m of t.matchAll(DT_ANY)) {
+      if (afterSkipLabel(t, m.index!, f)) continue;
+      const d = toDateTime(m);
+      if (d) own.push({ at: m.index!, d });
+    }
+    const near = own.sort((a, b) => Math.abs(a.at - lbl) - Math.abs(b.at - lbl)).slice(0, 2);
+    if (near.length === 2) entry = near[0].d.getTime() <= near[1].d.getTime() ? near[0].d : near[1].d;
+  }
+  if (!entry && lbl >= 0) {
     for (const m of t.slice(lbl).matchAll(DT_ANY)) {
       if (afterSkipLabel(t, lbl + m.index!, f)) continue;
       entry = toDateTime(m);
