@@ -663,7 +663,10 @@ export async function shipReview(): Promise<ShipPage> {
 
   return {
     rows,
-    routes: [...routes.values()].sort((a, b) => a.folder.localeCompare(b.folder, "th")),
+    // ทุกเส้นทางที่มีในระบบ (ยังไม่มีตั๋วรอตรวจก็แสดง) — ปุ่มเลือกเส้นทางครบเสมอ
+    routes: [...routeRows.map((r) => routeInfo(r.folderName)), ...routes.values()]
+      .filter((r, i, all) => all.findIndex((x) => x.folder === r.folder) === i)
+      .sort((a, b) => a.folder.localeCompare(b.folder, "th")),
     drivers: drivers
       .map((d) => ({ code: d.code, name: fullName(d) }))
       .sort((a, b) => a.name.localeCompare(b.name, "th")),

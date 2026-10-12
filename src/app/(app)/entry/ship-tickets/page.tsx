@@ -27,7 +27,10 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
   const data = await shipReview();
   // ตรวจทีละเส้นทาง — เส้นทางเดียวบนจอ ไม่ปนกัน (ระบบยังอ่านรูปทุกเส้นทางเบื้องหลัง สลับไปแล้วพร้อมตรวจทันที)
   const want = typeof sp.route === "string" ? sp.route : null;
-  const route = data.routes.find((r) => r.folder === want) ?? data.routes[0] ?? null;
+  // เปิดหน้ามาเฉยๆ = เส้นทางแรกที่มีตั๋วรอตรวจ
+  const pendingOf = (folder: string) => data.rows.filter((x) => x.routeFolder === folder).length;
+  const route =
+    data.routes.find((r) => r.folder === want) ?? data.routes.find((r) => pendingOf(r.folder) > 0) ?? data.routes[0] ?? null;
   const rows = route ? data.rows.filter((x) => x.routeFolder === route.folder) : [];
   // รูปซ้ำที่ข้าม — ของเส้นทางที่กำลังตรวจ (ไม่มีตั๋วรอตรวจเลย = ทุกเส้นทาง)
   const skipped = await skippedPhotos(route?.folder);
@@ -77,11 +80,11 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
 
       {isAdmin(user) && <ResetButton />}
 
-      {data.routes.length > 1 && (
+      {data.routes.length > 0 && (
         <div className="no-print mb-3 flex flex-wrap items-center gap-2">
           <span className="text-[14px] font-bold text-slate-700">เลือกเส้นทางที่จะตรวจ:</span>
           {data.routes.map((r) => {
-            const n = data.rows.filter((x) => x.routeFolder === r.folder).length;
+            const n = pendingOf(r.folder);
             const on = r.folder === route?.folder;
             return (
               <a
@@ -119,12 +122,16 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
           bodyClass="p-3"
         >
           {route.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{route.problem}</p>}
-          <ShipTable rows={rows} drivers={data.drivers} vehicles={data.vehicles} canEdit={canWrite(user)} />
+          {rows.length === 0 ? (
+            <Empty>✅ เส้นทางนี้ไม่มีตั๋วรอตรวจ — รูปใหม่ในโฟลเดอร์จะขึ้นเองภายใน 5 นาทีหลังอ่านเสร็จ</Empty>
+          ) : (
+            <ShipTable rows={rows} drivers={data.drivers} vehicles={data.vehicles} canEdit={canWrite(user)} />
+          )}
         </Card>
       )}
 
       {recent.length > 0 && (
-        <Card title={`ตรวจแล้วล่าสุด${data.routes.length > 1 && route ? ` · ${route.origin ?? route.folder} → ${route.destination ?? "❓"}` : ""}`} bodyClass="p-0">
+        <Card title={`ตรวจแล้วล่าสุด${route ? ` · ${route.origin ?? route.folder} → ${route.destination ?? "❓"}` : ""}`} bodyClass="p-0">
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
