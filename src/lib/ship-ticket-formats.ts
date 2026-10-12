@@ -40,6 +40,8 @@ export type TicketFormat = {
   blockEnd?: RegExp;
   /** ป้ายของค่าที่ไม่ใช่ของตั๋วใบนี้ (เช่น น้ำหนัก/วันที่ของท่าเรือในหมายเหตุ) — ตัวเลข/วันที่ที่ตามหลังป้ายนี้ไม่หยิบ */
   skipLabels?: RegExp;
+  /** blocks: ป้ายวัน-เวลาเข้าของใบนี้ (เช่น Gate In) — วันที่ของใบ = วัน-เวลาแรกหลังป้ายนี้ */
+  entryLabel?: RegExp;
   /** สูตรน้ำหนัก: "outMinusIn" รถเปล่าเข้า บรรทุกออก · "inMinusOut" บรรทุกเข้า ลงของแล้วออก */
   netRule: "outMinusIn" | "inMinusOut";
   /** ทะเบียนมาจากไหน: ชื่อโฟลเดอร์ย่อย หรือ ทะเบียนที่พิมพ์ในตั๋ว (โฟลเดอร์ย่อยเป็นอย่างอื่น เช่น วันที่ + ชื่อเรือ) */
@@ -49,6 +51,9 @@ export type TicketFormat = {
   /** ข้อความที่ต้องมีในตั๋วแบบนี้ (หัวบริษัท) — ไม่เจอ = ⚠️ อาจเป็นตั๋วผิดโฟลเดอร์ */
   mustContain?: { re: RegExp; label: string };
 };
+
+/** ป้ายของท่าเรือในช่องหมายเหตุของตั๋วโรงงาน (Port In Date / Port In Date time / Port In Weight (Kg)) */
+const PORT_LABELS = /Port\s*(?:In|Out)\s*(?:Date(?:\s*time)?|Weight(?:\s*\(\s*Kg\s*\))?)\s*[:：.]?\s*$/i;
 
 /** ลำดับนี้ = ลำดับในหน้าตั้งค่า (แบบทั่วไปอยู่บนสุด — เพิ่มโฟลเดอร์เองแล้วค่าเริ่มต้นไม่ไปเดาว่าเป็นแบบไหน) */
 export const FORMATS: Record<string, TicketFormat> = {
@@ -97,12 +102,26 @@ export const FORMATS: Record<string, TicketFormat> = {
     layout: "blocks",
     noPattern: { find: /(?<![A-Za-z0-9])(R\d{9})(?!\d)/g, valid: /^R\d{9}$/ },
     blockEnd: /SUPPLIER/g,
-    skipLabels: /Port\s*(?:In|Out)\s*(?:Date|Weight)\s*[:：.]?\s*$/i,
+    skipLabels: PORT_LABELS,
+    entryLabel: /Gate\s*In\s*Date\s*time/i,
     netRule: "inMinusOut",
     plateFrom: "ticket",
     hasDriverName: false,
     mustContain: { re: /G\s*J\s*Steel/i, label: "G J Steel" },
   },
+};
+
+/**
+ * ตั๋วชั่ง บริษัท จี สตีล (บ้านค่าย ระยอง) — หน้าตาเหมือน จี เจ สตีล ทุกอย่าง ต่างที่หัวตั๋ว «G Steel»
+ * (วันที่ใช้ / แทน - และมีบรรทัด Gross Weight เพิ่ม — ตัวอ่านรองรับทั้งคู่อยู่แล้ว)
+ * ตรวจกับรูปจริงในโฟลเดอร์ «ท่าเรือศรีราชาฮาร์เบอร์ - จี สตีล บ้านค่าย»
+ */
+FORMATS.gs = {
+  ...FORMATS.gjs,
+  key: "gs",
+  label: "ตั๋วชั่ง จี สตีล บ้านค่าย (เลขที่ R + 9 หลัก · ทะเบียนจากตั๋ว)",
+  // «G Steel» ต้องไม่ไปตรงกับ «G J Steel» / «GJ Steel»
+  mustContain: { re: /\bG\s+Steel/i, label: "G Steel" },
 };
 
 export const DEFAULT_FORMAT = "generic";

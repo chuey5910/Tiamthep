@@ -513,11 +513,19 @@ function parseBlocks(t: string, f: TicketFormat): ParsedTicket[] {
   return found;
 }
 
-/** ตัวเลข/วันที่ตำแหน่งนี้ตามหลังป้ายที่ไม่ใช่ของใบนี้ไหม (ดูย้อนในบรรทัดเดียวกัน) */
+/**
+ * ตัวเลข/วันที่ตำแหน่งนี้ตามหลังป้ายที่ไม่ใช่ของใบนี้ไหม
+ * ดูข้อความก่อนหน้าในบรรทัดเดียวกัน — ถ้าค่าอยู่ต้นบรรทัด ดูบรรทัดก่อนหน้าที่ไม่ว่าง (OCR ชอบแยกป้ายกับค่าคนละบรรทัด)
+ */
 function afterSkipLabel(t: string, at: number, f: TicketFormat): boolean {
   if (!f.skipLabels) return false;
   const lineStart = t.lastIndexOf("\n", at - 1) + 1;
-  return f.skipLabels.test(t.slice(Math.max(lineStart, at - 40), at));
+  let before = t.slice(lineStart, at);
+  if (!before.trim()) {
+    const prev = t.slice(0, lineStart).replace(/\s+$/, "");
+    before = prev.slice(prev.lastIndexOf("\n") + 1);
+  }
+  return f.skipLabels.test(before.slice(-60));
 }
 
 function parseBlock(part: string, f: TicketFormat): ParsedTicket[] {
@@ -538,7 +546,20 @@ function parseBlock(part: string, f: TicketFormat): ParsedTicket[] {
   if (nos.length > 1)
     return nos.map((no) => ({ text: t, ticketNo: no, date: null, weightIn: null, weightOut: null, weightNet: null, plate: null, driverName: null, note: "⚠️ แยกตั๋วในรูปนี้ไม่ออก — ดูรูปแล้วกรอกวันที่/น้ำหนัก/ทะเบียนเอง" }));
 
-  const entry = dts.length ? dts.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b)) : null;
+  // วัน-เวลาเข้า: แรกสุดหลังป้ายเข้า (Gate In) · ไม่มีป้าย = แรกสุดในใบ ถ้าทุกเวลาเป็นวันเดียวกัน · ไม่งั้นว่าง (ไม่เดา)
+  let entry: Date | null = null;
+  const lbl = f.entryLabel ? t.search(f.entryLabel) : -1;
+  if (lbl >= 0) {
+    for (const m of t.slice(lbl).matchAll(DT_ANY)) {
+      if (afterSkipLabel(t, lbl + m.index!, f)) continue;
+      entry = toDateTime(m);
+      if (entry) break;
+    }
+  }
+  if (!entry && dts.length) {
+    const first = dts.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
+    entry = dts.every((d) => dayOf(d).getTime() === dayOf(first).getTime()) ? first : null;
+  }
 
   // น้ำหนัก: ทุกตัวเลขที่หน้าตาเป็นน้ำหนัก (ตำแหน่งแรกที่เจอ) ไม่นับที่ตามหลังป้ายของคนอื่น
   const pos = new Map<number, number>();

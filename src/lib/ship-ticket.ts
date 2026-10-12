@@ -51,6 +51,15 @@ export type ShipPhoto = { fileId: string; fileName: string; url: string; plate: 
 const squash = (s: string) => s.replace(/\s+/g, "");
 
 /**
+ * ชื่อโฟลเดอร์เส้นทางแบบมาตรฐาน — «ต้นทาง - ปลายทาง» วรรคหน้า-หลังขีดเสมอ
+ * ใน Drive บางโฟลเดอร์เขียน «ต้นทาง-ปลายทาง» ติดกัน · ถือเป็นเส้นทางเดียวกัน ไม่แตกเป็น 2 เส้นทาง
+ * (ต้องตรงกับ migration 20261012140000_g_steel_route ที่ปรับชื่อเดิมในฐานข้อมูล)
+ */
+export function normRouteFolder(name: string): string {
+  return name.trim().replace(/\s+/g, " ").replace(/\s*-\s*/, " - ");
+}
+
+/**
  * ชื่อโฟลเดอร์ «ต้นทาง - ปลายทาง» → ชื่อสถานที่ในระบบ
  * เทียบแบบไม่สนช่องว่าง (โฟลเดอร์เดิมเขียน «โกดังท่าเรือ…» ส่วนในระบบเป็น «โกดัง ท่าเรือ…»)
  * ต้องตรงสถานที่เดียวเท่านั้น — ไม่ตรง/ตรงหลายที่ = null ให้คนเลือกเอง (ไม่เดา)
@@ -355,7 +364,7 @@ export async function pullShipTickets(): Promise<{ ok: true; added: number } | {
   if ("error" in cfg) return { ok: false, error: "เว็บเครื่องนี้ยังไม่ได้เชื่อมกับ Google Sheet ที่เก็บผลอ่านรูปตั๋ว" };
   try {
     const rows = await readValues(cfg.keyFile, cfg.sheetId, `${SHIP_TAB}!A2:G`);
-    const routeOf = (r: string[]) => (r[COL.route] ?? "").trim() || LEGACY_ROUTE_FOLDER;
+    const routeOf = (r: string[]) => normRouteFolder((r[COL.route] ?? "").trim() || LEGACY_ROUTE_FOLDER);
     const routes = await ensureShipRoutes(rows.filter((r) => (r[COL.fileId] ?? "").trim()).map(routeOf));
     let added = 0;
     for (const r of rows) {
