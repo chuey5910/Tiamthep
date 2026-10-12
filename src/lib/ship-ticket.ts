@@ -638,8 +638,14 @@ export async function shipReview(): Promise<ShipPage> {
   const nos = tickets.map((t) => t.ticketNo).filter((n): n is string => !!n);
   const [jobsWithNo, othersWithNo] = await Promise.all([
     prisma.job.findMany({ where: { ticketOrigin: { in: nos } }, select: { id: true, ticketOrigin: true, origin: true, destination: true } }),
-    prisma.shipTicket.findMany({ where: { ticketNo: { in: nos }, status: { not: "ไม่ใช้" } }, select: { id: true, ticketNo: true, routeFolder: true } }),
+    prisma.shipTicket.findMany({ where: { ticketNo: { in: nos }, status: { not: "ไม่ใช้" } }, select: { id: true, ticketNo: true, routeFolder: true, status: true, fileName: true, part: true, jobId: true, decidedAt: true } }),
   ]);
+
+  // งานของตั๋วที่ยืนยันไปแล้ว ยังอยู่ไหม (ShipTicket.jobId ไม่ผูกกับตารางงาน — ลบงานแล้วเลขยังค้างอยู่)
+  const otherJobIds = othersWithNo.map((o) => o.jobId).filter((n): n is number => n != null);
+  const liveOtherJobs = new Set(
+    (await prisma.job.findMany({ where: { id: { in: otherJobIds } }, select: { id: true } })).map((j) => j.id),
+  );
 
   const driverByKey = new Map(drivers.map((d) => [nameKey(fullName(d)), d.code]));
   // เทียบแบบหลวม — OCR ชอบอ่าน "อำมร" เป็น "อ่ามร" (ำ ↔ ่า) และวรรณยุกต์หลุด/เกิน
@@ -694,8 +700,14 @@ export async function shipReview(): Promise<ShipPage> {
         !route.origin || !route.destination || (j.origin === route.origin && j.destination === route.destination);
       const job = jobsWithNo.find((j) => j.ticketOrigin === ticketNo && sameRoute(j));
       const other = othersWithNo.find((o) => o.ticketNo === ticketNo && o.id !== t.id && o.routeFolder === t.routeFolder);
+      // บอกให้ชัดว่าซ้ำกับแถวไหน (รูปอะไร · รอตรวจหรือยืนยันไปแล้ว) — คนจะได้ไปดูได้ทันที ไม่ต้องไล่หา
+      const where = (o: { fileName: string; part: number }) => `รูป «${o.fileName}» ใบที่ ${o.part}`;
       if (job) warnings.push(`⚠️ เลขที่ตั๋วนี้มีในงาน #${job.id} แล้ว — ตรวจว่าซ้ำไหม`);
-      else if (other) warnings.push("⚠️ เลขที่ตั๋วซ้ำกับอีกแถวในหน้านี้ — ถ่ายรูปซ้ำไหม");
+      else if (other?.status === "รอตรวจ") warnings.push(`⚠️ เลขที่ตั๋วซ้ำกับอีกแถวที่รอตรวจ (${where(other)}) — ถ่ายรูปซ้ำไหม`);
+      else if (other)
+        warnings.push(
+          `⚠️ เลขที่ตั๋วนี้ยืนยันไปแล้ว${other.decidedAt ? ` เมื่อ ${formatThaiDate(other.decidedAt)}` : ""} (${where(other)}${other.jobId != null && liveOtherJobs.has(other.jobId) ? ` · งาน #${other.jobId}` : " · งานถูกลบไปแล้ว"}) — ดูที่รายการ «ตรวจแล้วล่าสุด» ท้ายหน้า`,
+        );
     }
 
     const verified = weightVerified(t);
