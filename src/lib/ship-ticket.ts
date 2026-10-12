@@ -331,18 +331,15 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
 
 /** ความคืบหน้าของตัวอ่านที่สอง — โชว์บนหน้าตั๋วเรือ */
 export async function localOcrProgress() {
-  const [waiting, failed, sampleError, duplicates] = await Promise.all([
+  const [waiting, failed, sampleError] = await Promise.all([
     prisma.shipPhoto.count({ where: { localStatus: "รอ" } }),
     prisma.shipPhoto.count({ where: { localStatus: "ผิดพลาด" } }),
     prisma.shipPhoto.findFirst({ where: { localStatus: "ผิดพลาด" }, orderBy: { localAt: "desc" }, select: { localError: true, localAt: true } }),
-    prisma.shipPhoto.count({ where: { dupOf: { not: null } } }),
   ]);
   const error = sampleError?.localError ?? null;
   return {
     waiting,
     failed,
-    /** รูปซ้ำที่ข้ามไป (สำเนาของรูปที่อ่านแล้ว) */
-    duplicates,
     error,
     /** ลองล่าสุดเมื่อไร — ให้เห็นว่าข้อความนี้ยังเป็นของตอนนี้ ไม่ใช่ค้างจากก่อนแก้ */
     triedAt: sampleError?.localAt ?? null,
@@ -665,6 +662,54 @@ export function pullShipTicketsInBackground(): void {
   pullShipTickets()
     .catch(() => {})
     .finally(() => runLocalOcrQueue().catch(() => {}));
+}
+
+/** รูปซ้ำที่ระบบข้าม — พร้อมรูปเดิมที่มันซ้ำด้วย ให้คนเปิดเทียบได้ (ข้ามผิดได้ ต้องตรวจย้อนได้) */
+export type SkippedPhoto = {
+  fileId: string;
+  fileName: string;
+  photoUrl: string;
+  plate: string;
+  routeFolder: string;
+  orig: { fileName: string; photoUrl: string; plate: string } | null;
+};
+
+export async function skippedPhotos(routeFolder?: string): Promise<SkippedPhoto[]> {
+  const dups = await prisma.shipPhoto.findMany({
+    where: { dupOf: { not: null }, ...(routeFolder ? { routeFolder } : {}) },
+    orderBy: [{ folderPlate: "asc" }, { fileName: "asc" }],
+  });
+  const origs = await prisma.shipPhoto.findMany({
+    where: { fileId: { in: dups.map((d) => d.dupOf!) } },
+    select: { fileId: true, fileName: true, photoUrl: true, folderPlate: true },
+  });
+  const byId = new Map(origs.map((o) => [o.fileId, o]));
+  return dups.map((d) => {
+    const o = byId.get(d.dupOf!);
+    return {
+      fileId: d.fileId,
+      fileName: d.fileName,
+      photoUrl: d.photoUrl,
+      plate: d.folderPlate,
+      routeFolder: d.routeFolder,
+      orig: o ? { fileName: o.fileName, photoUrl: o.photoUrl, plate: o.folderPlate } : null,
+    };
+  });
+}
+
+/**
+ * คนดูรูปแล้วเห็นว่า «ไม่ใช่รูปซ้ำ» → เลิกข้าม แล้วอ่านรูปนี้เป็นตั๋วรอตรวจตามปกติ
+ * (รอบดึงชีตถัดไปจะไม่ข้ามอีก เพราะเทียบรูปซ้ำเฉพาะรูปที่เพิ่งเจอครั้งแรก)
+ */
+export async function readSkippedPhoto(fileId: string): Promise<number> {
+  const photo = await prisma.shipPhoto.findUnique({ where: { fileId } });
+  if (!photo?.dupOf) return 0;
+  const route = await prisma.shipRoute.findUnique({ where: { folderName: photo.routeFolder } });
+  await prisma.shipPhoto.update({ where: { fileId }, data: { dupOf: null } });
+  return ingestPhoto(
+    { fileId, fileName: photo.fileName, url: photo.photoUrl, plate: photo.folderPlate, ocr: photo.googleText, route: photo.routeFolder },
+    formatOf(route?.format),
+  );
 }
 
 /**

@@ -5,7 +5,7 @@ import { requireAdmin, requireWrite } from "@/lib/auth";
 import { buildContext, routeKey } from "@/lib/calc";
 import { parseDate, toInputDate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
-import { folderVehicle, pullShipTickets, resetShipTickets, routeProblem } from "@/lib/ship-ticket";
+import { folderVehicle, pullShipTickets, readSkippedPhoto, resetShipTickets, routeProblem } from "@/lib/ship-ticket";
 import { nameKey } from "@/lib/ship-ticket-parse";
 
 export type ShipResult = { ok: true; message: string } | { ok: false; error: string };
@@ -18,6 +18,14 @@ export async function refreshShipTickets(): Promise<ShipResult> {
   const r = await pullShipTickets();
   revalidatePath("/", "layout");
   return r.ok ? { ok: true, message: r.added ? `✅ ได้ตั๋วใหม่ ${r.added} ใบ` : "✅ ไม่มีรูปใหม่" } : { ok: false, error: r.error };
+}
+
+/** รูปที่ระบบข้ามเพราะคิดว่าซ้ำ แต่คนดูแล้วไม่ใช่ → อ่านรูปนี้เป็นตั๋วรอตรวจ */
+export async function readSkipped(fileId: string): Promise<ShipResult> {
+  await requireWrite();
+  const n = await readSkippedPhoto(fileId);
+  revalidatePath("/", "layout");
+  return n > 0 ? { ok: true, message: `✅ อ่านรูปนี้แล้ว ได้ตั๋ว ${n} ใบ — อยู่ในตารางรอตรวจ` } : { ok: false, error: "รูปนี้ไม่ได้อยู่ในรายการข้ามแล้ว — กดโหลดหน้าใหม่" };
 }
 
 /** ผู้ดูแล: ล้างตั๋วที่ยังไม่ยืนยันทั้งหมด แล้วให้ระบบอ่านรูปใหม่ทั้งหมด */
