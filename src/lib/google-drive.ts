@@ -182,3 +182,34 @@ export async function downloadDriveFile(keyFile: string, fileId: string): Promis
   if (!res.ok) throw new Error(`Google Drive ตอบ ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return Buffer.from(await res.arrayBuffer());
 }
+
+/** ค้นไฟล์/โฟลเดอร์ใน Drive ตามเงื่อนไข (อ่านอย่างเดียว) — ใช้นับรูปตั๋วเรือ ไม่แตะไฟล์ */
+export async function driveSearch(keyFile: string, q: string): Promise<{ id: string; name: string }[]> {
+  const token = await getAccessToken(keyFile, "https://www.googleapis.com/auth/drive.readonly");
+  const out: { id: string; name: string }[] = [];
+  let pageToken = "";
+  do {
+    const params = new URLSearchParams({ q, fields: "nextPageToken,files(id,name)", pageSize: "1000" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(`${FILES_API}?${params}&${SHARED}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`Google Drive ตอบ ${res.status}`);
+    const body = (await res.json()) as { files?: { id: string; name: string }[]; nextPageToken?: string };
+    out.push(...(body.files ?? []));
+    pageToken = body.nextPageToken ?? "";
+  } while (pageToken);
+  return out;
+}
+
+/** โฟลเดอร์แม่ของไฟล์ (อ่านอย่างเดียว) */
+export async function driveParent(keyFile: string, fileId: string): Promise<string | null> {
+  const token = await getAccessToken(keyFile, "https://www.googleapis.com/auth/drive.readonly");
+  const res = await fetch(`${FILES_API}/${encodeURIComponent(fileId)}?fields=parents&${SHARED}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`Google Drive ตอบ ${res.status}`);
+  return ((await res.json()) as { parents?: string[] }).parents?.[0] ?? null;
+}

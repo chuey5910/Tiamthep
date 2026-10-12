@@ -94,7 +94,8 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
                 title={`โฟลเดอร์ «${r.folder}»`}
               >
                 {r.problem ? "❌ " : ""}
-                {r.origin ?? r.folder} → {r.destination ?? "❓"} ({n})
+                {r.origin ?? r.folder} → {r.destination ?? "❓"} · รอตรวจ {n}/{r.ticketsTotal} ใบ · รูป {r.photosRead}
+                {r.photosInDrive != null && `/${r.photosInDrive}${r.photosRead < r.photosInDrive ? " ⏳" : ""}`}
               </a>
             );
           })}
@@ -114,7 +115,8 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
             <>
               {route.origin ?? "❓ ต้นทาง"} → {route.destination ?? "❓ ปลายทาง"} · ลูกค้า {route.customer ?? "❓"}
               <span className="ml-2 text-[13px] font-normal text-slate-500">
-                รอตรวจ {rows.length} ใบ · โฟลเดอร์ «{route.folder}» · {route.format}
+                รอตรวจ {rows.length} จาก {route.ticketsTotal} ใบ · อ่านรูปแล้ว {route.photosRead}
+                {route.photosInDrive != null && ` จาก ${route.photosInDrive}`} รูป · โฟลเดอร์ «{route.folder}» · {route.format}
               </span>
             </>
           }
@@ -122,6 +124,11 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
           bodyClass="p-3"
         >
           {route.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{route.problem}</p>}
+          {route.photosInDrive != null && route.photosRead < route.photosInDrive && (
+            <p className="mb-3 text-[13px] font-bold text-sky-800">
+              ⏳ ยังอ่านไม่ครบ อีก {route.photosInDrive - route.photosRead} รูป — Google ทยอยอ่านรูปเองทุก 5 นาที แล้วขึ้นหน้านี้เอง ไม่ต้องกดอะไร
+            </p>
+          )}
           {rows.length === 0 ? (
             <Empty>✅ เส้นทางนี้ไม่มีตั๋วรอตรวจ — รูปใหม่ในโฟลเดอร์จะขึ้นเองภายใน 5 นาทีหลังอ่านเสร็จ</Empty>
           ) : (

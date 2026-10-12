@@ -21,7 +21,7 @@ import { writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ShipPhoto as ShipPhotoRow, ShipRoute } from "@prisma/client";
-import { downloadDriveFile } from "./google-drive";
+import { downloadDriveFile, driveParent, driveSearch } from "./google-drive";
 import { clearValues, readValues, sheetConfig } from "./google-sheets";
 import { readPhotoLocally } from "./ship-ocr-local";
 import { mergeReaders, type MergedTicket } from "./ship-ticket-merge";
@@ -136,9 +136,11 @@ export function routeProblem(folder: string, route: ShipRoute | undefined, custo
  *       (รูปจริง 70-5081 ใบ 104/114/127/154 ครบ 4 ใบ · 226 รูปเดิม: น้ำหนัก 820 → 824 ไม่มีค่าเดิมเปลี่ยน)
  *   7 = (ตัวอ่านที่สอง) แม่แบบตำแหน่ง: ตัดช่องวัน-เวลา/น้ำหนักตามตำแหน่งจากเลขที่ตั๋ว อ่านเป็นตัวเลขล้วน
  *       (รูปจริง 3 รูป: 11/12 → 12/12 ใบทุกช่อง) — เพิ่มเลขเพื่อให้รูปที่ยังรอตรวจถูกอ่านซ้ำด้วยวิธีใหม่
+ *   8 = ตัวอ่านที่สองอ่าน จี เจ สตีล / จี สตีล ด้วย (แม่แบบตำแหน่ง · ลบเส้นบรรทัดที่พิมพ์ทับตัวเลข)
+ *       (รูปจริง 8 รูป 15 ใบ: ตรงกับ Google ทุกใบ ไม่มีเตือนผิด · ศรีราชา 12/12 ค่าเดิมไม่เปลี่ยน)
  * หลังจากนั้นตัวอ่านที่สอง (Tesseract) อ่านซ้ำเบื้องหลัง แล้วแทนที่ด้วยผลรวม 2 ตัวอ่าน (ShipPhoto.localStatus)
  */
-export const PARSER_VERSION = 7;
+export const PARSER_VERSION = 8;
 
 /**
  * รูปนี้เป็นสำเนาของรูปที่อ่านไปแล้วไหม (คัดลอก/อัปโหลดรูปเดิมซ้ำ → Drive ให้รหัสไฟล์ใหม่)
@@ -348,6 +350,63 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// นับรูปใน Drive ต่อโฟลเดอร์เส้นทาง — ให้เห็นว่าอ่านไปแล้วกี่รูปจากทั้งหมด (อ่านอย่างเดียว ไม่แตะไฟล์)
+// ─────────────────────────────────────────────────────────────
+
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+let shipRootId: string | null = null;
+let driveCount: { at: number; byRoute: Map<string, number> } | null = null;
+let driveCounting: Promise<void> | null = null;
+
+/** ตั๋วเรือ / <เส้นทาง> / <โฟลเดอร์ย่อย> / รูป — หาโฟลเดอร์ «ตั๋วเรือ» จากรูปที่อ่านแล้วรูปไหนก็ได้ (ขึ้นไป 3 ชั้น) */
+async function countDrivePhotos(keyFile: string): Promise<void> {
+  if (!shipRootId) {
+    const sample = await prisma.shipPhoto.findFirst({ orderBy: { createdAt: "desc" }, select: { fileId: true } });
+    if (!sample) return;
+    let id: string | null = sample.fileId;
+    for (let i = 0; i < 3 && id; i++) id = await driveParent(keyFile, id);
+    if (!id) return;
+    shipRootId = id;
+  }
+  const byRoute = new Map<string, number>();
+  const routes = await driveSearch(keyFile, `'${shipRootId}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`);
+  for (const r of routes) {
+    const subs = await driveSearch(keyFile, `'${r.id}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`);
+    let n = 0;
+    // รูปแบบเดียวกับที่ Apps Script อ่าน (รูป + PDF) — ทีละ 20 โฟลเดอร์ย่อย กันคำค้นยาวเกิน
+    for (let i = 0; i < subs.length; i += 20) {
+      const inSubs = subs.slice(i, i + 20).map((x) => `'${x.id}' in parents`).join(" or ");
+      n += (await driveSearch(keyFile, `(${inSubs}) and trashed = false and (mimeType contains 'image/' or mimeType = 'application/pdf')`)).length;
+    }
+    const key = normRouteFolder(r.name.trim());
+    byRoute.set(key, (byRoute.get(key) ?? 0) + n);
+  }
+  driveCount = { at: Date.now(), byRoute };
+}
+
+/**
+ * จำนวนรูปใน Drive ต่อเส้นทาง (จำไว้ 5 นาที) — นับไม่ได้ (ยังไม่เชื่อม / ไม่มีสิทธิ์อ่าน) = null ไม่ขึ้นตัวเลข
+ * หน้าเว็บรอไม่เกิน 3 วินาที นับไม่ทันก็ใช้ค่าเดิมไปก่อน รอบหน้าค่อยได้ค่าใหม่
+ */
+export async function drivePhotoCounts(): Promise<Map<string, number> | null> {
+  const cfg = sheetConfig();
+  if ("error" in cfg) return null;
+  if (driveCount && Date.now() - driveCount.at < 5 * 60 * 1000) return driveCount.byRoute;
+  if (!driveCounting) {
+    driveCounting = countDrivePhotos(cfg.keyFile)
+      .catch(() => {
+        // ไม่มีสิทธิ์/เน็ตหลุด — ไม่ขึ้นตัวเลข ลองใหม่รอบหน้า (หาโฟลเดอร์แม่ใหม่ด้วย เผื่อเปลี่ยนที่)
+        shipRootId = null;
+      })
+      .finally(() => {
+        driveCounting = null;
+      });
+  }
+  await Promise.race([driveCounting, new Promise((r) => setTimeout(r, 3000))]);
+  return driveCount?.byRoute ?? null;
+}
+
 /** ความคืบหน้าของตัวอ่านที่สอง — โชว์บนหน้าตั๋วเรือ */
 export async function localOcrProgress() {
   const [waiting, failed, sampleError] = await Promise.all([
@@ -445,6 +504,12 @@ export type ShipRouteInfo = {
   plateFrom: "folder" | "ticket";
   /** ❌ ค่าตั้งยังไม่ครบ (ยืนยันตั๋วในโฟลเดอร์นี้ไม่ได้) */
   problem: string | null;
+  /** ตั๋วทั้งหมดของเส้นทางนี้ (รอตรวจ + ยืนยัน + ไม่ใช้) */
+  ticketsTotal: number;
+  /** รูปที่อ่านแล้ว (เข้าเว็บแล้ว) */
+  photosRead: number;
+  /** รูปทั้งหมดในโฟลเดอร์ Drive · null = นับไม่ได้ */
+  photosInDrive: number | null;
 };
 
 export type ShipPage = {
@@ -526,7 +591,7 @@ function pairedDriver(
 
 /** เตรียมแถวรอตรวจ — คำนวณสถานะใหม่ทุกครั้ง แก้ข้อมูลหลัก (รถ/จับคู่/พขร.) แล้วผลอัปเดตเอง */
 export async function shipReview(): Promise<ShipPage> {
-  const [tickets, ctx, drivers, aliases, routeRows, photoRoutes] = await Promise.all([
+  const [tickets, ctx, drivers, aliases, routeRows, photoRoutes, ticketCounts, inDrive] = await Promise.all([
     prisma.shipTicket.findMany({
       where: { status: "รอตรวจ" },
       orderBy: [{ ticketDate: "asc" }, { ticketNo: "asc" }, { id: "asc" }],
@@ -535,7 +600,9 @@ export async function shipReview(): Promise<ShipPage> {
     prisma.driver.findMany({ where: { active: true } }),
     prisma.ocrAlias.findMany({ where: { kind: "driver" } }),
     prisma.shipRoute.findMany(),
-    prisma.shipPhoto.findMany({ distinct: ["routeFolder"], select: { routeFolder: true } }),
+    prisma.shipPhoto.groupBy({ by: ["routeFolder"], _count: { _all: true } }),
+    prisma.shipTicket.groupBy({ by: ["routeFolder"], _count: { _all: true } }),
+    drivePhotoCounts(),
   ]);
 
   const notices: string[] = [];
@@ -556,6 +623,9 @@ export async function shipReview(): Promise<ShipPage> {
       format: formatOf(r?.format).label,
       plateFrom: formatOf(r?.format).plateFrom,
       problem: routeProblem(folder, r, !!customer),
+      ticketsTotal: ticketCounts.find((x) => x.routeFolder === folder)?._count._all ?? 0,
+      photosRead: photoRoutes.find((x) => x.routeFolder === folder)?._count._all ?? 0,
+      photosInDrive: inDrive ? (inDrive.get(folder) ?? 0) : null,
     };
     routes.set(folder, info);
     return info;
@@ -564,8 +634,8 @@ export async function shipReview(): Promise<ShipPage> {
   // เลขที่ตั๋วที่มีอยู่แล้ว (ในงาน + ในตั๋วแถวอื่น) — ซ้ำ = เตือนให้คนตัดสิน ไม่ตัดทิ้งเอง
   const nos = tickets.map((t) => t.ticketNo).filter((n): n is string => !!n);
   const [jobsWithNo, othersWithNo] = await Promise.all([
-    prisma.job.findMany({ where: { ticketOrigin: { in: nos } }, select: { id: true, ticketOrigin: true } }),
-    prisma.shipTicket.findMany({ where: { ticketNo: { in: nos }, status: { not: "ไม่ใช้" } }, select: { id: true, ticketNo: true } }),
+    prisma.job.findMany({ where: { ticketOrigin: { in: nos } }, select: { id: true, ticketOrigin: true, origin: true, destination: true } }),
+    prisma.shipTicket.findMany({ where: { ticketNo: { in: nos }, status: { not: "ไม่ใช้" } }, select: { id: true, ticketNo: true, routeFolder: true } }),
   ]);
 
   const driverByKey = new Map(drivers.map((d) => [nameKey(fullName(d)), d.code]));
@@ -616,8 +686,11 @@ export async function shipReview(): Promise<ShipPage> {
     // เลขที่ต้องถูกรูปแบบตามแบบตั๋วของเส้นทางนี้ (จำนวนหลัก)
     const ticketNo = validTicketNo(t.ticketNo, fmt) ? t.ticketNo : null;
     if (ticketNo) {
-      const job = jobsWithNo.find((j) => j.ticketOrigin === ticketNo);
-      const other = othersWithNo.find((o) => o.ticketNo === ticketNo && o.id !== t.id);
+      // เลขที่ซ้ำนับเฉพาะในเส้นทางเดียวกัน — คนละโรงงานออกเลขชุดเดียวกันได้ (เช่น จี เจ สตีล กับ จี สตีล มี R261000615 ทั้งคู่)
+      const sameRoute = (j: { origin: string; destination: string }) =>
+        !route.origin || !route.destination || (j.origin === route.origin && j.destination === route.destination);
+      const job = jobsWithNo.find((j) => j.ticketOrigin === ticketNo && sameRoute(j));
+      const other = othersWithNo.find((o) => o.ticketNo === ticketNo && o.id !== t.id && o.routeFolder === t.routeFolder);
       if (job) warnings.push(`⚠️ เลขที่ตั๋วนี้มีในงาน #${job.id} แล้ว — ตรวจว่าซ้ำไหม`);
       else if (other) warnings.push("⚠️ เลขที่ตั๋วซ้ำกับอีกแถวในหน้านี้ — ถ่ายรูปซ้ำไหม");
     }

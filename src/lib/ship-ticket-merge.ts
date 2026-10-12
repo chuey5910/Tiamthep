@@ -82,6 +82,13 @@ export function mergeReaders(google: ParsedTicket[], local: LocalTicket[], f: Ti
       if (src) w = { in: src.weightIn!, out: src.weightOut!, net: src.weightNet! };
     }
 
+    // ทะเบียน — แบบตั๋วที่เอาทะเบียนจากตั๋ว (ใช้หารถ/พขร.) อ่านได้ 2 แบบ = ว่างให้คนเลือก
+    let plate = g?.plate ?? l?.plate ?? null;
+    if (f.plateFrom === "ticket" && g?.plate && l?.plate && g.plate !== l.plate) {
+      notes.push(`⚠️ ทะเบียนในตั๋วอ่านได้ 2 แบบ: ${g.plate} / ${l.plate} — ดูรูปแล้วเลือกเอง`);
+      plate = null;
+    }
+
     return {
       text: [g?.text, l ? `— ตัวอ่านที่สอง —\n${l.text}` : null].filter(Boolean).join("\n"),
       ticketNo,
@@ -90,7 +97,7 @@ export function mergeReaders(google: ParsedTicket[], local: LocalTicket[], f: Ti
       weightIn: w?.in ?? null,
       weightOut: w?.out ?? null,
       weightNet: w?.net ?? null,
-      plate: g?.plate ?? l?.plate ?? null,
+      plate,
       driverName: g?.driverName ?? l?.driverName ?? null,
       readNote: notes.length ? notes.join(" · ") : null,
     };
