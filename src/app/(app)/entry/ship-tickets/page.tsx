@@ -119,7 +119,7 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
           bodyClass="p-3"
         >
           {route.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{route.problem}</p>}
-          <ShipTable rows={rows} drivers={data.drivers} canEdit={canWrite(user)} />
+          <ShipTable rows={rows} drivers={data.drivers} vehicles={data.vehicles} canEdit={canWrite(user)} />
         </Card>
       )}
 
@@ -141,7 +141,7 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
                 {recent.map((t) => (
                   <tr key={t.id}>
                     <td>{t.ticketNo ?? "-"}</td>
-                    <td>{t.folderPlate}</td>
+                    <td>{route?.plateFrom === "ticket" ? (t.plateOnTicket ?? "-") : t.folderPlate}</td>
                     <td>{t.ticketDate ? formatThaiDate(t.ticketDate) : "-"}</td>
                     <td>
                       {t.status === "ยืนยันแล้ว" && t.jobId != null && liveJobs.has(t.jobId) ? (

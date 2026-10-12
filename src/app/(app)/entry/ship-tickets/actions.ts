@@ -6,11 +6,13 @@ import { buildContext, routeKey } from "@/lib/calc";
 import { parseDate, toInputDate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { folderVehicle, pullShipTickets, readSkippedPhoto, resetShipTickets, routeProblem } from "@/lib/ship-ticket";
+import { formatOf, validTicketNo } from "@/lib/ship-ticket-formats";
 import { nameKey } from "@/lib/ship-ticket-parse";
 
 export type ShipResult = { ok: true; message: string } | { ok: false; error: string };
 
-export type ConfirmInput = { id: number; ticketNo: string; date: string; netKg: string; driverCode: string };
+/** plate = ทะเบียนที่คนเลือก (เฉพาะแบบตั๋วที่เอาทะเบียนจากตั๋ว แล้วอ่านไม่ได้/ไม่พบ) */
+export type ConfirmInput = { id: number; ticketNo: string; date: string; netKg: string; driverCode: string; plate?: string };
 
 /** ดึงรูปใหม่จากชีต (ปุ่ม 🔄) */
 export async function refreshShipTickets(): Promise<ShipResult> {
@@ -49,8 +51,8 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
   if (!t) return { ok: false, error: "ไม่พบตั๋วนี้ — กดโหลดหน้าใหม่" };
   if (t.status !== "รอตรวจ") return { ok: false, error: `ตั๋วนี้${t.status}ไปแล้ว — กดโหลดหน้าใหม่` };
 
-  const ticketNo = input.ticketNo.trim();
-  if (!/^\d{4,12}$/.test(ticketNo)) return { ok: false, error: "❌ กรอกเลขที่ตั๋ว (ตัวเลข) ก่อน" };
+  const ticketNo = input.ticketNo.trim().toUpperCase();
+  if (!/^[A-Z]?\d{4,12}$/.test(ticketNo)) return { ok: false, error: "❌ กรอกเลขที่ตั๋วก่อน" };
   const date = parseDate(input.date);
   if (!date) return { ok: false, error: "❌ กรอกวันที่ก่อน" };
   const netKg = Number(String(input.netKg).replace(/,/g, ""));
@@ -63,7 +65,12 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
   const problem = routeProblem(t.routeFolder, shipRoute, !!customer);
   if (problem || !shipRoute?.origin || !shipRoute.destination || !customer) return { ok: false, error: problem ?? "❌ ค่าตั้งเส้นทางไม่ครบ" };
   const { origin, destination } = shipRoute;
-  const found = folderVehicle(ctx.vehicleByPlate, t.folderPlate);
+  // ทะเบียน: จากชื่อโฟลเดอร์ หรือจากตั๋ว (ตามแบบตั๋วของเส้นทาง) — อ่านไม่ได้แล้วคนเลือกเอง = ใช้ที่คนเลือก
+  const fmt = formatOf(shipRoute.format);
+  const plateSrc = fmt.plateFrom === "ticket" ? input.plate?.trim() || t.plateOnTicket || "" : t.folderPlate;
+  if (!validTicketNo(ticketNo, fmt)) return { ok: false, error: `❌ เลขที่ตั๋ว ${ticketNo} ไม่ตรงรูปแบบของ «${fmt.label}» — ตรวจกับรูปอีกครั้ง` };
+  if (!plateSrc) return { ok: false, error: "❌ เลือกทะเบียนก่อน" };
+  const found = folderVehicle(ctx.vehicleByPlate, plateSrc, fmt.plateFrom);
   if (!found.vehicle) return { ok: false, error: found.error };
   const vehicle = found.vehicle;
 

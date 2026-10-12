@@ -6,7 +6,7 @@ import { SearchSelect } from "@/components/SearchSelect";
 import type { ShipRow } from "@/lib/ship-ticket";
 import { confirmShipTicket, confirmShipTickets, refreshShipTickets, setShipTicketUnused, type ConfirmInput } from "./actions";
 
-type Edit = { ticketNo: string; date: string; net: string; driver: string };
+type Edit = { ticketNo: string; date: string; net: string; driver: string; plate: string };
 
 /**
  * ตารางตั๋วรอตรวจ — ข้อมูลอยู่กึ่งกลางคอลัมน์ทุกช่อง (หลักของเจ้าของ)
@@ -15,11 +15,14 @@ type Edit = { ticketNo: string; date: string; net: string; driver: string };
 export function ShipTable({
   rows,
   drivers,
+  vehicles,
   canEdit,
 }: {
   /** ตั๋วของเส้นทางเดียว — ปุ่มยืนยันทุกแถวจึงไม่ข้ามไปเส้นทางอื่น */
   rows: ShipRow[];
   drivers: { code: string; name: string }[];
+  /** ให้เลือกเมื่อทะเบียนจากตั๋วอ่านไม่ได้/ไม่พบในข้อมูลรถ */
+  vehicles: string[];
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -28,12 +31,14 @@ export function ShipTable({
   // ค่าที่คนกรอก/เลือก — แถวที่ยังไม่ได้แตะใช้ค่าที่ระบบอ่านได้ (แถวใหม่หลังดึงรูปก็ได้ค่าเองทันที)
   const [edits, setEdits] = useState<Record<number, Edit>>({});
   const driverOptions = useMemo(() => drivers.map((d) => ({ value: d.code, label: d.name })), [drivers]);
+  const plateOptions = useMemo(() => vehicles.map((v) => ({ value: v, label: v })), [vehicles]);
 
   const base = (r: ShipRow): Edit => ({
     ticketNo: r.ticketNo ?? "",
     date: r.date ?? "",
     net: r.weightKg != null ? String(r.weightKg) : "",
     driver: r.driverCode ?? "",
+    plate: r.plate ?? "",
   });
   const editOf = (r: ShipRow): Edit => edits[r.id] ?? base(r);
   const set = (r: ShipRow, patch: Partial<Edit>) => setEdits((e) => ({ ...e, [r.id]: { ...(e[r.id] ?? base(r)), ...patch } }));
@@ -44,6 +49,7 @@ export function ShipTable({
     if (!e.date) m.push("วันที่");
     if (!(Number(e.net.replace(/,/g, "")) > 0)) m.push("น้ำหนัก");
     if (!e.driver) m.push("พขร.");
+    if (!e.plate) m.push("ทะเบียน");
     return m;
   };
   const ready = (r: ShipRow) => r.blockers.length === 0 && missing(r).length === 0;
@@ -54,7 +60,7 @@ export function ShipTable({
 
   const input = (r: ShipRow): ConfirmInput => {
     const e = editOf(r);
-    return { id: r.id, ticketNo: e.ticketNo, date: e.date, netKg: e.net, driverCode: e.driver };
+    return { id: r.id, ticketNo: e.ticketNo, date: e.date, netKg: e.net, driverCode: e.driver, plate: r.plate ? undefined : e.plate };
   };
   const run = (fn: () => Promise<{ ok: true; message: string } | { ok: false; error: string }>) =>
     start(async () => {
@@ -144,7 +150,23 @@ export function ShipTable({
                       </Fix>
                     )}
                   </td>
-                  <td className="nw">{r.plate}</td>
+                  <td className="nw">
+                    {r.plate ? (
+                      r.plate
+                    ) : (
+                      <Fix>
+                        <SearchSelect
+                          options={plateOptions}
+                          value={e.plate}
+                          onChange={(v) => set(r, { plate: v })}
+                          placeholder="เลือกทะเบียน"
+                          invalid={!e.plate}
+                          disabled={!canEdit}
+                          className="w-full !min-w-0"
+                        />
+                      </Fix>
+                    )}
+                  </td>
                   <td>
                     {r.dateLabel ? (
                       r.dateLabel
@@ -192,9 +214,10 @@ export function ShipTable({
                     {r.blockers.map((b) => (
                       <div key={b} className="text-red-700">{b}</div>
                     ))}
-                    {miss.filter((m) => m !== "พขร.").length > 0 && (
+                    {r.plateNote && !e.plate && <div className="text-red-700">{r.plateNote}</div>}
+                    {miss.filter((m) => m !== "พขร." && m !== "ทะเบียน").length > 0 && (
                       <div className="text-red-700">
-                        ❌ {miss.filter((m) => m !== "พขร.").join(" · ")}ไม่ชัด — ดูรูปแล้วกรอกเอง
+                        ❌ {miss.filter((m) => m !== "พขร." && m !== "ทะเบียน").join(" · ")}ไม่ชัด — ดูรูปแล้วกรอกเอง
                       </div>
                     )}
                     {r.driverNote && r.blockers.length === 0 && (

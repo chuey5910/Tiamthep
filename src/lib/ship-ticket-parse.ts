@@ -27,6 +27,8 @@ export type ParsedTicket = {
   driverName: string | null;
   /** วัน-เวลาเข้าเต็ม (ถ้ารู้) — ไว้จับคู่กับผลของตัวอ่านที่สอง */
   entryAt?: Date | null;
+  /** ข้อสังเกตตอนอ่าน (⚠️) — ไปเป็น readNote ให้คนดู */
+  note?: string | null;
 };
 
 /** ปรับข้อความ OCR ให้เทียบง่าย: สระ ำ ที่แยกร่าง · เลขไทย · จุลภาคเต็มความกว้าง · อักขระล่องหน */
@@ -157,6 +159,7 @@ export function parseTicket(segment: string, f: TicketFormat): ParsedTicket {
 /** ทั้งรูป → รายการตั๋วทีละใบ (ตามแบบตั๋วของโฟลเดอร์เส้นทาง) */
 export function parseTicketPhoto(text: string, f: TicketFormat): ParsedTicket[] {
   const t = normalizeOcr(text);
+  if (f.layout === "blocks") return parseBlocks(t, f);
   const whole = analyse(t, f);
   // จัดเที่ยวจากเวลาได้ → ใช้วิธีอ่านทั้งรูป (ทนต่อการอ่านสลับซ้าย-ขวา)
   if (whole?.entries) return whole.tickets;
@@ -482,6 +485,97 @@ function analyse(t: string, f: TicketFormat) {
     driverName: oneName,
   }));
   return { tickets, nos, entries, exits, triples, allDt: sortedDt.map((d) => d.v), placed: weightOf.filter(Boolean).length, conflicts };
+}
+
+// ─────────────────────────────────────────────────────────────
+// แบบ "blocks" — ตั๋วเรียงบนลงล่าง ข้อความ OCR ออกมาทีละใบ (ไม่สลับซ้าย-ขวา)
+// ป้ายกับค่าอาจแยกกันคนละบรรทัด/สลับลำดับ จึงไม่อ่านตามป้าย ใช้หลักที่ตรวจได้แทน:
+//   เลขที่ = รูปแบบเลขที่ของแบบนั้น · ทะเบียน = 70-5272 · น้ำหนัก = 3 ตัวที่ลบกันลงตัวตามสูตรของแบบ
+//   ค่าที่ตามหลังป้ายของคนอื่น (skipLabels เช่น Port In Weight) ไม่หยิบ
+// ไม่ชัด/ได้หลายแบบ = null ให้คนกรอก (ไม่เดา)
+// ─────────────────────────────────────────────────────────────
+
+const DT_ANY = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/g;
+
+function parseBlocks(t: string, f: TicketFormat): ParsedTicket[] {
+  // ตัดท่อนที่คำท้ายใบ (ข้อความหลังใบสุดท้ายเป็นเศษ) — ไม่มีคำท้ายเลย = ทั้งรูปเป็นท่อนเดียว
+  const parts: string[] = [];
+  let from = 0;
+  if (f.blockEnd) {
+    for (const m of t.matchAll(new RegExp(f.blockEnd.source, "g"))) {
+      parts.push(t.slice(from, m.index! + m[0].length));
+      from = m.index! + m[0].length;
+    }
+  }
+  parts.push(t.slice(from));
+  const found = parts.flatMap((part) => parseBlock(part, f));
+  // ท่อนที่ไม่มีอะไรเลย (เศษท้ายรูป) ไม่นับ — แต่ถ้าทั้งรูปอ่านอะไรไม่ได้ ต้องมีแถวให้คนเห็น (ticketRows ทำให้)
+  return found;
+}
+
+/** ตัวเลข/วันที่ตำแหน่งนี้ตามหลังป้ายที่ไม่ใช่ของใบนี้ไหม (ดูย้อนในบรรทัดเดียวกัน) */
+function afterSkipLabel(t: string, at: number, f: TicketFormat): boolean {
+  if (!f.skipLabels) return false;
+  const lineStart = t.lastIndexOf("\n", at - 1) + 1;
+  return f.skipLabels.test(t.slice(Math.max(lineStart, at - 40), at));
+}
+
+function parseBlock(part: string, f: TicketFormat): ParsedTicket[] {
+  const t = part.trim();
+  // เลขที่ตั๋ว
+  const nos = f.noPattern
+    ? [...new Set([...t.matchAll(new RegExp(f.noPattern.find.source, "g"))].map((m) => m[1]))]
+    : [...new Set([...t.matchAll(TICKET_NO)].map((m) => m[1]).filter((n) => validTicketNo(n, f)))];
+  // วัน-เวลา (ไม่นับของท่าเรือ ฯลฯ ตาม skipLabels) — วันที่ของใบ = เวลาแรกสุด (Gate In)
+  const dts: Date[] = [];
+  for (const m of t.matchAll(DT_ANY)) {
+    if (afterSkipLabel(t, m.index!, f)) continue;
+    const d = toDateTime(m);
+    if (d) dts.push(d);
+  }
+  if (nos.length === 0 && dts.length === 0) return [];
+  // ท่อนเดียวมีหลายเลขที่ = ตัดท่อนไม่ได้ (คำท้ายใบหาย) → ให้แค่เลขที่ ที่เหลือคนกรอก
+  if (nos.length > 1)
+    return nos.map((no) => ({ text: t, ticketNo: no, date: null, weightIn: null, weightOut: null, weightNet: null, plate: null, driverName: null, note: "⚠️ แยกตั๋วในรูปนี้ไม่ออก — ดูรูปแล้วกรอกวันที่/น้ำหนัก/ทะเบียนเอง" }));
+
+  const entry = dts.length ? dts.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b)) : null;
+
+  // น้ำหนัก: ทุกตัวเลขที่หน้าตาเป็นน้ำหนัก (ตำแหน่งแรกที่เจอ) ไม่นับที่ตามหลังป้ายของคนอื่น
+  const pos = new Map<number, number>();
+  for (const m of t.matchAll(/(?<![\d\/.,:\-])(\d{1,3}(?:,\d{3})+|\d{4,6})(?![\d\/:,.\-])/g)) {
+    if (afterSkipLabel(t, m.index!, f)) continue;
+    const n = kg(m[1]);
+    if (plausible(n) && !pos.has(n)) pos.set(n, m.index!);
+  }
+  // ลำดับบนใบ: เข้า → ออก → สุทธิ · ต้องได้ชุดเดียว
+  const tri: { in: number; out: number; net: number }[] = [];
+  for (const [a, pa] of pos)
+    for (const [b, pb] of pos) {
+      if (pb <= pa) continue;
+      const net = f.netRule === "inMinusOut" ? a - b : b - a;
+      const pn = pos.get(net);
+      if (net > 0 && pn != null && pn > pb && net !== a && net !== b) tri.push({ in: a, out: b, net });
+    }
+  const w = tri.length === 1 ? tri[0] : null;
+
+  const plates = [...new Set([...t.matchAll(/(?<![\d\-])(\d{1,2})\s*-\s*(\d{4})(?![\d\-])/g)].map((m) => `${m[1]}-${m[2]}`))];
+  const notes: string[] = [];
+  if (f.mustContain && !f.mustContain.re.test(t)) notes.push(`⚠️ ไม่พบหัวตั๋ว «${f.mustContain.label}» — ตรวจว่ารูปอยู่ถูกโฟลเดอร์ไหม`);
+
+  return [
+    {
+      text: t,
+      ticketNo: nos[0] ?? null,
+      date: entry ? dayOf(entry) : null,
+      entryAt: entry,
+      weightIn: w?.in ?? null,
+      weightOut: w?.out ?? null,
+      weightNet: w?.net ?? null,
+      plate: plates.length === 1 ? plates[0] : null,
+      driverName: null,
+      note: notes.length ? notes.join(" · ") : null,
+    },
+  ];
 }
 
 /** น้ำหนักผ่านสูตร ออก − เข้า = สุทธิ ไหม (ไม่ผ่าน = ถือว่าอ่านไม่ชัด) */

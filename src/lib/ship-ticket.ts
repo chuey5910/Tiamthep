@@ -170,7 +170,7 @@ export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number
     where: { fileId: p.fileId },
     data: { format: f.key, localStatus: f.localAnchor ? "รอ" : "ข้าม", localError: null, localTries: 0 },
   });
-  return createTickets(p, parseTicketPhoto(p.ocr, f).map((t) => ({ ...t, readNote: null })));
+  return createTickets(p, parseTicketPhoto(p.ocr, f).map((t) => ({ ...t, readNote: t.note ?? null })));
 }
 
 /** สร้างแถวตั๋วรอตรวจของรูปหนึ่ง — อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ */
@@ -389,7 +389,9 @@ export type ShipRow = {
   photoUrl: string;
   fileName: string;
   part: number;
-  plate: string;
+  /** ทะเบียนในข้อมูลรถ · null = ทะเบียนจากตั๋วอ่านไม่ได้/ไม่พบ → ให้คนเลือกในแถว (plateNote บอกเหตุ) */
+  plate: string | null;
+  plateNote: string | null;
   /** โฟลเดอร์เส้นทาง (ShipRoute.folderName) — หน้าตรวจแยกกลุ่มตามนี้ */
   routeFolder: string;
   /** null = อ่านไม่ได้/ไม่ชัด → ตัวแดง เว้นว่างให้กรอก */
@@ -420,6 +422,8 @@ export type ShipRouteInfo = {
   destination: string | null;
   customer: string | null;
   format: string;
+  /** ทะเบียนมาจากชื่อโฟลเดอร์ หรือจากตั๋ว */
+  plateFrom: "folder" | "ticket";
   /** ❌ ค่าตั้งยังไม่ครบ (ยืนยันตั๋วในโฟลเดอร์นี้ไม่ได้) */
   problem: string | null;
 };
@@ -428,18 +432,21 @@ export type ShipPage = {
   rows: ShipRow[];
   routes: ShipRouteInfo[];
   drivers: { code: string; name: string }[];
+  /** รถทั้งหมด — ให้เลือกเมื่อทะเบียนจากตั๋วอ่านไม่ได้ */
+  vehicles: string[];
   /** ข้อความระดับทั้งหน้า (เช่น ยังไม่ตั้งราคาเส้นทาง) */
   notices: string[];
 };
 
 /**
- * ชื่อโฟลเดอร์ → รถในฐานข้อมูล
+ * ทะเบียน (ชื่อโฟลเดอร์ หรือทะเบียนที่พิมพ์ในตั๋ว แล้วแต่แบบตั๋ว) → รถในฐานข้อมูล
  * ชื่อโฟลเดอร์อาจมีชื่อจังหวัดต่อท้าย (เช่น "70-1853 ลบ") — ตรงทุกตัวก่อน ไม่ตรงค่อยเทียบเฉพาะเลขทะเบียน
- * เลขเดียวกันมีหลายคันในฐานข้อมูล = ไม่รู้ว่าคันไหน → ไม่เดา ให้แก้ชื่อโฟลเดอร์
+ * เลขเดียวกันมีหลายคันในฐานข้อมูล = ไม่รู้ว่าคันไหน → ไม่เดา
  */
 export function folderVehicle<V extends { plate: string }>(
   vehicles: Map<string, V>,
   folder: string,
+  source: "folder" | "ticket" = "folder",
 ): { vehicle: V; error: null } | { vehicle: null; error: string } {
   const name = folder.trim();
   const exact = vehicles.get(name);
@@ -447,6 +454,10 @@ export function folderVehicle<V extends { plate: string }>(
   const key = plateKey(name);
   const same = [...vehicles.values()].filter((v) => plateKey(v.plate) === key);
   if (same.length === 1) return { vehicle: same[0], error: null };
+  if (source === "ticket") {
+    if (same.length > 1) return { vehicle: null, error: `❌ ทะเบียนในตั๋ว ${name} ตรงกับรถหลายคัน (${same.map((v) => v.plate).join(", ")}) — เลือกทะเบียนเอง` };
+    return { vehicle: null, error: `❌ ไม่พบทะเบียน ${name || "(ว่าง)"} (จากตั๋ว) ในข้อมูลรถ — เลือกทะเบียนเอง หรือเพิ่มรถที่หน้า ข้อมูลรถ` };
+  }
   if (same.length > 1)
     return { vehicle: null, error: `❌ โฟลเดอร์ ${name} ตรงกับรถหลายคัน (${same.map((v) => v.plate).join(", ")}) — ตั้งชื่อโฟลเดอร์ให้ตรงทะเบียนในหน้า ข้อมูลรถ ทุกตัว` };
   return { vehicle: null, error: `❌ ไม่พบทะเบียน ${name || "(ว่าง)"} ในข้อมูลรถ — ตั้งชื่อโฟลเดอร์ให้ตรงทะเบียน หรือเพิ่มรถที่หน้า ข้อมูลรถ` };
@@ -523,6 +534,7 @@ export async function shipReview(): Promise<ShipPage> {
       destination: r?.destination ?? null,
       customer: customer ? `${customer.code} — ${customer.name}` : null,
       format: formatOf(r?.format).label,
+      plateFrom: formatOf(r?.format).plateFrom,
       problem: routeProblem(folder, r, !!customer),
     };
     routes.set(folder, info);
@@ -561,21 +573,28 @@ export async function shipReview(): Promise<ShipPage> {
     const route = routeInfo(t.routeFolder);
     // ข้อความเต็มอยู่หัวกล่องของเส้นทาง — ในแถวบอกสั้นๆ ว่าไปแก้ที่ไหน
     if (route.problem) blockers.push(`❌ เส้นทางนี้ยังตั้งค่าไม่ครบ — ตั้งที่หน้า ${SHIP_SETTINGS}`);
-    const found = folderVehicle(ctx.vehicleByPlate, t.folderPlate);
+    // ทะเบียน: จากชื่อโฟลเดอร์ หรือจากตั๋ว (แล้วแต่แบบตั๋ว) — จากตั๋วอ่านไม่ได้/ไม่พบในข้อมูลรถ = ให้คนเลือกในแถว
+    const fmt = formatOf(routeByFolder.get(t.routeFolder)?.format);
+    const plateFromTicket = fmt.plateFrom === "ticket";
+    const plateSrc = plateFromTicket ? (t.plateOnTicket ?? "") : t.folderPlate;
+    const found = plateSrc
+      ? folderVehicle(ctx.vehicleByPlate, plateSrc, plateFromTicket ? "ticket" : "folder")
+      : { vehicle: null, error: "❌ อ่านทะเบียนในตั๋วไม่ได้ — ดูรูปแล้วเลือกทะเบียนเอง" };
     const vehicle = found.vehicle;
     // ทะเบียนที่โชว์/บันทึก = ทะเบียนในฐานข้อมูล (ไม่ใช่ชื่อโฟลเดอร์ที่อาจมีชื่อจังหวัดต่อท้าย)
-    const plate = vehicle?.plate ?? t.folderPlate;
-    if (!vehicle) blockers.push(found.error ?? "❌ ไม่พบรถ");
-    else if (route.origin && route.destination && !ctx.routeByKey.get(routeKey(route.origin, route.destination, vehicle.vehicleType)))
+    const plate = vehicle?.plate ?? (plateFromTicket ? null : t.folderPlate);
+    const plateNote = !vehicle && plateFromTicket ? found.error : null;
+    if (!vehicle && !plateFromTicket) blockers.push(found.error ?? "❌ ไม่พบรถ");
+    else if (vehicle && route.origin && route.destination && !ctx.routeByKey.get(routeKey(route.origin, route.destination, vehicle.vehicleType)))
       noRoute.add(`${route.origin} → ${route.destination} สำหรับ${vehicle.vehicleType}`);
-    if (t.plateOnTicket && plateKey(t.plateOnTicket) !== plateKey(plate))
+    if (!plateFromTicket && t.plateOnTicket && plate && plateKey(t.plateOnTicket) !== plateKey(plate))
       warnings.push(`⚠️ ทะเบียนในตั๋ว ${t.plateOnTicket} ไม่ตรงโฟลเดอร์ ${plate} — ตรวจว่าเก็บรูปผิดโฟลเดอร์ไหม`);
 
     // ตัวอ่าน 2 ตัวอ่านได้ไม่ตรงกัน ฯลฯ — ให้คนดูรูปก่อน
     if (t.readNote) warnings.push(...t.readNote.split(" · "));
 
     // เลขที่ต้องถูกรูปแบบตามแบบตั๋วของเส้นทางนี้ (จำนวนหลัก)
-    const ticketNo = validTicketNo(t.ticketNo, formatOf(routeByFolder.get(t.routeFolder)?.format)) ? t.ticketNo : null;
+    const ticketNo = validTicketNo(t.ticketNo, fmt) ? t.ticketNo : null;
     if (ticketNo) {
       const job = jobsWithNo.find((j) => j.ticketOrigin === ticketNo);
       const other = othersWithNo.find((o) => o.ticketNo === ticketNo && o.id !== t.id);
@@ -587,7 +606,7 @@ export async function shipReview(): Promise<ShipPage> {
     const date = t.ticketDate;
 
     // พขร.: ตารางจับคู่รถ ณ วันที่ในตั๋ว เทียบกับชื่อท้ายตั๋ว (หรือชื่อที่คนเคยเลือกให้ไว้)
-    const paired = date && vehicle ? pairedDriver(ctx.pairings, plate, date) : null;
+    const paired = date && vehicle ? pairedDriver(ctx.pairings, vehicle.plate, date) : null;
     const key = t.driverNameOnTicket ? nameKey(t.driverNameOnTicket) : null;
     const loose = t.driverNameOnTicket ? looseName(t.driverNameOnTicket) : null;
     let fromTicket = key ? (aliasByKey.get(key) ?? driverByKey.get(key) ?? (loose ? driverByLoose.get(loose) : undefined) ?? null) : null;
@@ -611,9 +630,11 @@ export async function shipReview(): Promise<ShipPage> {
       driverCode = nearDriver(loose);
       driverNote = `⚠️ ชื่อในตั๋ว «${t.driverNameOnTicket}» ใกล้เคียง ${driverName.get(driverCode!) ?? driverCode} — ตรวจแล้วกดยืนยัน (ตารางจับคู่ไม่มีรถคันนี้)`;
     } else {
-      driverNote = key
-        ? `⚠️ ไม่รู้จักชื่อในตั๋ว «${t.driverNameOnTicket}» และตารางจับคู่ไม่มีรถคันนี้`
-        : "⚠️ อ่านชื่อในตั๋วไม่ได้ และตารางจับคู่ไม่มีรถคันนี้";
+      driverNote = !fmt.hasDriverName
+        ? "⚠️ ตารางจับคู่รถไม่มีรถคันนี้ ณ วันที่ในตั๋ว — เลือก พขร. เอง (เพิ่มที่หน้า จับคู่รถ + พขร. ครั้งหน้าจะเติมให้เอง)"
+        : key
+          ? `⚠️ ไม่รู้จักชื่อในตั๋ว «${t.driverNameOnTicket}» และตารางจับคู่ไม่มีรถคันนี้`
+          : "⚠️ อ่านชื่อในตั๋วไม่ได้ และตารางจับคู่ไม่มีรถคันนี้";
     }
 
     return {
@@ -622,6 +643,7 @@ export async function shipReview(): Promise<ShipPage> {
       fileName: t.fileName,
       part: t.part,
       plate,
+      plateNote,
       routeFolder: t.routeFolder,
       ticketNo,
       date: date ? toInputDate(date) : null,
@@ -645,6 +667,7 @@ export async function shipReview(): Promise<ShipPage> {
     drivers: drivers
       .map((d) => ({ code: d.code, name: fullName(d) }))
       .sort((a, b) => a.name.localeCompare(b.name, "th")),
+    vehicles: [...ctx.vehicleByPlate.values()].map((v) => v.plate).sort((a, b) => a.localeCompare(b, "th")),
     notices,
   };
 }
