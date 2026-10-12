@@ -520,7 +520,7 @@ function pairedDriver(
 
 /** เตรียมแถวรอตรวจ — คำนวณสถานะใหม่ทุกครั้ง แก้ข้อมูลหลัก (รถ/จับคู่/พขร.) แล้วผลอัปเดตเอง */
 export async function shipReview(): Promise<ShipPage> {
-  const [tickets, ctx, drivers, aliases, routeRows] = await Promise.all([
+  const [tickets, ctx, drivers, aliases, routeRows, photoRoutes] = await Promise.all([
     prisma.shipTicket.findMany({
       where: { status: "รอตรวจ" },
       orderBy: [{ ticketDate: "asc" }, { ticketNo: "asc" }, { id: "asc" }],
@@ -529,6 +529,7 @@ export async function shipReview(): Promise<ShipPage> {
     prisma.driver.findMany({ where: { active: true } }),
     prisma.ocrAlias.findMany({ where: { kind: "driver" } }),
     prisma.shipRoute.findMany(),
+    prisma.shipPhoto.findMany({ distinct: ["routeFolder"], select: { routeFolder: true } }),
   ]);
 
   const notices: string[] = [];
@@ -676,9 +677,11 @@ export async function shipReview(): Promise<ShipPage> {
 
   return {
     rows,
-    // ทุกเส้นทางที่มีในระบบ (ยังไม่มีตั๋วรอตรวจก็แสดง) — ปุ่มเลือกเส้นทางครบเสมอ
-    routes: [...routeRows.map((r) => routeInfo(r.folderName)), ...routes.values()]
+    // ทุกเส้นทางที่มีรูปในระบบ หรือตั้งค่าครบแล้ว (ยังไม่มีตั๋วรอตรวจก็แสดง) — ปุ่มเลือกเส้นทางครบเสมอ
+    // ค่าตั้งที่ค้างจากชื่อโฟลเดอร์เก่า (ไม่มีรูป และตั้งค่าไม่ครบ) ไม่แสดง กันปุ่มซ้ำที่ชื่อต่างกันแค่ช่องว่าง
+    routes: [...routes.values(), ...routeRows.map((r) => routeInfo(r.folderName))]
       .filter((r, i, all) => all.findIndex((x) => x.folder === r.folder) === i)
+      .filter((r) => !r.problem || tickets.some((t) => t.routeFolder === r.folder) || photoRoutes.some((x) => x.routeFolder === r.folder))
       .sort((a, b) => a.folder.localeCompare(b.folder, "th")),
     drivers: drivers
       .map((d) => ({ code: d.code, name: fullName(d) }))
