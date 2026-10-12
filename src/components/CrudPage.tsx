@@ -2,8 +2,10 @@ import Link from "next/link";
 import { CrudForm, DeleteButton } from "./CrudForm";
 import { Card, Empty, PageHeader } from "./ui";
 import { DateRangeFilter, ExpiringToggle, SearchFilter, SelectFilter } from "./Filters";
+import { ExportMenu } from "./ExportMenu";
 import { loadOptions, type Option, type Resource } from "@/lib/crud";
 import { prisma } from "@/lib/prisma";
+import { crudQuery } from "@/lib/crud-query";
 import { formatThaiDate } from "@/lib/date";
 import { baht, num } from "@/lib/format";
 import type { SearchParams } from "@/lib/params";
@@ -50,56 +52,12 @@ export async function CrudPage({
   extraFooter?: ReactNode;
 }) {
   const options = await loadOptions(resource);
-  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
   const editId = typeof searchParams.edit === "string" ? searchParams.edit : undefined;
   const pageSize = resource.pageSize ?? 50;
   const page = Math.max(1, Number(searchParams.page) || 1);
 
-  // PostgreSQL เทียบตัวพิมพ์ใหญ่-เล็กเป็นคนละตัว จึงต้องสั่ง insensitive
-  // ไม่งั้นค้น "bgc" จะไม่เจอ "BGC"
-  const and: Record<string, unknown>[] = [];
-  if (q && resource.searchFields?.length) {
-    and.push({ OR: resource.searchFields.map((f) => ({ [f]: { contains: q, mode: "insensitive" } })) });
-  }
-
-  // dropdown กรองรายคอลัมน์ (?f_ชื่อฟิลด์=ค่า) — เลือกค่าเดียว เหมือน filter บนหัวตารางในชีต
-  const filterValues: Record<string, string> = {};
-  for (const f of resource.filterFields ?? []) {
-    const v = searchParams[`f_${f}`];
-    const val = typeof v === "string" ? v.trim() : "";
-    if (val) {
-      filterValues[f] = val;
-      and.push({ [f]: val });
-    }
-  }
-
-  // เอกสารใกล้หมดอายุ — ใช้จำนวนวันแจ้งเตือนเดียวกับหน้าหลัก (ตั้งค่า → แจ้งเตือนเอกสารล่วงหน้า)
+  const { where, q, from, to, filterValues, onlyExpiring, alertDays, today } = await crudQuery(resource, searchParams);
   const expiryFields = resource.expiryFields ?? [];
-  let alertDays = 30;
-  if (expiryFields.length) {
-    const s = await prisma.setting.findUnique({ where: { key: "docAlertDays" } });
-    alertDays = Number(s?.value) > 0 ? Number(s!.value) : 30;
-  }
-  const todayUtc = new Date();
-  const today = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate()));
-  const threshold = new Date(today.getTime() + alertDays * 86400000);
-  const onlyExpiring = searchParams.expiring === "1" && expiryFields.length > 0;
-  if (onlyExpiring) and.push({ OR: expiryFields.map((f) => ({ [f]: { lte: threshold } })) });
-
-  // ช่วงวันที่ (?from=YYYY-MM-DD&to=YYYY-MM-DD) — ใส่ช่องเดียวก็ได้ (ตั้งแต่… / ถึง…)
-  const ymd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
-  const from = resource.dateRangeField ? ymd(searchParams.from) : "";
-  const to = resource.dateRangeField ? ymd(searchParams.to) : "";
-  if (from || to) {
-    and.push({
-      [resource.dateRangeField!]: {
-        ...(from ? { gte: new Date(from + "T00:00:00Z") } : {}),
-        ...(to ? { lte: new Date(to + "T00:00:00Z") } : {}),
-      },
-    });
-  }
-
-  const where: Record<string, unknown> = and.length ? { AND: and } : {};
 
   /** ฟิลด์วันหมดอายุของแถวนี้ที่ใกล้ถึง/เลยกำหนด: ชื่อฟิลด์ → จำนวนวันที่เหลือ (ติดลบ = เลยแล้ว) */
   const expiryOf = (row: Row): Record<string, number> => {
@@ -189,7 +147,8 @@ export async function CrudPage({
         />
       </Card>
 
-      {(resource.searchFields?.length || resource.filterFields?.length || expiryFields.length || resource.dateRangeField) ? (
+      {/* แถบค้นหา/กรอง + Export — มีทุกตาราง (Export ได้เสมอ แม้ตารางที่ไม่มีช่องค้นหา) */}
+      {(
         <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
           {resource.searchFields?.length ? <SearchFilter value={q} /> : null}
           {resource.dateRangeField && <DateRangeFilter from={from} to={to} inline clearable />}
@@ -211,8 +170,11 @@ export async function CrudPage({
             <ExpiringToggle on={onlyExpiring} alertDays={alertDays} />
           )}
           <span className="pb-2 text-[12px] text-slate-500">พบ {total.toLocaleString("th-TH")} รายการ</span>
+          <div className="ml-auto">
+            <ExportMenu resourceKey={resource.key} />
+          </div>
         </div>
-      ) : null}
+      )}
 
       <Card bodyClass="p-0">
         {rows.length === 0 ? (
@@ -227,7 +189,7 @@ export async function CrudPage({
                       {f.label}
                     </th>
                   ))}
-                  <th className="no-print w-24">จัดการ</th>
+                  <th className="no-print">จัดการ</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,7 +204,8 @@ export async function CrudPage({
                         return (
                           <td
                             key={f.name}
-                            className={f.format === "money" || f.format === "num" ? "num" : undefined}
+                            // วันที่ไม่ตัดขึ้นบรรทัดใหม่ ("20 ก.ค. 2569" อ่านเป็นก้อนเดียว)
+                            className={f.format === "money" || f.format === "num" ? "num" : f.type === "date" ? "whitespace-nowrap" : undefined}
                           >
                             {cellText(row[f.name], f.format, options[f.name])}
                             {daysLeft != null && (
@@ -254,7 +217,7 @@ export async function CrudPage({
                         );
                       })}
                       <td className="no-print">
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap justify-center gap-1">
                           <Link href={`?edit=${encodeURIComponent(id)}`} className="btn btn-ghost px-2 py-1 text-[12px]">
                             แก้ไข
                           </Link>

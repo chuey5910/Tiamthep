@@ -90,7 +90,8 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
               <a
                 key={r.folder}
                 href={`?route=${encodeURIComponent(r.folder)}`}
-                className={`btn ${on ? "btn-primary" : "btn-ghost"}`}
+                // ชื่อเส้นทางยาว — มือถือให้ขึ้นบรรทัดใหม่ในปุ่ม ไม่ดันหน้าให้ล้นจอ
+                className={`btn btn-wrap ${on ? "btn-primary" : "btn-ghost"}`}
                 title={`โฟลเดอร์ «${r.folder}»`}
               >
                 {r.problem ? "❌ " : ""}

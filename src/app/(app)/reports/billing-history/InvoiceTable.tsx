@@ -73,7 +73,7 @@ export function InvoiceTable({ rows, canEdit }: { rows: InvoiceRow[]; canEdit: b
                   {r.dueAt || "-"} <DueBadge daysLeft={r.daysLeft} />
                 </td>
                 <td className="text-slate-600">{r.billedBy ?? "-"}</td>
-                <td className="no-print whitespace-nowrap">
+                <td className="no-print">
                   <button type="button" className="btn btn-ghost px-2 py-1 text-[12px]" onClick={() => setOpen(r)}>
                     ดูยอด
                   </button>{" "}

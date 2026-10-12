@@ -183,7 +183,7 @@ export function RouteActions({ id, backHref = "?" }: { id: number; backHref?: st
   // ต่อท้ายคำค้นเดิม ("?" หรือ "?q=…") จะได้กลับมาเจอตารางที่กรองไว้เหมือนเดิม
   const link = (k: string) => `${backHref}${backHref === "?" ? "" : "&"}${k}=${id}`;
   return (
-    <div className="flex gap-1">
+    <div className="flex flex-wrap justify-center gap-1">
       <a href={link("route")} className="btn btn-ghost px-2 py-1 text-[12px]">
         ตั้งราคา
       </a>
