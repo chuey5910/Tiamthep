@@ -16,6 +16,8 @@ function useSetParams() {
       if (v == null || v === "") next.delete(k);
       else next.set(k, v);
     }
+    // เปลี่ยนตัวกรองแล้วกลับไปหน้าแรก — ค้างหน้า 3 อยู่ ผลที่กรองแล้วอาจมีไม่ถึง จะเห็นว่างทั้งที่มีข้อมูล
+    if (!("page" in updates)) next.delete("page");
     start(() => router.push(`${pathname}?${next.toString()}`));
   };
 
@@ -28,11 +30,23 @@ function useSetParams() {
  * inline = ไม่ต้องมีกรอบการ์ดของตัวเอง ใช้เมื่อต้องวางเรียงกับตัวกรองอื่น
  * (เช่น หน้าวางบิล ที่ ลูกค้า + ช่วงวันที่ + ปลายทาง ต้องอยู่แถวเดียวกัน)
  */
-export function DateRangeFilter({ from, to, inline = false }: { from: string; to: string; inline?: boolean }) {
+export function DateRangeFilter({
+  from,
+  to,
+  inline = false,
+  clearable = false,
+}: {
+  from: string;
+  to: string;
+  inline?: boolean;
+  /** มีปุ่ม «ทุกวัน» ล้างช่วงวันที่ (หน้าที่ไม่บังคับช่วง เช่น ตารางข้อมูล) */
+  clearable?: boolean;
+}) {
   const { set, pending } = useSetParams();
 
   const shiftMonth = (delta: number) => {
-    const d = new Date(from + "T00:00:00Z");
+    // ยังไม่ได้เลือกช่วง → นับจากเดือนนี้
+    const d = from ? new Date(from + "T00:00:00Z") : new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), 1));
     const y = d.getUTCFullYear();
     const m = d.getUTCMonth() + delta;
     const first = new Date(Date.UTC(y, m, 1));
@@ -67,6 +81,11 @@ export function DateRangeFilter({ from, to, inline = false }: { from: string; to
         <button className="btn btn-ghost" onClick={() => shiftMonth(1)} disabled={pending}>
           เดือนถัดไป ▶
         </button>
+        {clearable && (from || to) && (
+          <button className="btn btn-ghost" onClick={() => set({ from: null, to: null })} disabled={pending}>
+            ✕ ทุกวัน
+          </button>
+        )}
       </div>
       {pending && <span className="pb-2 text-xs text-slate-400">กำลังคำนวณ…</span>}
     </>

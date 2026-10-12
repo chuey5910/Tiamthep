@@ -73,6 +73,8 @@ export type Resource = {
    * และจะแดงต่อไปจนกว่าจะต่ออายุครบทุกรายการ
    */
   expiryFields?: string[];
+  /** ฟิลด์วันที่ที่ให้กรองเป็นช่วง (ตั้งแต่วันที่ – ถึงวันที่) — ว่างทั้งคู่ = ทุกวัน */
+  dateRangeField?: string;
   /** จำนวนแถวต่อหน้า */
   pageSize?: number;
   /** ข้อความช่วยเหลือใต้หัวข้อ */
@@ -267,6 +269,7 @@ export const RESOURCES: Record<string, Resource> = {
     idType: "number",
     orderBy: [{ date: "desc" }, { id: "desc" }],
     searchFields: ["driverCode", "plate", "note"],
+    dateRangeField: "date",
     pageSize: 100,
     fields: [
       { name: "date", label: "วันที่", type: "date", required: true, format: "date", span: 1 },

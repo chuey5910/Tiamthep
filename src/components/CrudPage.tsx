@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CrudForm, DeleteButton } from "./CrudForm";
 import { Card, Empty, PageHeader } from "./ui";
-import { ExpiringToggle, SearchFilter, SelectFilter } from "./Filters";
+import { DateRangeFilter, ExpiringToggle, SearchFilter, SelectFilter } from "./Filters";
 import { loadOptions, type Option, type Resource } from "@/lib/crud";
 import { prisma } from "@/lib/prisma";
 import { formatThaiDate } from "@/lib/date";
@@ -86,6 +86,19 @@ export async function CrudPage({
   const onlyExpiring = searchParams.expiring === "1" && expiryFields.length > 0;
   if (onlyExpiring) and.push({ OR: expiryFields.map((f) => ({ [f]: { lte: threshold } })) });
 
+  // ช่วงวันที่ (?from=YYYY-MM-DD&to=YYYY-MM-DD) — ใส่ช่องเดียวก็ได้ (ตั้งแต่… / ถึง…)
+  const ymd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+  const from = resource.dateRangeField ? ymd(searchParams.from) : "";
+  const to = resource.dateRangeField ? ymd(searchParams.to) : "";
+  if (from || to) {
+    and.push({
+      [resource.dateRangeField!]: {
+        ...(from ? { gte: new Date(from + "T00:00:00Z") } : {}),
+        ...(to ? { lte: new Date(to + "T00:00:00Z") } : {}),
+      },
+    });
+  }
+
   const where: Record<string, unknown> = and.length ? { AND: and } : {};
 
   /** ฟิลด์วันหมดอายุของแถวนี้ที่ใกล้ถึง/เลยกำหนด: ชื่อฟิลด์ → จำนวนวันที่เหลือ (ติดลบ = เลยแล้ว) */
@@ -130,6 +143,14 @@ export async function CrudPage({
   const tableFields = resource.fields.filter((f) => !f.hideInTable);
   const pages = Math.ceil(total / pageSize);
 
+  // ลิงก์เปลี่ยนหน้า — คงตัวกรองทุกตัวไว้ (คำค้น · ช่วงวันที่ · dropdown) ไม่งั้นกดหน้าถัดไปแล้วกลายเป็นข้อมูลทั้งหมด
+  const pageHref = (n: number) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(searchParams)) if (typeof v === "string" && v && k !== "page" && k !== "edit") p.set(k, v);
+    p.set("page", String(n));
+    return `?${p.toString()}`;
+  };
+
   const idOf = (row: Row): string => {
     const v = row[resource.idField];
     if (v instanceof Date) return v.toISOString().slice(0, 10);
@@ -168,9 +189,10 @@ export async function CrudPage({
         />
       </Card>
 
-      {(resource.searchFields?.length || resource.filterFields?.length || expiryFields.length) ? (
+      {(resource.searchFields?.length || resource.filterFields?.length || expiryFields.length || resource.dateRangeField) ? (
         <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
           {resource.searchFields?.length ? <SearchFilter value={q} /> : null}
+          {resource.dateRangeField && <DateRangeFilter from={from} to={to} inline clearable />}
           {(resource.filterFields ?? []).map((f) => {
             const field = resource.fields.find((x) => x.name === f);
             if (!field) return null;
@@ -194,7 +216,7 @@ export async function CrudPage({
 
       <Card bodyClass="p-0">
         {rows.length === 0 ? (
-          <Empty>{q || Object.keys(filterValues).length || onlyExpiring ? "ไม่พบข้อมูลตามเงื่อนไขที่กรอง" : "ยังไม่มีข้อมูล — เพิ่มได้จากฟอร์มด้านบน"}</Empty>
+          <Empty>{q || Object.keys(filterValues).length || onlyExpiring || from || to ? "ไม่พบข้อมูลตามเงื่อนไขที่กรอง" : "ยังไม่มีข้อมูล — เพิ่มได้จากฟอร์มด้านบน"}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="tbl">
@@ -254,12 +276,12 @@ export async function CrudPage({
             </span>
             <div className="flex gap-2">
               {page > 1 && (
-                <Link href={`?page=${page - 1}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className="btn btn-ghost">
+                <Link href={pageHref(page - 1)} className="btn btn-ghost">
                   ◀ ก่อนหน้า
                 </Link>
               )}
               {page < pages && (
-                <Link href={`?page=${page + 1}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className="btn btn-ghost">
+                <Link href={pageHref(page + 1)} className="btn btn-ghost">
                   ถัดไป ▶
                 </Link>
               )}
