@@ -213,7 +213,9 @@ function labeledAll(t: string, label: RegExp): (At<number> & { vat: number })[] 
   const out: (At<number> & { vat: number })[] = [];
   for (const m of t.matchAll(label)) {
     const from = m.index! + m[0].length;
-    const v = t.slice(from, from + 30).match(/^([^\d]{0,15}?)(?<![\d\/.,:])(\d{1,3}(?:[,.]\d{3})+|\d{4,6})(?![\d\/:])/);
+    const v = t
+      .slice(from, from + 30)
+      .match(new RegExp(`^([^\\d]{0,15}?)(?<![\\d\\/.,:])(\\d{1,3}(?:[,.]\\d{3})+|${MESSY_KG}|\\d{4,6})(?![\\d\\/:])`));
     if (!v) continue;
     const n = kg(v[2]);
     if (plausible(n)) out.push({ v: n, at: m.index!, vat: from + v[1].length });
@@ -222,10 +224,17 @@ function labeledAll(t: string, label: RegExp): (At<number> & { vat: number })[] 
 }
 
 // ป้ายที่ OCR อ่านเพี้ยนบ่อย: นน.เข้า → นน.เขา / นน.เช้า · นน.ออก → นบ.ออก
-const LBL_IN = /(?:นน|นบ|บน|น\.น)\s*\.?\s*เ[ขชบ]\s*้?\s*า/g;
-const LBL_OUT = /(?:นน|นบ|บน|น\.น)\s*\.?\s*ออ/g;
-const LBL_NET = /(?:นน|นบ|บน|น\.น)\s*\.?\s*สุ/g;
-const LBL_ENTRY = /เวลา\s*เ[ขชบ]\s*้?\s*า/g;
+// ป้ายที่ OCR อ่านเพี้ยนบ่อย: นน.→นบ./นพ./บน. · เข้า→เขา/เช้า/เข่า/เฒ่า (วรรณยุกต์สลับ ่/้ หรือหลุด)
+const LBL_IN = /(?:น[นบพ]|บน|น\.น)\s*\.?\s*เ[ขชบฒ]\s*[่้]?\s*า/g;
+const LBL_OUT = /(?:น[นบพ]|บน|น\.น)\s*\.?\s*ออ/g;
+const LBL_NET = /(?:น[นบพ]|บน|น\.น)\s*\.?\s*สุ/g;
+const LBL_ENTRY = /เวลา\s*เ[ขชบฒ]\s*[่้]?\s*า/g;
+
+/**
+ * ตัวเลขน้ำหนักที่ OCR ใส่จุด/จุลภาคเพี้ยน เช่น "11,380" → "1.1.,380" — นับเมื่อหลังสุดเป็น 3 หลักหลังเครื่องหมายคั่น
+ * (ไม่รับเลขยาวล้วน/วันที่/เวลา/เบอร์โทร — มีตัวกันด้านหน้า-หลังอยู่แล้ว) ค่าจริงต้องผ่านสูตรน้ำหนักอีกชั้นเสมอ
+ */
+const MESSY_KG = "\\d{1,2}[.,]+\\d[.,]+\\d{3}";
 
 /** at/outAt/inAt = ตำแหน่งในข้อความ (ไว้ดูว่าอยู่ใกล้เวลาของใบไหน) · pos = ตำแหน่งตัวเลขจริง 3 ตัว (กันหยิบซ้ำ) */
 type Triple = { in: number; out: number; net: number; at: number; outAt: number; inAt?: number; pos: number[] };
@@ -263,9 +272,16 @@ function triplesOf(t: string): Triple[] {
  * ช่วงค่าตามรถจริง: เข้า (รถเปล่า) 5–20 ตัน · ออก 15–60 ตัน · สุทธิ 5–50 ตัน
  * ตัวเลข 1 ตัวใช้ได้ชุดเดียว · เลือกชุดที่ตัวเลขอยู่ใกล้กันที่สุดก่อน
  */
-function looseTriples(t: string, taken: Set<number>): Triple[] {
+/**
+ * @param tare น้ำหนักรถเปล่าของรูปนี้ (ค่ากลางของ นน.เข้า ที่อ่านจากป้ายได้) — รถคันเดียวกันทั้งรูป ค่าใกล้กันทุกเที่ยว
+ *
+ * ระวัง: ไม่มีป้าย = ไม่รู้ว่าตัวไหน "เข้า" ตัวไหน "สุทธิ" — เข้า + สุทธิ = ออก ลงตัวทั้งสองแบบ
+ * (เคยพลาด: 11,500 + 16,720 = 28,220 ระบบหยิบสุทธิ = 11,500 ซึ่งคือน้ำหนักรถเปล่า)
+ * ถ้าสองตัวสลับกันได้ (ทั้งคู่อยู่ในช่วงน้ำหนักรถเปล่า) ต้องตัดสินด้วยน้ำหนักรถเปล่าของรูปเท่านั้น ไม่มีให้เทียบ = ไม่ใช้ชุดนี้
+ */
+function looseTriples(t: string, taken: Set<number>, tare: number | null): Triple[] {
   const nums: At<number>[] = [];
-  for (const m of t.matchAll(/(?<![\d\/.,:\-])(\d{1,2}[,.]\d{3})(?![\d\/:,.])/g)) {
+  for (const m of t.matchAll(new RegExp(`(?<![\\d\\/.,:\\-])(\\d{1,2}[,.]\\d{3}|${MESSY_KG})(?![\\d\\/:,.])`, "g"))) {
     if (taken.has(m.index!)) continue;
     nums.push({ v: kg(m[1]), at: m.index! });
   }
@@ -278,6 +294,8 @@ function looseTriples(t: string, taken: Set<number>): Triple[] {
       if (net < 5000 || net > 50000) return;
       nums.forEach((nn, ni) => {
         if (nn.v !== net || ni === i || ni === oi) return;
+        const swappable = nn.v >= 5000 && nn.v <= 20000;
+        if (swappable && !(tare != null && Math.abs(x.v - tare) <= 1500 && Math.abs(x.v - tare) < Math.abs(nn.v - tare))) return;
         const ps = [x.at, o.at, nn.at];
         cands.push({ i, o: oi, n: ni, spread: Math.max(...ps) - Math.min(...ps) });
       });
@@ -292,6 +310,27 @@ function looseTriples(t: string, taken: Set<number>): Triple[] {
     out.push({ in: nums[c.i].v, out: nums[c.o].v, net: nums[c.n].v, at: nums[c.n].at, outAt: nums[c.o].at, inAt: nums[c.i].at, pos: [nums[c.i].at, nums[c.o].at, nums[c.n].at] });
   }
   return out;
+}
+
+/**
+ * น้ำหนักรถเปล่าของรูป (รถคันเดียวกันทุกเที่ยว น้ำหนักรถเปล่าแทบเท่ากัน ต่างกันไม่กี่สิบ-ร้อยกิโล)
+ *   1. ค่ากลางของ นน.เข้า ที่อ่านจากป้ายได้
+ *   2. ป้ายเพี้ยนหมด → กลุ่มตัวเลขช่วงรถเปล่า (5–20 ตัน) ที่เกาะกลุ่มกันแน่นที่สุด (ห่างกันไม่เกิน 300 กก.)
+ *      ต้องเป็นกลุ่มเดียวที่ใหญ่ที่สุดชัดเจน — มีสองกลุ่มขนาดเท่ากัน (เช่น น้ำหนักสุทธิบังเอิญใกล้กันด้วย) = ไม่รู้ → null
+ */
+function estimateTare(t: string): number | null {
+  const ins = labeledAll(t, LBL_IN).map((x) => x.v).sort((a, b) => a - b);
+  if (ins.length) return ins[Math.floor(ins.length / 2)];
+  const nums = [...t.matchAll(new RegExp(`(?<![\\d\\/.,:\\-])(\\d{1,2}[,.]\\d{3}|${MESSY_KG})(?![\\d\\/:,.])`, "g"))]
+    .map((m) => kg(m[1]))
+    .filter((n) => n >= 5000 && n <= 20000);
+  const groups = nums.map((v) => nums.filter((x) => Math.abs(x - v) <= 300));
+  const best = Math.max(0, ...groups.map((g) => g.length));
+  if (best < 2) return null;
+  const centers = groups.filter((g) => g.length === best).map((g) => g.reduce((a, b) => a + b, 0) / g.length);
+  // กลุ่มใหญ่สุดต้องเป็นกลุ่มเดียว (ศูนย์กลางห่างกันเกิน 600 กก. = คนละกลุ่ม)
+  if (centers.some((c) => Math.abs(c - centers[0]) > 600)) return null;
+  return Math.round(centers.reduce((a, b) => a + b, 0) / centers.length);
 }
 
 /** ค่ากลางของการอ่านทั้งรูป — ใช้ดูว่าทำไมใบไหนอ่านไม่ผ่าน (ไว้ปรับตัวอ่านจากรูปจริง) */
@@ -315,13 +354,24 @@ function analyse(t: string, f: TicketFormat) {
         nosText.push({ v: m[1], at: m.index! });
   }
   nosText.sort((a, b) => a.at - b.at);
+  // เลขที่ที่ขึ้นต้นไม่เหมือนใบอื่นในรูป (ท่าออกเลขเรียงกัน) = OCR อ่านเพี้ยน เช่น 2261000102 → 2261060102
+  // ถ้าปล่อยไว้ การเรียงเลขน้อย→มากจะเลื่อนทั้งรูป ทุกใบได้น้ำหนักของใบข้างๆ → ตัดทิ้ง ใบนั้นว่างให้คนกรอก
+  if (f.samePrefix > 0 && nosText.length >= 3) {
+    const count = new Map<string, number>();
+    for (const x of nosText) count.set(x.v.slice(0, f.samePrefix), (count.get(x.v.slice(0, f.samePrefix)) ?? 0) + 1);
+    const [main, c] = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (c * 2 > nosText.length) for (let i = nosText.length - 1; i >= 0; i--) if (!nosText[i].v.startsWith(main)) nosText.splice(i, 1);
+  }
 
   // วัน-เวลาทั้งหมดในรูป (ไม่ซ้ำ)
-  const allDt: At<Date>[] = [];
+  const rawDt: At<Date>[] = [];
   for (const m of t.matchAll(DATETIME)) {
     const d = toDateTime(m);
-    if (d && !allDt.some((x) => x.v.getTime() === d.getTime())) allDt.push({ v: d, at: m.index! });
+    if (d && !rawDt.some((x) => x.v.getTime() === d.getTime())) rawDt.push({ v: d, at: m.index! });
   }
+  // OCR อ่านปีเพี้ยน (เช่น 2026 → 2013/2020) — รถคันเดียวในรูปเดียว เวลาห่างจากค่ากลางของรูปเกิน 7 วันเป็นไปไม่ได้ ไม่นับ
+  const mid = [...rawDt].sort((a, b) => a.v.getTime() - b.v.getTime())[Math.floor(rawDt.length / 2)]?.v.getTime() ?? 0;
+  const allDt = rawDt.filter((d) => Math.abs(d.v.getTime() - mid) <= 7 * 86400 * 1000);
   const sortedDt = [...allDt].sort((a, b) => a.v.getTime() - b.v.getTime());
 
   // รถคันเดียววิ่งทีละเที่ยว → เรียงเวลาแล้วต้องเป็น เข้า ออก เข้า ออก …
@@ -395,7 +445,8 @@ function analyse(t: string, f: TicketFormat) {
   const taken = new Set<number>();
   // ตัวเลขที่ชุดมีป้ายใช้ไปแล้ว — แบบไม่พึ่งป้ายห้ามหยิบซ้ำ (กันเฉพาะตัวเลขนั้นจริงๆ ไม่กันทั้งช่วง)
   for (const tr of labeledT) for (const p of tr.pos) taken.add(p);
-  const triples = [...labeledT, ...looseTriples(t, taken)].filter(
+  const tare = estimateTare(t);
+  const triples = [...labeledT, ...looseTriples(t, taken, tare)].filter(
     (tr, i, all) => all.findIndex((x) => x.in === tr.in && x.out === tr.out && x.net === tr.net) === i,
   );
 
@@ -417,8 +468,12 @@ function analyse(t: string, f: TicketFormat) {
     return lo;
   };
   // ใช้แค่ตำแหน่ง นน.ออก กับ นน.สุทธิ — นน.เข้า (รถเปล่า) มักเท่ากันทุกใบ ตัวไหนก็ลบลงตัว จึงไม่ใช่หลักฐาน
+  // นน.เข้า เป็นหลักฐานได้เฉพาะเมื่อค่านั้นมีตัวเดียวในรูป (ค่าซ้ำกันหลายใบ = ไม่รู้ว่าตัวไหนของใบไหน)
+  const kgCount = new Map<number, number>();
+  for (const m of t.matchAll(new RegExp(`(?<![\\d\\/.,:\\-])(\\d{1,3}(?:[,.]\\d{3})+|${MESSY_KG})(?![\\d\\/:])`, "g")))
+    kgCount.set(kg(m[1]), (kgCount.get(kg(m[1])) ?? 0) + 1);
   const sameLineTrip = (tr: Triple): number => {
-    const lines = new Set(tr.pos.slice(1).map(lineOf));
+    const lines = new Set((kgCount.get(tr.in) === 1 ? tr.pos : tr.pos.slice(1)).map(lineOf));
     const trips = new Set(allDt.filter((d) => lines.has(lineOf(d.at))).map((d) => tripOf(d.v)).filter((k) => k >= 0));
     return trips.size === 1 ? [...trips][0] : -1;
   };
