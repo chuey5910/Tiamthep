@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireWrite } from "@/lib/auth";
+import { requireAdmin, requireWrite } from "@/lib/auth";
 import { buildContext, routeKey } from "@/lib/calc";
 import { parseDate, toInputDate } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
-import { folderVehicle, pullShipTickets, routeProblem } from "@/lib/ship-ticket";
+import { folderVehicle, pullShipTickets, resetShipTickets, routeProblem } from "@/lib/ship-ticket";
 import { nameKey } from "@/lib/ship-ticket-parse";
 
 export type ShipResult = { ok: true; message: string } | { ok: false; error: string };
@@ -18,6 +18,18 @@ export async function refreshShipTickets(): Promise<ShipResult> {
   const r = await pullShipTickets();
   revalidatePath("/", "layout");
   return r.ok ? { ok: true, message: r.added ? `✅ ได้ตั๋วใหม่ ${r.added} ใบ` : "✅ ไม่มีรูปใหม่" } : { ok: false, error: r.error };
+}
+
+/** ผู้ดูแล: ล้างตั๋วที่ยังไม่ยืนยันทั้งหมด แล้วให้ระบบอ่านรูปใหม่ทั้งหมด */
+export async function resetAllShipTickets(): Promise<ShipResult> {
+  await requireAdmin();
+  const r = await resetShipTickets();
+  revalidatePath("/", "layout");
+  if (!r.ok) return { ok: false, error: r.error };
+  return {
+    ok: true,
+    message: `✅ ล้างแล้ว — ตั๋วรอตรวจ ${r.tickets.toLocaleString("th-TH")} ใบ · รูป ${r.photos.toLocaleString("th-TH")} รูป · ระบบเริ่มอ่านรูปใหม่ทั้งหมดเองภายใน 5 นาที (ครบทุกรูปประมาณ 1 ชั่วโมง)`,
+  };
 }
 
 /**

@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ShipPhoto as ShipPhotoRow, ShipRoute } from "@prisma/client";
 import { downloadDriveFile } from "./google-drive";
-import { readValues, sheetConfig } from "./google-sheets";
+import { clearValues, readValues, sheetConfig } from "./google-sheets";
 import { readPhotoLocally } from "./ship-ocr-local";
 import { mergeReaders, type MergedTicket } from "./ship-ticket-merge";
 import { formatOf, validTicketNo, type TicketFormat } from "./ship-ticket-formats";
@@ -121,8 +121,33 @@ export function routeProblem(folder: string, route: ShipRoute | undefined, custo
  */
 export const PARSER_VERSION = 3;
 
+/**
+ * รูปนี้เป็นสำเนาของรูปที่อ่านไปแล้วไหม (คัดลอก/อัปโหลดรูปเดิมซ้ำ → Drive ให้รหัสไฟล์ใหม่)
+ * ต้องตรงทั้ง 2 อย่าง: ทะเบียนเดียวกัน + ข้อความที่ Google อ่านได้ตรงกันทุกตัวอักษร (= ภาพเดียวกัน)
+ * รูปที่อ่านไม่ออกเลย (ข้อความสั้น) เทียบไม่ได้ → ไม่ถือว่าซ้ำ ให้คนดูเอง
+ */
+async function samePhotoAs(p: ShipPhoto): Promise<string | null> {
+  if (p.ocr.trim().length < 50) return null;
+  const same = await prisma.shipPhoto.findMany({
+    where: { googleText: p.ocr, fileId: { not: p.fileId }, dupOf: null },
+    select: { fileId: true, folderPlate: true },
+  });
+  return same.find((x) => plateKey(x.folderPlate) === plateKey(p.plate))?.fileId ?? null;
+}
+
 export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number> {
-  const before = await prisma.shipPhoto.findUnique({ where: { fileId: p.fileId }, select: { format: true } });
+  const before = await prisma.shipPhoto.findUnique({ where: { fileId: p.fileId }, select: { format: true, dupOf: true } });
+  if (before?.dupOf) return 0; // รู้แล้วว่าเป็นรูปซ้ำ
+  if (!before) {
+    const orig = await samePhotoAs(p);
+    if (orig) {
+      // สำเนาของรูปที่อ่านแล้ว — เก็บไว้ให้รู้ว่าข้าม แต่ไม่สร้างตั๋ว (กันตั๋วขึ้นซ้ำ)
+      await prisma.shipPhoto.create({
+        data: { fileId: p.fileId, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim(), routeFolder: p.route, googleText: p.ocr, format: f.key, localStatus: "ข้าม", dupOf: orig },
+      });
+      return 0;
+    }
+  }
   // เก็บรูป + ข้อความของ Google ไว้เสมอ — ตัวอ่านที่สอง (Tesseract) จะมาอ่านซ้ำทีหลังจากคิวนี้
   const info = { googleText: p.ocr, fileName: p.fileName, photoUrl: p.url, folderPlate: p.plate.trim(), routeFolder: p.route };
   await prisma.shipPhoto.upsert({
@@ -306,15 +331,18 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
 
 /** ความคืบหน้าของตัวอ่านที่สอง — โชว์บนหน้าตั๋วเรือ */
 export async function localOcrProgress() {
-  const [waiting, failed, sampleError] = await Promise.all([
+  const [waiting, failed, sampleError, duplicates] = await Promise.all([
     prisma.shipPhoto.count({ where: { localStatus: "รอ" } }),
     prisma.shipPhoto.count({ where: { localStatus: "ผิดพลาด" } }),
     prisma.shipPhoto.findFirst({ where: { localStatus: "ผิดพลาด" }, orderBy: { localAt: "desc" }, select: { localError: true, localAt: true } }),
+    prisma.shipPhoto.count({ where: { dupOf: { not: null } } }),
   ]);
   const error = sampleError?.localError ?? null;
   return {
     waiting,
     failed,
+    /** รูปซ้ำที่ข้ามไป (สำเนาของรูปที่อ่านแล้ว) */
+    duplicates,
     error,
     /** ลองล่าสุดเมื่อไร — ให้เห็นว่าข้อความนี้ยังเป็นของตอนนี้ ไม่ใช่ค้างจากก่อนแก้ */
     triedAt: sampleError?.localAt ?? null,
@@ -637,6 +665,37 @@ export function pullShipTicketsInBackground(): void {
   pullShipTickets()
     .catch(() => {})
     .finally(() => runLocalOcrQueue().catch(() => {}));
+}
+
+/**
+ * ล้างตั๋วที่ยังไม่ยืนยันทั้งหมด แล้วให้ระบบอ่านรูปใหม่ทั้งหมด (ปุ่มผู้ดูแล)
+ *   1. ล้างแถวข้อมูลในแท็บ «ตั๋วเรือ» ของชีต → Apps Script อ่านทุกรูปใน Drive ใหม่ในรอบถัดไป
+ *   2. ลบตั๋ว «รอตรวจ» และรายการรูปในระบบ
+ * ตั๋วที่ยืนยันเป็นงาน/กด «ไม่ใช้» แล้ว ไม่ลบ — รูปของตั๋วพวกนั้นก็เก็บไว้ อ่านซ้ำแล้วไม่เกิดแถวซ้ำ
+ * ล้างชีตก่อนฐานข้อมูล: ระหว่างนั้นถ้ามีรอบดึงชีตแทรก จะเจอชีตว่าง ไม่สร้างตั๋วเก่ากลับมา
+ */
+export async function resetShipTickets(
+  opts: { clearSheet?: () => Promise<void> } = {},
+): Promise<{ ok: true; tickets: number; photos: number } | { ok: false; error: string }> {
+  let clearSheet = opts.clearSheet;
+  if (!clearSheet) {
+    const cfg = sheetConfig();
+    if ("error" in cfg) return { ok: false, error: "เว็บเครื่องนี้ยังไม่ได้เชื่อมกับ Google Sheet — ล้างแท็บ «ตั๋วเรือ» ไม่ได้" };
+    clearSheet = () => clearValues(cfg.keyFile, cfg.sheetId, `${SHIP_TAB}!A2:G`);
+  }
+  try {
+    await clearSheet();
+  } catch (e) {
+    return { ok: false, error: `ล้างแท็บ «${SHIP_TAB}» ในชีตไม่สำเร็จ — ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const decided = await prisma.shipTicket.findMany({ where: { status: { not: "รอตรวจ" } }, select: { fileId: true } });
+  const keep = [...new Set(decided.map((d) => d.fileId))];
+  const [tickets, photos] = await prisma.$transaction([
+    prisma.shipTicket.deleteMany({ where: { status: "รอตรวจ" } }),
+    prisma.shipPhoto.deleteMany({ where: { fileId: { notIn: keep } } }),
+  ]);
+  lastPull = 0; // ดึงรอบถัดไปได้ทันที
+  return { ok: true, tickets: tickets.count, photos: photos.count };
 }
 
 /** ตั๋วรอตรวจกี่ใบ — ตัวเลขข้างเมนู */

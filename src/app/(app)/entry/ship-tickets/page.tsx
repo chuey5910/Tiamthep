@@ -3,8 +3,9 @@ import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import type { SearchParams } from "@/lib/params";
-import { canWrite } from "@/lib/roles";
+import { canWrite, isAdmin } from "@/lib/roles";
 import { SHIP_SETTINGS, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview } from "@/lib/ship-ticket";
+import { ResetButton } from "./ResetButton";
 import { ShipTable } from "./ShipTable";
 import { UndoUnused } from "./UndoUnused";
 
@@ -60,6 +61,11 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
           🔍 ตัวอ่านที่สองกำลังอ่านรูปซ้ำ — เหลือ {local.waiting} รูป · ใบในรูปเหล่านั้นจะเติมค่าให้เองเมื่ออ่านเสร็จ (เปิดหน้านี้ใหม่เพื่อดูผล)
         </p>
       )}
+      {local.duplicates > 0 && (
+        <p className="mb-3 text-[13px] font-bold text-emerald-700">
+          ✅ ข้ามรูปซ้ำ {local.duplicates.toLocaleString("th-TH")} รูป — เป็นสำเนาของรูปที่อ่านไปแล้ว (ทะเบียนเดียวกัน ข้อความในรูปตรงกันทุกตัวอักษร) จึงไม่สร้างตั๋วซ้ำ
+        </p>
+      )}
       {local.failed > 0 && (
         <p className="mb-3 text-[13px] font-bold text-amber-700">
           ⚠️ ตัวอ่านที่สองอ่านไม่ได้ {local.failed} รูป — {local.error} (ลองล่าสุด {local.triedAt ? formatThaiDateTime(local.triedAt) : "-"} · ระบบลองใหม่เองทุก {local.retryEvery})
@@ -70,6 +76,8 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
           {n}
         </p>
       ))}
+
+      {isAdmin(user) && <ResetButton />}
 
       {data.routes.length > 1 && (
         <div className="no-print mb-3 flex flex-wrap items-center gap-2">
