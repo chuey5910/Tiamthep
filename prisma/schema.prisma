@@ -653,7 +653,7 @@ model ShipTicket {
   /// ชื่อโฟลเดอร์ย่อย = ทะเบียนรถ
   folderPlate String
   /// ชื่อโฟลเดอร์เส้นทาง (ต้นทาง - ปลายทาง) → ShipRoute.folderName
-  routeFolder String   @default("ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์")
+  routeFolder String   @default("ท่าเรือศรีราชาฮาร์เบอร์ - โกดัง ท่าเรือศรีราชาฮาร์เบอร์")
   /// ข้อความ OCR ของใบนี้ (ไว้ตรวจย้อนหลัง)
   ocrText     String
 
@@ -715,7 +715,7 @@ model ShipPhoto {
   fileName    String
   photoUrl    String
   folderPlate String
-  routeFolder String    @default("ท่าเรือศรีราชาฮาร์เบอร์ - โกดังท่าเรือศรีราชาฮาร์เบอร์")
+  routeFolder String    @default("ท่าเรือศรีราชาฮาร์เบอร์ - โกดัง ท่าเรือศรีราชาฮาร์เบอร์")
   /// แบบตั๋วที่ใช้อ่านรอบล่าสุด — เปลี่ยนแบบในหน้าตั้งค่าแล้ว รูปที่ยังรอตรวจทั้งรูปถูกอ่านใหม่เอง
   format      String?
   /// ข้อความ OCR ของ Google ทั้งรูป (จากแท็บ «ตั๋วเรือ»)
