@@ -134,6 +134,11 @@ function partyByCode_(tab, code) {
  */
 function handleRegister_(replyToken, userId, code) {
   var inDrivers = !!driverLineIds_()[code];
+  // ไลน์ OA ของร้าน: ลงทะเบียนได้เฉพาะร้าน/พนักงานสั่งของ — คนขับต้องลงทะเบียนในไลน์คนขับ (แจ้งงานส่งจากบัญชีนั้น)
+  if (CHANNEL === "shop" && inDrivers && !partyByCode_(PO_TAB.STAFF, code) && !partyByCode_(PO_TAB.SHOPS, code)) {
+    lineReply_(replyToken, "รหัส " + code + " เป็นรหัสคนขับ — ให้ลงทะเบียนในไลน์ที่ใช้รับงาน ไม่ใช่บัญชีนี้");
+    return;
+  }
   var staff = partyByCode_(PO_TAB.STAFF, code);
   var shop = partyByCode_(PO_TAB.SHOPS, code);
   var hits = (inDrivers ? 1 : 0) + (staff ? 1 : 0) + (shop ? 1 : 0);
@@ -212,7 +217,8 @@ function linkShopMenu_(userId) {
 
 function shopRichMenuId_() {
   var cache = CacheService.getScriptCache();
-  var hit = cache.get("shop_richmenu");
+  var key = "shop_richmenu_" + CHANNEL; // เมนูแยกตามบัญชีไลน์
+  var hit = cache.get(key);
   if (hit) return hit === "-" ? "" : hit;
   var res = UrlFetchApp.fetch("https://api.line.me/v2/bot/richmenu/list", { headers: lineHeaders_(), muteHttpExceptions: true });
   var id = "";
@@ -221,8 +227,39 @@ function shopRichMenuId_() {
       if (m.name === SHOP_RICHMENU_NAME) id = m.richMenuId;
     });
   }
-  cache.put("shop_richmenu", id || "-", id ? 600 : 120); // สั้นไว้ — ติดตั้งเมนูใหม่จากเว็บแล้วเลขเปลี่ยน
+  cache.put(key, id || "-", id ? 600 : 120); // สั้นไว้ — ติดตั้งเมนูใหม่จากเว็บแล้วเลขเปลี่ยน
   return id;
+}
+
+// ── ไลน์ OA ของร้าน (บัญชีที่สอง) ───────────────────────────
+
+/**
+ * ทุกอย่างที่เข้ามาทางไลน์ OA ของร้าน (webhook URL ต่อท้าย &ch=shop)
+ * บัญชีนี้มีลูกค้า/คนอื่นคุยกับแอดมินอยู่ด้วย จึงตอบเฉพาะ: ลงทะเบียน · คำสั่ง # · เมนูร้าน · ปุ่มบนการ์ด · รูปบิล
+ * ข้อความอื่นเงียบทั้งหมด และไม่มีทางไปเข้าระบบรูปตั๋ว/แจ้งงานของคนขับ
+ */
+function handleShopChannelEvent_(ev, userId) {
+  if (ev.type === "postback") {
+    var data = String((ev.postback && ev.postback.data) || "");
+    if (data.indexOf("po|") === 0) handlePoPostback_(ev, userId, data);
+    return;
+  }
+  if (ev.type !== "message") return;
+  if (ev.message.type === "image") {
+    if (partyOf_(PO_TAB.SHOPS, userId)) handlePoImage_(ev, userId);
+    return;
+  }
+  if (ev.message.type !== "text") return;
+  var text = String(ev.message.text || "").trim();
+  var m = text.match(/^ลงทะเบียน\s*([A-Za-z0-9\-]+)$/);
+  if (m) {
+    handleRegister_(ev.replyToken, userId, m[1].toUpperCase());
+    return;
+  }
+  if (handlePoText_(ev, userId, text)) return;
+  if (partyOf_(PO_TAB.STAFF, userId)) {
+    lineReply_(ev.replyToken, "คำสั่งที่ใช้ได้\n• #สั่ง — สั่งงานร้าน (พิมพ์ #สั่ง เพื่อดูตัวอย่าง)\n• #สถานะ PO-… — ดูสถานะใบสั่ง\n• #สถานะ — 5 ใบล่าสุดของคุณ\n• #ยกเลิก PO-… — ยกเลิกใบที่ร้านยังไม่ตอบ");
+  }
 }
 
 // ── อ่าน/เขียนใบสั่ง ─────────────────────────────────────────

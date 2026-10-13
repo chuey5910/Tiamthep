@@ -20,9 +20,16 @@ const API = "https://api.line.me/v2/bot";
 const DATA_API = "https://api-data.line.me/v2/bot";
 const USER_ID = /^U[0-9a-f]{32}$/i;
 
+/**
+ * เมนูร้านต้องติดตั้งในไลน์ OA บัญชีที่ร้านใช้ — ร้านใช้บัญชีแยกจากไลน์คนขับ
+ * จึงใช้ SHOP_LINE_CHANNEL_ACCESS_TOKEN (ค่าเดียวกับ SHOP_CHANNEL_ACCESS_TOKEN ใน Script Properties)
+ * ไม่ได้ตั้ง = ร้านใช้ไลน์บัญชีเดียวกับคนขับ
+ */
 function token(): string {
+  const shop = (process.env.SHOP_LINE_CHANNEL_ACCESS_TOKEN ?? "").trim();
+  if (shop) return shop;
   const t = (process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "").trim();
-  if (!t) throw new Error("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN ใน .env (ค่าเดียวกับใน Script Properties ของไลน์บอท)");
+  if (!t) throw new Error("ยังไม่ได้ตั้ง SHOP_LINE_CHANNEL_ACCESS_TOKEN ใน .env (token ของไลน์ OA ที่ร้านใช้)");
   return t;
 }
 

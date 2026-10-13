@@ -105,6 +105,7 @@ var TZ = "Asia/Bangkok";
 //   WEBHOOK_TOKEN              รหัสลับใน URL webhook กันคนนอกยิงเข้ามา
 //   DRIVE_FOLDER_ID            โฟลเดอร์ Drive เก็บรูปตั๋ว
 //   ADMIN_USER_ID              LINE userId ของผู้ดูแล — รับแจ้งเตือนเมื่อระบบมีปัญหา (เว้นได้)
+//   SHOP_CHANNEL_ACCESS_TOKEN  token ของไลน์ OA บัญชีที่ร้าน/พนักงานสั่งของใช้ (ใบสั่งงานร้าน — ดู ShopOrders.gs)
 // ─────────────────────────────────────────────────────────────
 
 function prop_(key) {
@@ -403,12 +404,17 @@ function jobsMessage_(title, name, code, items) {
  * ใช้รหัสลับใน URL แทน (?token=...) ต้องตรงกับ WEBHOOK_TOKEN เท่านั้นจึงประมวลผล
  * และ webhook นี้ "เขียนได้แค่ในชีต" ไม่มีทางแตะฐานข้อมูลเว็บโดยตรง
  */
+// ไลน์ที่ส่ง webhook รอบนี้มา: "main" = ไลน์คนขับ · "shop" = ไลน์ OA ของร้าน (URL ต่อท้าย &ch=shop)
+// บอทตัวเดียวรับได้ 2 บัญชี — ตอบกลับต้องใช้ token ของบัญชีที่ข้อความเข้ามาเท่านั้น
+var CHANNEL = "main";
+
 function doPost(e) {
   try {
     var expected = prop_("WEBHOOK_TOKEN");
     if (!expected || !e || !e.parameter || e.parameter.token !== expected) {
       return ContentService.createTextOutput("forbidden");
     }
+    CHANNEL = e.parameter.ch === "shop" ? "shop" : "main";
     var body = JSON.parse(e.postData.contents);
     (body.events || []).forEach(function (ev) {
       try {
@@ -434,6 +440,12 @@ function handleEvent_(ev) {
 
   var userId = ev.source && ev.source.userId;
   if (!userId) return;
+
+  // ไลน์ OA ของร้าน — รับเฉพาะเรื่องใบสั่งงาน ข้อความอื่นเงียบ (แอดมินคุยกับลูกค้าในแชทได้ตามปกติ)
+  if (CHANNEL === "shop") {
+    handleShopChannelEvent_(ev, userId);
+    return;
+  }
 
   if (ev.type === "follow") {
     lineReply_(ev.replyToken,
@@ -1094,9 +1106,11 @@ function fillIfEmpty_(sheet, row, col, value) {
 // LINE Messaging API
 // ─────────────────────────────────────────────────────────────
 
-function lineHeaders_() {
-  var token = prop_("LINE_CHANNEL_ACCESS_TOKEN");
-  if (!token) throw new Error("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN ใน Script Properties");
+/** ch ไม่ระบุ = บัญชีที่ข้อความรอบนี้เข้ามา (CHANNEL) · "main" = ไลน์คนขับเสมอ */
+function lineHeaders_(ch) {
+  var key = (ch || CHANNEL) === "shop" ? "SHOP_CHANNEL_ACCESS_TOKEN" : "LINE_CHANNEL_ACCESS_TOKEN";
+  var token = prop_(key);
+  if (!token) throw new Error("ยังไม่ได้ตั้ง " + key + " ใน Script Properties");
   return { Authorization: "Bearer " + token };
 }
 
@@ -1138,7 +1152,7 @@ function linePush_(userId, text, quickItems) {
   var res = UrlFetchApp.fetch("https://api.line.me/v2/bot/message/push", {
     method: "post",
     contentType: "application/json",
-    headers: lineHeaders_(),
+    headers: lineHeaders_("main"), // ส่งเอง = แจ้งงานคนขับ/แจ้งผู้ดูแล ผ่านไลน์คนขับเท่านั้น
     payload: JSON.stringify({ to: userId, messages: [textMessage_(text, quickItems)] }),
     muteHttpExceptions: true,
   });
