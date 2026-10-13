@@ -41,11 +41,14 @@ var PC = {
   BILL: 17,       // ลิงก์รูปบิลที่ร้านส่ง (หลายรูปคั่นบรรทัด)
   RESULT: 18,     // ผลลงบัญชี — เว็บเขียนกลับ
   RAW: 19,        // ข้อความที่พนักงานพิมพ์ (แถวแรกของใบ)
+  OPERATOR: 20,   // คนดำเนินการ — คนที่จะเอารถเข้าร้าน/ไปรับของ (ร้านใช้ยืนยันตัวคน)
+  ORDERED_BY: 21, // คนสั่ง ตามที่พิมพ์ในข้อความ (ไม่ได้พิมพ์ = ชื่อคนที่ส่งข้อความ)
 };
 var PO_HEADER = [
   "เลขใบสั่ง", "ลำดับ", "สั่งเมื่อ", "รหัสผู้สั่ง", "ชื่อผู้สั่ง", "รหัสร้าน", "ชื่อร้าน",
   "ลงที่ (ทะเบียน/คลัง)", "รายการ", "จำนวน", "หน่วย", "สถานะใบ", "ร้านตอบ", "ราคา (บาท)",
   "ร้านตอบเมื่อ", "แจ้งราคาเมื่อ", "รูปบิล", "ผลลงบัญชี (เว็บ)", "ข้อความที่สั่ง",
+  "คนดำเนินการ", "คนสั่ง",
 ];
 var POS = {
   WAIT: "รอร้านตอบ",
@@ -70,12 +73,21 @@ var MENU_CONTACT = "📞 ติดต่อบริษัท";
 var SHOP_RICHMENU_NAME = "tiamthep-shop";
 
 var PO_EXAMPLE =
-  "ตัวอย่าง\n" +
-  "#สั่ง ร้านตัวอย่างยางยนต์\n" +
-  "รถ 70-1938\n" +
-  "- เปลี่ยนยาง 11R22.5 2 เส้น\n" +
-  "- สลับยาง 2 เส้น\n\n" +
-  "สั่งเข้าคลัง: เปลี่ยนบรรทัด «รถ …» เป็น «เข้าคลัง»";
+  "แบบที่ 1 — ทำรถ\n" +
+  "#สั่ง\n" +
+  "Shop : ร้านตัวอย่างยางยนต์\n" +
+  "ทะเบียน : 70-1938\n" +
+  "คนดำเนินการ : สมชาย\n" +
+  "ทำอะไร : 1. เปลี่ยนยาง 11R22.5 / จำนวน 2 เส้น\n" +
+  "ทำอะไร : 2. สลับยาง / จำนวน 2 เส้น\n" +
+  "คนสั่ง : วิชัย\n\n" +
+  "แบบที่ 2 — สั่งเข้าคลัง\n" +
+  "#สั่งเข้าคลัง\n" +
+  "Shop : S01\n" +
+  "รายการ : 1. น้ำมันเครื่อง 15W40 / จำนวน 20 ลิตร\n" +
+  "รายการ : 2. กรองดักน้ำ HINO / จำนวน 2 ชิ้น\n" +
+  "คนดำเนินการ : สมชาย\n\n" +
+  "– คนสั่ง ไม่ใส่ก็ได้ (ใช้ชื่อคนส่งข้อความ)";
 
 /** เมนู ④ — สร้างแท็บของระบบใบสั่งงานร้าน (กดซ้ำได้ ไม่ลบข้อมูลเดิม) */
 function setupShopOrders() {
@@ -94,7 +106,11 @@ function setupShopOrders() {
 function poSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(PO_TAB.PO);
-  if (sh) return sh;
+  if (sh) {
+    // แท็บที่สร้างไว้ก่อนเพิ่มคอลัมน์ใหม่ — เติมหัวคอลัมน์ที่ขาด (ไม่แตะข้อมูลเดิม)
+    if (sh.getLastColumn() < PO_HEADER.length) ensureSheet_(ss, PO_TAB.PO, PO_HEADER);
+    return sh;
+  }
   sh = ensureSheet_(ss, PO_TAB.PO, PO_HEADER);
   sh.getRange(2, PC.PRICE, 5000, 1).setNumberFormat("#,##0.00");
   return sh;
@@ -284,6 +300,8 @@ function poAll_() {
         target: String(v[PC.TARGET - 1]).trim(),
         status: String(v[PC.STATUS - 1]).trim(),
         bill: String(v[PC.BILL - 1]).trim(),
+        operator: String(v[PC.OPERATOR - 1] || "").trim(),
+        orderedBy: String(v[PC.ORDERED_BY - 1] || "").trim(),
         items: [],
       };
     }
@@ -389,29 +407,67 @@ function handlePoText_(ev, userId, text) {
   return true;
 }
 
-/** แยกข้อความ #สั่ง → {shopText, plates[], stock, items[]} หรือ {error} */
+/**
+ * แยกข้อความ #สั่ง → {shopText, plate, stock, operator, orderedBy, items[]} หรือ {error}
+ * รูปแบบหลัก (มีหัวข้อ):  Shop : … · ทะเบียน : … · คนดำเนินการ : … · ทำอะไร/รายการ : 1. … / จำนวน 2 เส้น · คนสั่ง : …
+ * หัวข้อเป็นตัวกำหนด ลำดับบรรทัดสลับกันได้ · «#สั่งเข้าคลัง» = สั่งเข้าคลัง
+ * รูปแบบสั้นแบบเดิม (รถ 70-1938 / เข้าคลัง / - รายการ) ยังใช้ได้
+ */
 function parsePoText_(text) {
   var lines = text.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
-  var shopText = lines.shift().replace(/^#\s*สั่ง(งาน)?\s*/, "").trim();
+  var first = lines.shift();
+  var stock = /^#\s*สั่ง\s*(?:เข้า|ลง)\s*(?:คลัง|สต[๊็]?อ[กค])/.test(first);
+  var shopText = first.replace(/^#\s*สั่ง(?:งาน)?\s*(?:(?:เข้า|ลง)\s*(?:คลัง|สต[๊็]?อ[กค]))?\s*/, "").trim();
   var plates = [];
-  var stock = false;
   var items = [];
+  var errors = [];
+  var operator = "";
+  var orderedBy = "";
+  var LABEL = /^(shop|ร้าน(?:ค้า)?|ทะเบียน(?:รถ)?|รถ|คนดำเนินการ|ผู้ดำเนินการ|ทำอะไร|รายการ|คนสั่ง|ผู้สั่ง)\s*[:：]\s*(.*)$/i;
   lines.forEach(function (l) {
-    var m;
+    var m = l.match(LABEL);
+    if (m) {
+      var key = m[1].toLowerCase();
+      var val = m[2].trim();
+      if (key === "shop" || key.indexOf("ร้าน") === 0) shopText = val;
+      else if (key.indexOf("ทะเบียน") === 0 || key === "รถ") { if (val) plates.push(val.replace(/^รถ\s*/, "").replace(/\s+/g, "")); }
+      else if (key === "คนดำเนินการ" || key === "ผู้ดำเนินการ") operator = val;
+      else if (key === "คนสั่ง" || key === "ผู้สั่ง") orderedBy = val;
+      else {
+        var it = parsePoLabeledItem_(val, items.length + 1);
+        if (it.error) errors.push(it.error); else items.push(it);
+      }
+      return;
+    }
     var flat = l.replace(/\s+/g, "");
-    if ((m = l.match(/^(?:รถ|ทะเบียน(?:รถ)?)\s*[:：]?\s*(.+)$/))) { plates.push(m[1].replace(/\s+/g, "")); return; }
+    if ((m = l.match(/^(?:รถ|ทะเบียน(?:รถ)?)\s+(.+)$/))) { plates.push(m[1].replace(/\s+/g, "")); return; }
     if (/^(?:เข้า|ลง)?(?:คลัง|สต[๊็]?อ[กค])(?:บริษัท)?$/.test(flat)) { stock = true; return; }
     if ((m = l.match(/^(?:[-•*·]|\d+\s*[.)])\s*(.+)$/))) { items.push(parsePoItem_(m[1])); return; }
     if (!shopText) { shopText = l; return; }
     items.push(parsePoItem_(l));
   });
-  if (!shopText) return { error: "ไม่ได้ระบุร้าน" };
+  if (errors.length) return { error: errors.join("\n") };
+  if (!shopText) return { error: "ไม่ได้ระบุร้าน — ใส่บรรทัด «Shop : ชื่อร้าน หรือรหัสร้าน»" };
   if (plates.length > 1) return { error: "ใบสั่ง 1 ใบ ใช้กับรถ 1 คัน — ถ้าหลายคันให้ส่ง #สั่ง แยกใบ" };
-  if (plates.length && stock) return { error: "ใบเดียวเลือกได้อย่างเดียว: «รถ <ทะเบียน>» หรือ «เข้าคลัง»" };
-  if (!plates.length && !stock) return { error: "ยังไม่ได้บอกว่าลงที่ไหน — ใส่บรรทัด «รถ <ทะเบียน>» หรือ «เข้าคลัง»" };
-  if (!items.length) return { error: "ยังไม่มีรายการ — ใส่รายการบรรทัดละ 1 อย่าง ขึ้นต้นด้วย -" };
+  if (plates.length && stock) return { error: "«#สั่งเข้าคลัง» ไม่ต้องใส่ทะเบียน — ถ้าเป็นงานของรถ ให้ใช้ «#สั่ง»" };
+  if (!plates.length && !stock) return { error: "ยังไม่ได้ใส่ทะเบียนรถ — ใส่บรรทัด «ทะเบียน : 70-1938» (ถ้าสั่งเข้าคลัง ให้ขึ้นต้นด้วย «#สั่งเข้าคลัง»)" };
+  if (!operator) return { error: "ยังไม่ได้ใส่คนดำเนินการ — ใส่บรรทัด «คนดำเนินการ : ชื่อคนที่จะไปร้าน» (ร้านใช้ยืนยันว่ามาจากบริษัทจริง)" };
+  if (!items.length) return { error: "ยังไม่มีรายการ — ใส่บรรทัด «ทำอะไร : 1. … / จำนวน 2 เส้น» (สั่งเข้าคลังใช้ «รายการ : …»)" };
   if (items.length > 20) return { error: "รายการเกิน 20 อย่าง — แบ่งส่งเป็น 2 ใบ" };
-  return { shopText: shopText, plate: plates[0] || "", stock: stock, items: items };
+  return { shopText: shopText, plate: plates[0] || "", stock: stock, operator: operator, orderedBy: orderedBy, items: items };
+}
+
+/** «1. เปลี่ยนยาง 11R22.5 / จำนวน 2 เส้น» → {item, qty:2, unit:"เส้น"} · ไม่มี «/ จำนวน» = อ่านแบบสั้น */
+function parsePoLabeledItem_(val, n) {
+  var s = val.replace(/^\d+\s*[.)]\s*/, "").trim();
+  if (!s) return { error: "รายการที่ " + n + " ว่าง" };
+  var cut = s.lastIndexOf("/");
+  if (cut < 0) return parsePoItem_(s);
+  var name = s.slice(0, cut).trim();
+  var m = s.slice(cut + 1).trim().match(/^(?:จำนวน)?\s*(\d+(?:\.\d+)?)\s*(\S.*)?$/);
+  if (!name) return { error: "รายการที่ " + n + " ไม่มีชื่อรายการ" };
+  if (!m) return { error: "รายการที่ " + n + " «" + name + "» จำนวนอ่านไม่ได้ — พิมพ์แบบ «/ จำนวน 2 เส้น»" };
+  return { item: name, qty: Number(m[1]), unit: (m[2] || "").trim() };
 }
 
 /** «เปลี่ยนยาง 11R22.5 2 เส้น» → {item:"เปลี่ยนยาง 11R22.5", qty:2, unit:"เส้น"} · ไม่มีจำนวน = 1 */
@@ -454,7 +510,7 @@ function poCreate_(ev, userId, text) {
     lineReply_(ev.replyToken, "ยังไม่ได้ลงทะเบียนเป็นพนักงานสั่งของ — พิมพ์ «ลงทะเบียน <รหัสพนักงาน>» (ขอรหัสจากออฟฟิศ)");
     return;
   }
-  if (text.replace(/\s+/g, "").replace(/^#สั่ง(งาน)?/, "") === "") {
+  if (text.replace(/\s+/g, "").replace(/^#สั่ง(งาน)?((เข้า|ลง)(คลัง|สต[๊็]?อ[กค]))?/, "") === "") {
     lineReply_(ev.replyToken, "สั่งงานร้านแบบนี้ครับ 👇\n\n" + PO_EXAMPLE);
     return;
   }
@@ -468,6 +524,7 @@ function poCreate_(ev, userId, text) {
     return;
   }
   var target = p.stock ? PO_STOCK : p.plate;
+  var orderedBy = p.orderedBy || staff.name || staff.code;
 
   var id;
   var lock = LockService.getScriptLock();
@@ -478,7 +535,7 @@ function poCreate_(ev, userId, text) {
     var at = nowText_();
     var rows = p.items.map(function (it, i) {
       return [id, i + 1, at, staff.code, staff.name, shop.code, shop.name, target, it.item, it.qty, it.unit,
-        POS.WAIT, "", "", "", "", "", "", i === 0 ? text.slice(0, 2000) : ""];
+        POS.WAIT, "", "", "", "", "", "", i === 0 ? text.slice(0, 2000) : "", p.operator, orderedBy];
     });
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, PO_HEADER.length).setValues(rows);
   } finally {
@@ -491,6 +548,7 @@ function poCreate_(ev, userId, text) {
     "✅ บันทึกใบสั่งงาน " + id + " แล้ว\n" +
     "– ร้าน: " + shop.name + "\n" +
     "– ลงที่: " + (p.stock ? "เข้าคลังบริษัท" : "รถ " + p.plate) + "\n" +
+    "– คนดำเนินการ: " + p.operator + " · คนสั่ง: " + orderedBy + "\n" +
     "– รายการ:\n" + lines.join("\n") + "\n" +
     "– รอร้านกดรับในแชทของร้าน" +
     (shop.userId ? "" : "\n⚠️ ร้านนี้ยังไม่ได้ลงทะเบียนไลน์ — ร้านจะยังไม่เห็นใบนี้ (ให้ร้านพิมพ์ «ลงทะเบียน " + shop.code + "»)") +
@@ -515,7 +573,8 @@ function poSummary_(o) {
   });
   return (PO_ICON[o.status] || "•") + " " + o.id + " · " + (o.status || "-") + "\n" +
     "ร้าน " + o.shopName + " · " + (o.target === PO_STOCK ? "เข้าคลัง" : "รถ " + o.target) + "\n" +
-    "สั่งเมื่อ " + o.at.replace(/^'/, "") + " โดย " + (o.staffName || o.staffCode) + "\n" +
+    "สั่งเมื่อ " + o.at.replace(/^'/, "") + " โดย " + (o.orderedBy || o.staffName || o.staffCode) + "\n" +
+    (o.operator ? "คนดำเนินการ " + o.operator + "\n" : "") +
     lines.join("\n") +
     (o.status === POS.PRICED || o.status === POS.POSTED ? "\nรวม " + fmtBaht_(total) + " บาท" : "");
 }
@@ -595,23 +654,26 @@ function flexButton_(label, data, color, display) {
 
 /** การ์ดใบสั่งงานที่ร้านเห็น — ปุ่มเปลี่ยนตามสถานะ */
 function poCard_(o) {
+  var pair = function (label, value, strong) {
+    return { type: "box", layout: "horizontal", margin: "sm", contents: [
+      flexText_(label, { size: "sm", color: "#555555", flex: 2 }),
+      flexText_(value, { size: strong ? "md" : "sm", weight: "bold", align: "end", flex: 3, color: strong ? "#c8102e" : "#111111" }),
+    ] };
+  };
+  var stock = o.target === PO_STOCK;
   var rows = [
-    { type: "box", layout: "horizontal", contents: [
-      flexText_(o.target === PO_STOCK ? "ลงที่" : "ทะเบียนรถ", { size: "sm", color: "#555555", flex: 2 }),
-      flexText_(o.target === PO_STOCK ? "เข้าคลังบริษัท" : o.target, { size: "sm", weight: "bold", align: "end", flex: 3 }),
-    ] },
-    { type: "box", layout: "horizontal", contents: [
-      flexText_("ผู้สั่ง", { size: "sm", color: "#555555", flex: 2 }),
-      flexText_(o.staffName || o.staffCode, { size: "sm", weight: "bold", align: "end", flex: 3 }),
-    ] },
-    { type: "separator", margin: "md" },
-    flexText_("รายการ", { weight: "bold", margin: "md" }),
+    pair("ประเภท", stock ? "📦 สั่งเข้าคลัง" : "🚚 งานรถ"),
   ];
+  if (!stock) rows.push(pair("ทะเบียนรถ", o.target, true));
+  rows.push(pair(stock ? "คนมารับของ" : "คนนำรถเข้า", o.operator || "-", true));
+  rows.push(pair("คนสั่ง", o.orderedBy || o.staffName || o.staffCode));
+  rows.push({ type: "separator", margin: "md" });
+  rows.push(flexText_(stock ? "รายการ" : "ทำอะไร", { weight: "bold", margin: "md" }));
   o.items.forEach(function (it, i) {
     var mark = it.answer === ANS.OK ? "✅ " : it.answer === ANS.NO ? "❌ " : (i + 1) + ". ";
     rows.push(flexText_(mark + it.item + fmtQty_(it) + (it.answer === ANS.NO ? " — ไม่มีของ" : ""), { size: "sm", margin: "sm" }));
   });
-  rows.push(flexText_("ไม่มีเลขใบสั่งงานนี้ = บริษัทไม่ได้สั่ง กรุณาอย่าทำ/จ่ายของ", { size: "xxs", color: "#888888", margin: "lg" }));
+  rows.push(flexText_("ไม่มีเลขใบสั่งงานนี้ หรือคนที่มาไม่ใช่คนดำเนินการ = บริษัทไม่ได้สั่ง กรุณาอย่าทำ/จ่ายของ", { size: "xxs", color: "#888888", margin: "lg" }));
 
   var buttons = [];
   if (o.status === POS.WAIT) {
