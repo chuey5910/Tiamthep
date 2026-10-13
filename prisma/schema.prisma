@@ -738,3 +738,61 @@ model ShipPhoto {
 
   @@index([localStatus])
 }
+
+// ─────────────────────────────────────────────────────────────
+// ใบสั่งงานร้านค้า (PO) — ซ่อมบำรุง/อะไหล่ สั่งผ่านไลน์บอท
+// ─────────────────────────────────────────────────────────────
+
+/// ใบสั่งงานร้าน — ต้นทางคือแท็บ «ใบสั่งงานร้าน» ในชีต (ไลน์บอทเขียน) เว็บดึงมาเก็บ แล้วแอดมินลงบัญชี
+/// ข้อมูลฝั่งไลน์ (สถานะ ร้านตอบ ราคา) ยึดชีตเสมอ · ข้อมูลลงบัญชีเป็นของเว็บ
+model ShopOrder {
+  /// เลขใบสั่ง เช่น PO-6910-001
+  id          String    @id
+  orderedAt   DateTime
+  staffCode   String
+  staffName   String
+  shopCode    String
+  shopName    String
+  /// ทะเบียนรถ หรือ "คลัง"
+  target      String
+  /// สถานะจากชีต: รอร้านตอบ | ร้านรับแล้ว | ร้านไม่มีของ | แจ้งราคาแล้ว | ลงบัญชีแล้ว | ยกเลิก
+  status      String
+  respondedAt DateTime?
+  pricedAt    DateTime?
+  /// ลิงก์รูปบิลที่ร้านส่ง (คั่นบรรทัด)
+  billUrls    String?
+  rawText     String?
+  postedAt    DateTime?
+  postedBy    String?
+  syncedAt    DateTime  @default(now())
+  items       ShopOrderItem[]
+
+  @@index([orderedAt])
+  @@index([shopName, orderedAt])
+  @@index([status])
+}
+
+model ShopOrderItem {
+  id           Int       @id @default(autoincrement())
+  orderId      String
+  order        ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  seq          Int
+  description  String
+  qty          Float     @default(1)
+  unit         String?
+  /// ร้านตอบ: "ทำได้" | "ไม่มีของ" | null (ยังไม่ตอบ)
+  answer       String?
+  /// ราคารวมของรายการที่ร้านแจ้ง (บาท)
+  shopPrice    Float?
+  // ── ลงบัญชีแล้ว (เว็บ) — มีค่า = ห้ามลงซ้ำ ──
+  expenseId    Int?      @unique
+  stockInId    Int?      @unique
+  postedAmount Float?
+  /// ทะเบียนรถ หรือ "คลัง"
+  postedTarget String?
+  postedCategory String?
+  postedItemCode String?
+  postedAt     DateTime?
+
+  @@unique([orderId, seq])
+}

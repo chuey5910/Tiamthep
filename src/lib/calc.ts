@@ -468,6 +468,16 @@ export function expenseAmount(unitPrice: number, qty: number): number {
   return round2(unitPrice * qty);
 }
 
+/**
+ * ใบสั่งงานร้าน: ร้านแจ้ง "ราคารวมของรายการ" (ไม่ใช่ราคาต่อหน่วย)
+ * ยอดรวมยึดตามที่ร้านแจ้ง/แอดมินยืนยันเสมอ · ราคาต่อหน่วย = รวม ÷ จำนวน (ไม่ปัดเศษ เพื่อให้ × จำนวน กลับมาได้ยอดเดิม)
+ * เช่น 100 บาท 3 ชิ้น → ต่อหน่วย 33.333… · รวม 100.00 (ไม่ใช่ 99.99)
+ */
+export function poLineAmounts(total: number, qty: number): { qty: number; unitPrice: number; amount: number } {
+  const q = qty > 0 ? qty : 1;
+  return { qty: q, unitPrice: total / q, amount: round2(total) };
+}
+
 // ─────────────────────────────────────────────────────────────
 // เงินพิเศษค่าน้ำมัน (ซื้อคืนน้ำมันที่ประหยัดได้)
 // ─────────────────────────────────────────────────────────────
