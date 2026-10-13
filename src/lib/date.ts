@@ -60,7 +60,10 @@ export function parseDate(input: unknown): Date | null {
     // เลข serial ของ Excel (นับจาก 1899-12-30)
     const ms = Math.round((input - 25569) * 86400 * 1000);
     const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : startOfDay(d);
+    if (isNaN(d.getTime())) return null;
+    // คนพิมพ์ปี พ.ศ. ลงช่องวันที่ของ Excel (10/10/2569) → Excel เก็บเป็นปี ค.ศ. 2569 — แปลงกลับ
+    if (d.getUTCFullYear() > 2400) return normalizeYear(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    return startOfDay(d);
   }
   const s = String(input).trim();
   if (!s || s === "-") return null;

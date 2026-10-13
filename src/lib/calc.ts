@@ -463,6 +463,11 @@ export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/** ราคารวมของรายการค่าใช้จ่าย = ราคาต่อหน่วย × จำนวน (ฟอร์มและการนำเข้าไฟล์ใช้สูตรเดียวกัน) */
+export function expenseAmount(unitPrice: number, qty: number): number {
+  return round2(unitPrice * qty);
+}
+
 // ─────────────────────────────────────────────────────────────
 // เงินพิเศษค่าน้ำมัน (ซื้อคืนน้ำมันที่ประหยัดได้)
 // ─────────────────────────────────────────────────────────────

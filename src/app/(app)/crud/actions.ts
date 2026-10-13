@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { RESOURCES, type Field, type Resource } from "@/lib/crud";
 import { parseDate } from "@/lib/date";
+import { expenseAmount } from "@/lib/calc";
 
 type ActionResult = { ok: boolean; error?: string };
 
@@ -99,9 +100,7 @@ async function applyRules(resource: Resource, data: Record<string, unknown>): Pr
     // ราคารวมเว้นว่าง = คิดจาก ราคาต่อหน่วย × จำนวน
     const amount = data.amount as number | null;
     if (amount == null || amount === 0) {
-      const unitPrice = Number(data.unitPrice ?? 0);
-      const qty = Number(data.qty ?? 0);
-      data.amount = Math.round(unitPrice * qty * 100) / 100;
+      data.amount = expenseAmount(Number(data.unitPrice ?? 0), Number(data.qty ?? 0));
     }
   }
 

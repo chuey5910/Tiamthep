@@ -243,6 +243,7 @@ export const RESOURCES: Record<string, Resource> = {
     idType: "number",
     orderBy: [{ date: "desc" }, { id: "desc" }],
     searchFields: ["detail", "supplier", "category", "plate"],
+    dateRangeField: "date",
     pageSize: 100,
     notes: ["ค่าใช้จ่ายส่วนกลาง (เงินเดือนสำนักงาน ค่าบริหาร) ไม่ต้องระบุทะเบียนรถ"],
     fields: [

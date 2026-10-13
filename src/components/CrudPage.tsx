@@ -45,11 +45,14 @@ export async function CrudPage({
   searchParams,
   extraHeader,
   extraFooter,
+  toolbar,
 }: {
   resource: Resource;
   searchParams: SearchParams;
   extraHeader?: ReactNode;
   extraFooter?: ReactNode;
+  /** ปุ่มเพิ่มของหน้านั้น วางข้างปุ่ม Export (เช่น Import จาก Excel) */
+  toolbar?: ReactNode;
 }) {
   const options = await loadOptions(resource);
   const editId = typeof searchParams.edit === "string" ? searchParams.edit : undefined;
@@ -170,7 +173,8 @@ export async function CrudPage({
             <ExpiringToggle on={onlyExpiring} alertDays={alertDays} />
           )}
           <span className="pb-2 text-[12px] text-slate-500">พบ {total.toLocaleString("th-TH")} รายการ</span>
-          <div className="ml-auto">
+          <div className="ml-auto flex flex-wrap gap-2">
+            {toolbar}
             <ExportMenu resourceKey={resource.key} />
           </div>
         </div>
