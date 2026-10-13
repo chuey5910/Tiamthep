@@ -670,7 +670,7 @@ function flexText_(text, opt) {
 
 function flexButton_(label, data, color, display) {
   return {
-    type: "button", style: "primary", color: color, height: "sm", margin: "sm",
+    type: "button", style: "primary", color: color, height: "md", margin: "md",
     action: { type: "postback", label: label.slice(0, 40), data: data, displayText: display || label },
   };
 }
@@ -679,8 +679,8 @@ function flexButton_(label, data, color, display) {
 function poCard_(o) {
   var pair = function (label, value, strong) {
     return { type: "box", layout: "horizontal", margin: "sm", contents: [
-      flexText_(label, { size: "sm", color: "#555555", flex: 2 }),
-      flexText_(value, { size: strong ? "md" : "sm", weight: "bold", align: "end", flex: 3, color: strong ? "#c8102e" : "#111111" }),
+      flexText_(label, { size: "md", color: "#555555", flex: 2 }),
+      flexText_(value, { size: strong ? "xl" : "lg", weight: "bold", align: "end", flex: 3, color: strong ? "#c8102e" : "#111111" }),
     ] };
   };
   var stock = o.target === PO_STOCK;
@@ -691,17 +691,17 @@ function poCard_(o) {
   rows.push(pair(stock ? "คนมารับของ" : "คนนำรถเข้า", o.operator || "-", true));
   rows.push(pair("คนสั่ง", o.orderedBy || o.staffName || o.staffCode));
   rows.push({ type: "separator", margin: "md" });
-  rows.push(flexText_(stock ? "รายการ" : "ทำอะไร", { weight: "bold", margin: "md" }));
+  rows.push(flexText_(stock ? "รายการ" : "ทำอะไร", { weight: "bold", size: "xl", margin: "lg" }));
   o.items.forEach(function (it, i) {
     var mark = it.answer === ANS.OK ? "✅ " : it.answer === ANS.NO ? "❌ " : (i + 1) + ". ";
-    rows.push(flexText_(mark + it.item + fmtQty_(it) + (it.answer === ANS.NO ? " — ไม่มีของ" : ""), { size: "sm", margin: "sm" }));
+    rows.push(flexText_(mark + it.item + fmtQty_(it) + (it.answer === ANS.NO ? " — ไม่มีของ" : ""), { size: "lg", margin: "md" }));
   });
   if (o.found && o.found.length) {
     rows.push({ type: "separator", margin: "md" });
-    rows.push(flexText_("🔍 ร้านตรวจพบเพิ่ม (ยังไม่ได้สั่ง — ห้ามทำ)", { weight: "bold", margin: "md", color: "#b45309" }));
-    o.found.forEach(function (it) { rows.push(flexText_("• " + it.item + fmtQty_(it), { size: "sm", margin: "sm", color: "#b45309" })); });
+    rows.push(flexText_("🔍 ร้านตรวจพบเพิ่ม (ยังไม่ได้สั่ง — ห้ามทำ)", { weight: "bold", size: "lg", margin: "lg", color: "#b45309" }));
+    o.found.forEach(function (it) { rows.push(flexText_("• " + it.item + fmtQty_(it), { size: "lg", margin: "md", color: "#b45309" })); });
   }
-  rows.push(flexText_("ไม่มีเลขใบสั่งงานนี้ หรือคนที่มาไม่ใช่คนดำเนินการ = บริษัทไม่ได้สั่ง กรุณาอย่าทำ/จ่ายของ", { size: "xxs", color: "#888888", margin: "lg" }));
+  rows.push(flexText_("ไม่มีเลขใบสั่งงานนี้ หรือคนที่มาไม่ใช่คนดำเนินการ = บริษัทไม่ได้สั่ง กรุณาอย่าทำ/จ่ายของ", { size: "sm", color: "#888888", margin: "xl" }));
 
   var buttons = [];
   if (o.status === POS.WAIT) {
@@ -718,21 +718,19 @@ function poCard_(o) {
   if (!stock && (o.status === POS.WAIT || o.status === POS.ACCEPTED)) {
     buttons.push(flexButton_("🔍 ความเสียหายที่ตรวจพบ", "po|dmg|" + o.id, "#475569", "แจ้งความเสียหายที่ตรวจพบ " + o.id));
   }
+  // giga = การ์ดกว้างสุดที่ไลน์มี · ตัวอักษรใหญ่ อ่านบนมือถือได้สบาย
   var bubble = {
     type: "bubble",
-    header: { type: "box", layout: "vertical", backgroundColor: "#c8102e", paddingAll: "14px", contents: [
-      flexText_("ใบสั่งงาน " + o.id, { color: "#ffffff", weight: "bold", size: "lg" }),
-      flexText_("บริษัท เทียมเทพ ขนส่ง จำกัด · " + o.at.replace(/^'/, ""), { color: "#ffe4e6", size: "xs" }),
-      flexText_((PO_ICON[o.status] || "") + " " + o.status, { color: "#ffffff", size: "sm", weight: "bold", margin: "sm" }),
+    size: "giga",
+    header: { type: "box", layout: "vertical", backgroundColor: "#c8102e", paddingAll: "16px", contents: [
+      flexText_("ใบสั่งงาน " + o.id, { color: "#ffffff", weight: "bold", size: "xxl" }),
+      flexText_("บริษัท เทียมเทพ ขนส่ง จำกัด · " + o.at.replace(/^'/, ""), { color: "#ffe4e6", size: "sm" }),
+      flexText_((PO_ICON[o.status] || "") + " " + o.status, { color: "#ffffff", size: "lg", weight: "bold", margin: "md" }),
     ] },
     body: { type: "box", layout: "vertical", spacing: "xs", contents: rows },
   };
   if (buttons.length) bubble.footer = { type: "box", layout: "vertical", spacing: "sm", contents: buttons };
   return bubble;
-}
-
-function carousel_(alt, bubbles) {
-  return { type: "flex", altText: alt.slice(0, 300), contents: bubbles.length === 1 ? bubbles[0] : { type: "carousel", contents: bubbles.slice(0, 12) } };
 }
 
 function shopOpenOrders_(shop, statuses) {
@@ -751,19 +749,24 @@ function poShopList_(ev, shop) {
   // ใบที่รอตอบขึ้นก่อน (เก่าก่อน) — ร้านเห็นงานที่ต้องกดก่อน
   list.sort(function (a, b) { return (a.status === POS.WAIT ? 0 : 1) - (b.status === POS.WAIT ? 0 : 1) || (a.id < b.id ? -1 : 1); });
   var wait = list.filter(function (o) { return o.status === POS.WAIT; }).length;
+  // การ์ดใบละข้อความ (ไม่ใช้ carousel) — การ์ดกว้างเต็มจอ ไม่ต้องปัดข้าง · ตอบได้ครั้งละ 5 ข้อความ = หัว + 4 ใบ
   var head = "📋 ออเดอร์ของร้าน " + list.length + " ใบ" + (wait ? " · รอกดรับ " + wait + " ใบ" : "") +
-    (list.length > 12 ? "\n(แสดง 12 ใบแรก — ตอบใบเหล่านี้แล้วกดเมนูอีกครั้ง)" : "");
-  lineReplyMessages_(ev.replyToken, [{ type: "text", text: head }, carousel_(head, list.slice(0, 12).map(poCard_))]);
+    (list.length > 4 ? "\n(แสดง 4 ใบแรก — ตอบใบเหล่านี้แล้วกดเมนูอีกครั้ง จะเห็นใบถัดไป)" : "");
+  var msgs = [{ type: "text", text: head }];
+  list.slice(0, 4).forEach(function (o) {
+    msgs.push({ type: "flex", altText: "ใบสั่งงาน " + o.id + " · " + o.status, contents: poCard_(o) });
+  });
+  lineReplyMessages_(ev.replyToken, msgs);
 }
 
 /** การ์ดเลือกทีละรายการ (มีของไม่ครบ) */
 function poPickCard_(o) {
-  var rows = [flexText_("กดทีละรายการว่าทำได้ / ไม่มีของ", { weight: "bold", size: "sm" })];
+  var rows = [flexText_("กดทีละรายการว่าทำได้ / ไม่มีของ", { weight: "bold", size: "lg" })];
   o.items.forEach(function (it) {
     var state = it.answer === ANS.OK ? "✅ ทำได้" : it.answer === ANS.NO ? "❌ ไม่มีของ" : "ยังไม่เลือก";
     rows.push({ type: "separator", margin: "md" });
-    rows.push(flexText_(it.seq + ". " + it.item + fmtQty_(it), { size: "sm", margin: "md", weight: "bold" }));
-    rows.push(flexText_("ตอนนี้: " + state, { size: "xs", color: it.answer ? "#333333" : "#d97706" }));
+    rows.push(flexText_(it.seq + ". " + it.item + fmtQty_(it), { size: "xl", margin: "lg", weight: "bold" }));
+    rows.push(flexText_("ตอนนี้: " + state, { size: "md", color: it.answer ? "#333333" : "#d97706" }));
     rows.push({ type: "box", layout: "horizontal", spacing: "sm", margin: "sm", contents: [
       flexButton_("✅ ทำได้", "po|it|" + o.id + "|" + it.seq + "|ok", "#06C755", it.seq + ". ทำได้"),
       flexButton_("❌ ไม่มีของ", "po|it|" + o.id + "|" + it.seq + "|no", "#dc2626", it.seq + ". ไม่มีของ"),
@@ -771,8 +774,9 @@ function poPickCard_(o) {
   });
   return {
     type: "bubble",
-    header: { type: "box", layout: "vertical", backgroundColor: "#d97706", paddingAll: "12px", contents: [
-      flexText_("⚠️ มีของไม่ครบ · " + o.id, { color: "#ffffff", weight: "bold" }),
+    size: "giga",
+    header: { type: "box", layout: "vertical", backgroundColor: "#d97706", paddingAll: "16px", contents: [
+      flexText_("⚠️ มีของไม่ครบ · " + o.id, { color: "#ffffff", weight: "bold", size: "xl" }),
     ] },
     body: { type: "box", layout: "vertical", contents: rows },
   };
