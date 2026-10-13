@@ -695,6 +695,9 @@ model ShipRoute {
   /// แบบตั๋ว (ship-ticket-formats.ts) — ส่วนที่ต่างกันของแต่ละแบบ เช่น จำนวนหลักเลขที่
   format      String   @default("generic")
   note        String?
+  /// อ่านครบทุกรูปในโฟลเดอร์แล้ว (รูปใน Drive = รูปที่อ่าน) → หยุดอ่าน อัปเดตระบบก็ไม่อ่านซ้ำ · มีรูปใหม่ = เปิดอ่านต่อเอง
+  readStopped   Boolean   @default(false)
+  readStoppedAt DateTime?
   createdAt   DateTime @default(now())
 }
 
@@ -727,6 +730,10 @@ model ShipPhoto {
   localError  String?
   localTries  Int       @default(0)
   localAt     DateTime?
+  /// ผลของตัวอ่านที่สอง (Tesseract) เก็บไว้ — ปรับตัวอ่าน Google แล้วรวมผลใหม่ได้ทันที ไม่ต้องอ่านรูปซ้ำ
+  localResult  Json?
+  /// รุ่นของตัวอ่านที่สองที่อ่านไว้ (TicketFormat.localVersion) — ต่ำกว่ารุ่นปัจจุบัน = ต้องอ่านรูปใหม่
+  localVersion Int       @default(0)
   createdAt   DateTime  @default(now())
 
   @@index([localStatus])

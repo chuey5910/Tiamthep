@@ -9,11 +9,16 @@
  * ส่วนที่ขึ้นกับว่าออกจากท่าไหน (เลขที่กี่หลัก อยู่ตรงไหนบนใบ) ห้ามฝังในตัวอ่านกลาง — ใส่เป็นแบบใหม่ที่นี่
  *
  * เพิ่มแบบใหม่: เพิ่มก้อนใน FORMATS แล้วเลือกที่หน้า ตั้งค่า › ตั๋วเรือ
- * (ปรับแบบเดิมแล้วต้องเพิ่ม PARSER_VERSION ใน ship-ticket.ts — รูปที่ยังรอตรวจทั้งรูปจะถูกอ่านใหม่เอง)
+ * ปรับตัวอ่านของแบบไหน เพิ่ม version (Google) / localVersion (ตัวอ่านที่สอง) ของแบบนั้นเท่านั้น
+ *   — รูปที่ยังรอตรวจของแบบนั้นถูกอ่านใหม่เอง แบบอื่นไม่แตะ (เดิมเลขรุ่นเดียวทั้งระบบ อัปเดตทีอ่านใหม่ทุกรูป ไม่จบสักที)
  */
 
 export type TicketFormat = {
   key: string;
+  /** รุ่นตัวอ่านข้อความ Google ของแบบนี้ — ใบรอตรวจที่อ่านด้วยรุ่นต่ำกว่า ถูกอ่านใหม่ (ใช้ผลตัวอ่านที่สองที่เก็บไว้ ไม่อ่านรูปซ้ำ) */
+  version: number;
+  /** รุ่นตัวอ่านที่สอง (Tesseract) ของแบบนี้ — ผลที่เก็บไว้รุ่นต่ำกว่า ต้องอ่านรูปใหม่ */
+  localVersion: number;
   /** ชื่อที่ให้เลือกในหน้าตั้งค่า */
   label: string;
   /** จำนวนหลักของเลขที่ตั๋ว (ต่ำสุด, สูงสุด) */
@@ -70,6 +75,8 @@ export const FORMATS: Record<string, TicketFormat> = {
   generic: {
     key: "generic",
     label: "แบบทั่วไป (ต้องมีคำว่า «เลขที่» นำหน้า)",
+    version: 7,
+    localVersion: 1,
     noDigits: [6, 12],
     samePrefix: 0,
     noLineBelow: null,
@@ -84,6 +91,9 @@ export const FORMATS: Record<string, TicketFormat> = {
   srh: {
     key: "srh",
     label: "ใบชั่งศรีราชาฮาร์เบอร์ (เลขที่ 10 หลัก)",
+    // ตัวอ่าน Google ของศรีราชาแก้ล่าสุดรุ่น 7 (รุ่น 8–10 แก้เฉพาะ จี เจ สตีล / จี สตีล)
+    version: 7,
+    localVersion: 1,
     noDigits: [10, 10],
     samePrefix: 6,
     noLineBelow: /^[ \t|_.-]*Sh/i,
@@ -105,6 +115,8 @@ export const FORMATS: Record<string, TicketFormat> = {
   gjs: {
     key: "gjs",
     label: "ตั๋วชั่ง จี เจ สตีล (เลขที่ R + 9 หลัก · ทะเบียนจากตั๋ว)",
+    version: 10,
+    localVersion: 1,
     noDigits: [10, 10],
     samePrefix: 0,
     noLineBelow: null,

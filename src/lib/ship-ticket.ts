@@ -23,7 +23,7 @@ import { join } from "node:path";
 import type { ShipPhoto as ShipPhotoRow, ShipRoute } from "@prisma/client";
 import { downloadDriveFile, driveParent, driveSearch } from "./google-drive";
 import { clearValues, readValues, sheetConfig } from "./google-sheets";
-import { readPhotoLocally } from "./ship-ocr-local";
+import { readPhotoLocally, type LocalTicket } from "./ship-ocr-local";
 import { mergeReaders, type MergedTicket } from "./ship-ticket-merge";
 import { formatOf, validTicketNo, type TicketFormat } from "./ship-ticket-formats";
 import { nameKey, parseTicketPhoto, plateKey, weightVerified } from "./ship-ticket-parse";
@@ -146,8 +146,25 @@ export function routeProblem(folder: string, route: ShipRoute | undefined, custo
  *       ชีตจริง 447 รูป: เปลี่ยน 3 รูป จี สตีล ที่เคยผิด/ขาด ตรงรูปทุกใบ · ที่เหลือไม่เปลี่ยน
  *       รูปที่บางใบยืนยันแล้ว อ่านใหม่เฉพาะใบที่ยังรอตรวจ (redoPendingOnly)
  * หลังจากนั้นตัวอ่านที่สอง (Tesseract) อ่านซ้ำเบื้องหลัง แล้วแทนที่ด้วยผลรวม 2 ตัวอ่าน (ShipPhoto.localStatus)
+ *
+ * ตั้งแต่รุ่น 10 เลขรุ่นแยกตามแบบตั๋ว (TicketFormat.version / localVersion ใน ship-ticket-formats.ts)
+ * — เดิมเลขเดียวทั้งระบบ แก้ตัวอ่านแบบเดียวก็อ่านใหม่ทุกรูปทุกเส้นทาง อัปเดตทีหนึ่งอ่านเป็นชั่วโมง ไม่จบสักที
+ * — ผลตัวอ่านที่สองเก็บไว้ (ShipPhoto.localResult) ปรับตัวอ่าน Google แล้วรวมผลใหม่ได้ทันที ไม่ต้องอ่านรูปซ้ำ
+ * — โฟลเดอร์ที่อ่านครบแล้ว (ShipRoute.readStopped) ไม่แตะเลย
  */
-export const PARSER_VERSION = 10;
+
+/** ผลตัวอ่านที่สองที่เก็บไว้ ยังใช้ได้กับแบบตั๋วนี้ไหม (แบบเดิม · รุ่นไม่ต่ำกว่าปัจจุบัน) */
+function cachedLocal(
+  photo: { format: string | null; localResult: unknown; localVersion: number } | null,
+  f: TicketFormat,
+): LocalTicket[] | null {
+  if (!photo || photo.format !== f.key || photo.localVersion < f.localVersion || !Array.isArray(photo.localResult)) return null;
+  return (photo.localResult as (Omit<LocalTicket, "entryAt" | "exitAt"> & { entryAt: string | null; exitAt: string | null })[]).map((t) => ({
+    ...t,
+    entryAt: t.entryAt ? new Date(t.entryAt) : null,
+    exitAt: t.exitAt ? new Date(t.exitAt) : null,
+  }));
+}
 
 /**
  * รูปนี้เป็นสำเนาของรูปที่อ่านไปแล้วไหม (คัดลอก/อัปโหลดรูปเดิมซ้ำ → Drive ให้รหัสไฟล์ใหม่)
@@ -164,7 +181,10 @@ async function samePhotoAs(p: ShipPhoto): Promise<string | null> {
 }
 
 export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number> {
-  const before = await prisma.shipPhoto.findUnique({ where: { fileId: p.fileId }, select: { format: true, dupOf: true } });
+  const before = await prisma.shipPhoto.findUnique({
+    where: { fileId: p.fileId },
+    select: { format: true, dupOf: true, localResult: true, localVersion: true },
+  });
   if (before?.dupOf) return 0; // รู้แล้วว่าเป็นรูปซ้ำ
   if (!before) {
     const orig = await samePhotoAs(p);
@@ -190,18 +210,25 @@ export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number
   });
   if (seen.length > 0) {
     // อ่านด้วยตัวอ่านรุ่นเก่า หรือเปลี่ยนแบบตั๋วของเส้นทางนี้ และทั้งรูปยังไม่มีใครตัดสิน → ลบแล้วอ่านใหม่
-    const stale = seen.some((x) => x.parserVersion < PARSER_VERSION && x.status === "รอตรวจ") || before?.format !== f.key;
+    const stale = seen.some((x) => x.parserVersion < f.version && x.status === "รอตรวจ") || before?.format !== f.key;
     if (!stale) return 0;
     const decided = seen.filter((x) => x.status !== "รอตรวจ");
     if (decided.length > 0) return redoPendingOnly(p, f, decided);
     await prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } });
+  }
+  const google = parseTicketPhoto(p.ocr, f);
+  // ตัวอ่านที่สองเคยอ่านรูปนี้ด้วยแบบตั๋ว/รุ่นเดียวกันแล้ว → รวมผลทันที ไม่ต้องเข้าคิวอ่านรูปซ้ำ
+  const local = f.localAnchor ? cachedLocal(before, f) : null;
+  if (local) {
+    await prisma.shipPhoto.update({ where: { fileId: p.fileId }, data: { format: f.key, localStatus: "เสร็จ", localError: null } });
+    return createTickets(p, mergeReaders(google, local, f), f);
   }
   // ตัวอ่านที่สองต้องอ่านรูปนี้ (ใหม่) ด้วยแบบตั๋วเดียวกัน — แบบที่ไม่มีจุดยึดแบ่งช่อง ใช้ตัวอ่านเดียว ไม่ต้องเข้าคิว
   await prisma.shipPhoto.update({
     where: { fileId: p.fileId },
     data: { format: f.key, localStatus: f.localAnchor ? "รอ" : "ข้าม", localError: null, localTries: 0 },
   });
-  return createTickets(p, parseTicketPhoto(p.ocr, f).map((t) => ({ ...t, readNote: t.note ?? null })));
+  return createTickets(p, google.map((t) => ({ ...t, readNote: t.note ?? null })), f);
 }
 
 /**
@@ -215,7 +242,7 @@ async function redoPendingOnly(p: ShipPhoto, f: TicketFormat, decided: { ticketN
   const fresh = parsed.filter((t) => !decidedNos.has(t.ticketNo));
   if (fresh.length === 0) return 0;
   let next = Math.max(...decided.map((d) => d.part));
-  const rows = ticketRows(p, fresh.map((t) => ({ ...t, readNote: t.note ?? null }))).map((r) => ({ ...r, part: ++next }));
+  const rows = ticketRows(p, fresh.map((t) => ({ ...t, readNote: t.note ?? null })), f).map((r) => ({ ...r, part: ++next }));
   await prisma.$transaction([
     prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } }),
     prisma.shipTicket.createMany({ data: rows }),
@@ -224,7 +251,7 @@ async function redoPendingOnly(p: ShipPhoto, f: TicketFormat, decided: { ticketN
 }
 
 /** สร้างแถวตั๋วรอตรวจของรูปหนึ่ง — อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ */
-function ticketRows(p: ShipPhoto, parsed: MergedTicket[]) {
+function ticketRows(p: ShipPhoto, parsed: MergedTicket[], f: TicketFormat) {
   const tickets = parsed.length > 0 ? parsed : [null];
   return tickets.map((t, i) => ({
     fileId: p.fileId,
@@ -242,12 +269,12 @@ function ticketRows(p: ShipPhoto, parsed: MergedTicket[]) {
     plateOnTicket: t?.plate ?? null,
     driverNameOnTicket: t?.driverName ?? null,
     readNote: t?.readNote ?? null,
-    parserVersion: PARSER_VERSION,
+    parserVersion: f.version,
   }));
 }
 
-async function createTickets(p: ShipPhoto, parsed: MergedTicket[]): Promise<number> {
-  const data = ticketRows(p, parsed);
+async function createTickets(p: ShipPhoto, parsed: MergedTicket[], f: TicketFormat): Promise<number> {
+  const data = ticketRows(p, parsed, f);
   await prisma.shipTicket.createMany({ data, skipDuplicates: true });
   return data.length;
 }
@@ -350,10 +377,15 @@ async function readOnePhoto(photo: ShipPhotoRow, fetchImage: (fileId: string) =>
       const nowDecided = await tx.shipTicket.count({ where: { fileId: photo.fileId, status: { not: "รอตรวจ" } } });
       if (nowDecided > 0) return false;
       await tx.shipTicket.deleteMany({ where: { fileId: photo.fileId } });
-      await tx.shipTicket.createMany({ data: ticketRows(p, merged) });
+      await tx.shipTicket.createMany({ data: ticketRows(p, merged, f) });
       return true;
     });
     await mark(replaced ? "เสร็จ" : "ข้าม", null);
+    // เก็บผลไว้ — ปรับตัวอ่าน Google ภายหลัง รวมผลใหม่ได้ทันทีไม่ต้องอ่านรูปนี้ซ้ำ (ลดงานเครื่อง)
+    await prisma.shipPhoto.update({
+      where: { fileId: photo.fileId },
+      data: { localResult: JSON.parse(JSON.stringify(local)), localVersion: f.localVersion },
+    });
     // เปิด Drive ได้แล้ว → รูปที่เคยติดเรื่องสิทธิ์ กลับเข้าคิวทันที ไม่ต้องรอรอบชั่วโมง
     await prisma.shipPhoto.updateMany({
       where: { localStatus: "ผิดพลาด", localError: { in: [NO_ACCESS_MSG, DRIVE_API_MSG] } },
@@ -462,7 +494,9 @@ export async function pullShipTickets(): Promise<{ ok: true; added: number } | {
   if ("error" in cfg) return { ok: false, error: "เว็บเครื่องนี้ยังไม่ได้เชื่อมกับ Google Sheet ที่เก็บผลอ่านรูปตั๋ว" };
   try {
     const rows = await readValues(cfg.keyFile, cfg.sheetId, `${SHIP_TAB}!A2:G`);
-    return { ok: true, ...(await ingestSheetRows(rows)) };
+    const res = await ingestSheetRows(rows);
+    await syncReadStopped().catch(() => {});
+    return { ok: true, ...res };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/Unable to parse range/i.test(msg)) {
@@ -472,21 +506,46 @@ export async function pullShipTickets(): Promise<{ ok: true; added: number } | {
   }
 }
 
+/**
+ * โฟลเดอร์เส้นทางที่อ่านครบแล้ว → หยุดอ่าน · มีรูปใหม่เข้าโฟลเดอร์ → เปิดอ่านต่อเอง
+ * ครบ = รูปที่อ่านแล้ว ≥ รูปใน Drive และตัวอ่านที่สองไม่มีค้าง · นับรูปใน Drive ไม่ได้ = ไม่เปลี่ยนอะไร (ไม่เดา)
+ */
+export async function syncReadStopped(): Promise<void> {
+  const inDrive = await drivePhotoCounts();
+  if (!inDrive) return;
+  const [routes, read, waiting] = await Promise.all([
+    prisma.shipRoute.findMany({ select: { id: true, folderName: true, readStopped: true } }),
+    prisma.shipPhoto.groupBy({ by: ["routeFolder"], _count: { _all: true } }),
+    prisma.shipPhoto.groupBy({ by: ["routeFolder"], where: { localStatus: "รอ" }, _count: { _all: true } }),
+  ]);
+  for (const r of routes) {
+    const total = inDrive.get(r.folderName);
+    if (!total) continue;
+    const n = read.find((x) => x.routeFolder === r.folderName)?._count._all ?? 0;
+    const w = waiting.find((x) => x.routeFolder === r.folderName)?._count._all ?? 0;
+    const done = n >= total && w === 0;
+    if (done && !r.readStopped) await prisma.shipRoute.update({ where: { id: r.id }, data: { readStopped: true, readStoppedAt: new Date() } });
+    else if (!done && r.readStopped) await prisma.shipRoute.update({ where: { id: r.id }, data: { readStopped: false, readStoppedAt: null } });
+  }
+}
+
 /** แถวของแท็บ «ตั๋วเรือ» (A:G) → ตั๋วรอตรวจ · คืนจำนวนใบที่เพิ่ม และจำนวนรูปที่ข้ามเพราะอ่านจบแล้ว */
 export async function ingestSheetRows(rows: string[][]): Promise<{ added: number; skipped: number }> {
   {
     const routeOf = (r: string[]) => normRouteFolder((r[COL.route] ?? "").trim() || LEGACY_ROUTE_FOLDER);
     const routes = await ensureShipRoutes(rows.filter((r) => (r[COL.fileId] ?? "").trim()).map(routeOf));
-    // รูปที่อ่านจบแล้ว (อยู่ในระบบ · แบบตั๋ว/โฟลเดอร์เดิม · ไม่มีใบรอตรวจที่อ่านด้วยตัวอ่านรุ่นเก่า) ข้ามเลย ไม่ต้องอ่านซ้ำทุก 5 นาที
-    // เปลี่ยนแบบตั๋ว ย้ายโฟลเดอร์ หรือปรับตัวอ่าน (PARSER_VERSION) แล้ว รูปนั้นกลับมาอ่านใหม่เอง
-    const [known, withTickets, stale] = await Promise.all([
+    // รูปที่อ่านจบแล้ว (อยู่ในระบบ · แบบตั๋ว/โฟลเดอร์เดิม · ไม่มีใบรอตรวจที่อ่านด้วยตัวอ่านรุ่นเก่าของแบบนั้น) ข้ามเลย ไม่ต้องอ่านซ้ำทุก 5 นาที
+    // เปลี่ยนแบบตั๋ว ย้ายโฟลเดอร์ หรือเพิ่มรุ่นตัวอ่านของแบบนั้น (TicketFormat.version) แล้ว รูปนั้นกลับมาอ่านใหม่เอง
+    const [known, withTickets, pending] = await Promise.all([
       prisma.shipPhoto.findMany({ select: { fileId: true, format: true, routeFolder: true, folderPlate: true, dupOf: true } }),
       prisma.shipTicket.findMany({ distinct: ["fileId"], select: { fileId: true } }),
-      prisma.shipTicket.findMany({ where: { status: "รอตรวจ", parserVersion: { lt: PARSER_VERSION } }, distinct: ["fileId"], select: { fileId: true } }),
+      prisma.shipTicket.findMany({ where: { status: "รอตรวจ" }, select: { fileId: true, parserVersion: true } }),
     ]);
     const knownBy = new Map(known.map((k) => [k.fileId, k]));
     const hasTickets = new Set(withTickets.map((t) => t.fileId));
-    const staleIds = new Set(stale.map((t) => t.fileId));
+    const staleIds = new Set(
+      pending.filter((t) => t.parserVersion < formatOf(knownBy.get(t.fileId)?.format).version).map((t) => t.fileId),
+    );
     let added = 0;
     let skipped = 0;
     for (const r of rows) {
@@ -495,6 +554,11 @@ export async function ingestSheetRows(rows: string[][]): Promise<{ added: number
       const route = routeOf(r);
       const k = knownBy.get(fileId);
       const f = formatOf(routes.get(route)?.format);
+      // โฟลเดอร์ที่อ่านครบแล้ว (✅) ไม่แตะเลย — อัปเดตระบบก็ไม่อ่านซ้ำ (เปิดอ่านต่อเองเมื่อมีรูปใหม่: syncReadStopped)
+      if (k && routes.get(route)?.readStopped) {
+        skipped++;
+        continue;
+      }
       if (k && k.format === f.key && k.routeFolder === route && k.folderPlate === (r[COL.plate] ?? "").trim() && !staleIds.has(fileId) && (k.dupOf || hasTickets.has(fileId))) {
         skipped++;
         continue;
@@ -565,6 +629,8 @@ export type ShipRouteInfo = {
   photosInDrive: number | null;
   /** รูปที่ตัวอ่านที่สองยังไม่ได้อ่าน */
   localWaiting: number;
+  /** อ่านครบแล้ว หยุดอ่านโฟลเดอร์นี้ */
+  readStopped: boolean;
 };
 
 export type ShipPage = {
@@ -683,6 +749,7 @@ export async function shipReview(): Promise<ShipPage> {
       photosRead: photoRoutes.find((x) => x.routeFolder === folder)?._count._all ?? 0,
       photosInDrive: inDrive ? (inDrive.get(folder) ?? 0) : null,
       localWaiting: localWaits.find((x) => x.routeFolder === folder)?._count._all ?? 0,
+      readStopped: r?.readStopped ?? false,
     };
     routes.set(folder, info);
     return info;
