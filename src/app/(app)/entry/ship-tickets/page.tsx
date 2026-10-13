@@ -4,7 +4,7 @@ import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import type { SearchParams } from "@/lib/params";
 import { canWrite, isAdmin } from "@/lib/roles";
-import { SHIP_SETTINGS, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview, skippedPhotos } from "@/lib/ship-ticket";
+import { SHIP_SETTINGS, localOcrProgress, pullShipTickets, runLocalOcrQueue, shipReview, skippedPhotos, type ShipRouteInfo } from "@/lib/ship-ticket";
 import { ResetButton } from "./ResetButton";
 import { ShipTable } from "./ShipTable";
 import { SkippedList } from "./SkippedList";
@@ -97,7 +97,7 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
               >
                 {r.problem ? "❌ " : ""}
                 {r.origin ?? r.folder} → {r.destination ?? "❓"} · รอตรวจ {n}/{r.ticketsTotal} ใบ · รูป {r.photosRead}
-                {r.photosInDrive != null && `/${r.photosInDrive}${r.photosRead < r.photosInDrive ? " ⏳" : ""}`}
+                {r.photosInDrive != null && `/${r.photosInDrive}`} {readState(r).icon}
               </a>
             );
           })}
@@ -126,9 +126,9 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
           bodyClass="p-3"
         >
           {route.problem && <p className="mb-3 text-[13px] font-bold text-red-700">{route.problem}</p>}
-          {route.photosInDrive != null && route.photosRead < route.photosInDrive && (
-            <p className="mb-3 text-[13px] font-bold text-sky-800">
-              ⏳ ยังอ่านไม่ครบ อีก {route.photosInDrive - route.photosRead} รูป — Google ทยอยอ่านรูปเองทุก 5 นาที แล้วขึ้นหน้านี้เอง ไม่ต้องกดอะไร
+          {readState(route).text && (
+            <p className={`mb-3 text-[13px] font-bold ${readState(route).icon === "✅" ? "text-emerald-700" : "text-sky-800"}`}>
+              {readState(route).text}
             </p>
           )}
           {rows.length === 0 ? (
@@ -192,4 +192,21 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
       )}
     </>
   );
+}
+
+/**
+ * สถานะการอ่านของโฟลเดอร์เส้นทาง (เครื่องหมายบนปุ่มเลือกเส้นทาง + ข้อความหัวกล่อง)
+ *   ⏳ Google ยังอ่านรูปในโฟลเดอร์ไม่ครบ · 🔍 ตัวอ่านที่สองยังอ่านไม่ครบ · ✅ อ่านครบทุกรูปแล้ว (หยุดอ่าน รอรูปใหม่)
+ * นับรูปใน Drive ไม่ได้ (ยังไม่มีสิทธิ์อ่าน) = ไม่ขึ้นเครื่องหมาย — ไม่รู้ว่าครบหรือยัง ไม่เดา
+ */
+function readState(r: ShipRouteInfo): { icon: string; text: string | null } {
+  if (r.photosInDrive == null) return { icon: "", text: null };
+  if (r.photosRead < r.photosInDrive)
+    return { icon: "⏳", text: `⏳ ยังอ่านไม่ครบ อีก ${r.photosInDrive - r.photosRead} รูป — Google ทยอยอ่านรูปเองทุก 5 นาที แล้วขึ้นหน้านี้เอง ไม่ต้องกดอะไร` };
+  if (r.localWaiting > 0)
+    return { icon: "🔍", text: `🔍 ตัวอ่านที่สองกำลังตรวจซ้ำอีก ${r.localWaiting} รูป — ค่าที่อ่านได้จะเติม/ยืนยันให้เองเมื่อเสร็จ` };
+  return {
+    icon: "✅",
+    text: `✅ อ่านครบทุกรูปแล้ว (${r.photosInDrive} รูป) — ระบบหยุดอ่านรูปเดิม เพิ่มรูปใหม่ในโฟลเดอร์เมื่อไร ระบบอ่านเฉพาะรูปใหม่ให้เอง`,
+  };
 }

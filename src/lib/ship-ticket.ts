@@ -462,13 +462,43 @@ export async function pullShipTickets(): Promise<{ ok: true; added: number } | {
   if ("error" in cfg) return { ok: false, error: "เว็บเครื่องนี้ยังไม่ได้เชื่อมกับ Google Sheet ที่เก็บผลอ่านรูปตั๋ว" };
   try {
     const rows = await readValues(cfg.keyFile, cfg.sheetId, `${SHIP_TAB}!A2:G`);
+    return { ok: true, ...(await ingestSheetRows(rows)) };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/Unable to parse range/i.test(msg)) {
+      return { ok: false, error: `ชีตยังไม่มีแท็บ «${SHIP_TAB}» — วางโค้ด Apps Script ใหม่แล้วกดเรียก setupShipTickets 1 ครั้ง` };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
+/** แถวของแท็บ «ตั๋วเรือ» (A:G) → ตั๋วรอตรวจ · คืนจำนวนใบที่เพิ่ม และจำนวนรูปที่ข้ามเพราะอ่านจบแล้ว */
+export async function ingestSheetRows(rows: string[][]): Promise<{ added: number; skipped: number }> {
+  {
     const routeOf = (r: string[]) => normRouteFolder((r[COL.route] ?? "").trim() || LEGACY_ROUTE_FOLDER);
     const routes = await ensureShipRoutes(rows.filter((r) => (r[COL.fileId] ?? "").trim()).map(routeOf));
+    // รูปที่อ่านจบแล้ว (อยู่ในระบบ · แบบตั๋ว/โฟลเดอร์เดิม · ไม่มีใบรอตรวจที่อ่านด้วยตัวอ่านรุ่นเก่า) ข้ามเลย ไม่ต้องอ่านซ้ำทุก 5 นาที
+    // เปลี่ยนแบบตั๋ว ย้ายโฟลเดอร์ หรือปรับตัวอ่าน (PARSER_VERSION) แล้ว รูปนั้นกลับมาอ่านใหม่เอง
+    const [known, withTickets, stale] = await Promise.all([
+      prisma.shipPhoto.findMany({ select: { fileId: true, format: true, routeFolder: true, folderPlate: true, dupOf: true } }),
+      prisma.shipTicket.findMany({ distinct: ["fileId"], select: { fileId: true } }),
+      prisma.shipTicket.findMany({ where: { status: "รอตรวจ", parserVersion: { lt: PARSER_VERSION } }, distinct: ["fileId"], select: { fileId: true } }),
+    ]);
+    const knownBy = new Map(known.map((k) => [k.fileId, k]));
+    const hasTickets = new Set(withTickets.map((t) => t.fileId));
+    const staleIds = new Set(stale.map((t) => t.fileId));
     let added = 0;
+    let skipped = 0;
     for (const r of rows) {
       const fileId = (r[COL.fileId] ?? "").trim();
       if (!fileId) continue;
       const route = routeOf(r);
+      const k = knownBy.get(fileId);
+      const f = formatOf(routes.get(route)?.format);
+      if (k && k.format === f.key && k.routeFolder === route && k.folderPlate === (r[COL.plate] ?? "").trim() && !staleIds.has(fileId) && (k.dupOf || hasTickets.has(fileId))) {
+        skipped++;
+        continue;
+      }
       added += await ingestPhoto(
         {
           fileId,
@@ -478,16 +508,10 @@ export async function pullShipTickets(): Promise<{ ok: true; added: number } | {
           ocr: r[COL.ocr] ?? "",
           route,
         },
-        formatOf(routes.get(route)?.format),
+        f,
       );
     }
-    return { ok: true, added };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/Unable to parse range/i.test(msg)) {
-      return { ok: false, error: `ชีตยังไม่มีแท็บ «${SHIP_TAB}» — วางโค้ด Apps Script ใหม่แล้วกดเรียก setupShipTickets 1 ครั้ง` };
-    }
-    return { ok: false, error: msg };
+    return { added, skipped };
   }
 }
 
@@ -539,6 +563,8 @@ export type ShipRouteInfo = {
   photosRead: number;
   /** รูปทั้งหมดในโฟลเดอร์ Drive · null = นับไม่ได้ */
   photosInDrive: number | null;
+  /** รูปที่ตัวอ่านที่สองยังไม่ได้อ่าน */
+  localWaiting: number;
 };
 
 export type ShipPage = {
@@ -620,7 +646,7 @@ function pairedDriver(
 
 /** เตรียมแถวรอตรวจ — คำนวณสถานะใหม่ทุกครั้ง แก้ข้อมูลหลัก (รถ/จับคู่/พขร.) แล้วผลอัปเดตเอง */
 export async function shipReview(): Promise<ShipPage> {
-  const [tickets, ctx, drivers, aliases, routeRows, photoRoutes, ticketCounts, inDrive] = await Promise.all([
+  const [tickets, ctx, drivers, aliases, routeRows, photoRoutes, ticketCounts, inDrive, localWaits] = await Promise.all([
     prisma.shipTicket.findMany({
       where: { status: "รอตรวจ" },
       orderBy: [{ ticketDate: "asc" }, { ticketNo: "asc" }, { id: "asc" }],
@@ -632,6 +658,7 @@ export async function shipReview(): Promise<ShipPage> {
     prisma.shipPhoto.groupBy({ by: ["routeFolder"], _count: { _all: true } }),
     prisma.shipTicket.groupBy({ by: ["routeFolder"], _count: { _all: true } }),
     drivePhotoCounts(),
+    prisma.shipPhoto.groupBy({ by: ["routeFolder"], where: { localStatus: "รอ" }, _count: { _all: true } }),
   ]);
 
   const notices: string[] = [];
@@ -655,6 +682,7 @@ export async function shipReview(): Promise<ShipPage> {
       ticketsTotal: ticketCounts.find((x) => x.routeFolder === folder)?._count._all ?? 0,
       photosRead: photoRoutes.find((x) => x.routeFolder === folder)?._count._all ?? 0,
       photosInDrive: inDrive ? (inDrive.get(folder) ?? 0) : null,
+      localWaiting: localWaits.find((x) => x.routeFolder === folder)?._count._all ?? 0,
     };
     routes.set(folder, info);
     return info;
