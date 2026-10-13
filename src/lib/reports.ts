@@ -9,7 +9,6 @@
  */
 
 import { prisma } from "./prisma";
-import { freezeLegacyInvoiceLines } from "./invoice-adjust";
 import { needsReorder } from "./stock-rules";
 import {
   buildContext,
@@ -62,7 +61,6 @@ export async function loadPeriod(period: Period) {
   for (const j of jobs) calcs.set(j.id, computeJob(ctx, j));
 
   // ขาที่วางบิลไปแล้ว — รายได้/ราคา/วันที่ ยึดตามใบวางบิล ไม่คำนวณใหม่จากการตั้งค่าปัจจุบัน
-  await freezeLegacyInvoiceLines();
   const invoicedRows = await prisma.customerBillingLine.findMany({
     where: { jobId: { in: jobs.map((j) => j.id) } },
     include: { billing: { select: { invoiceNo: true } } },

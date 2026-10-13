@@ -12,7 +12,7 @@
 
 import { allocateSatang, billRate, billingLines, billingTotals } from "./billing";
 import { formatThaiDate } from "./date";
-import { freezeLegacyInvoiceLines, priceJobsLive, storedSnap, type LineSnap } from "./invoice-adjust";
+import { priceJobsLive, storedSnap, type LineSnap } from "./invoice-adjust";
 import { prisma } from "./prisma";
 import { loadPeriod } from "./reports";
 
@@ -136,7 +136,6 @@ export async function draftInvoiceDoc(customerId: number, from: Date, to: Date, 
  * (ใบที่ออกก่อนมีที่เก็บ ไม่มีค่าเดิม → ใช้ข้อมูลงานปัจจุบันแทน)
  */
 export async function issuedInvoiceDoc(id: number): Promise<InvoiceDoc | null> {
-  await freezeLegacyInvoiceLines();
   const inv = await prisma.customerBilling.findUnique({
     where: { id },
     include: { lines: true, customer: true },
