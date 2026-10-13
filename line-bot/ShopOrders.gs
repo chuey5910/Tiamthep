@@ -58,7 +58,9 @@ var POS = {
   POSTED: "ลงบัญชีแล้ว",   // เว็บเขียน
   CANCELLED: "ยกเลิก",
 };
-var ANS = { OK: "ทำได้", NO: "ไม่มีของ" };
+var ANS = { OK: "ทำได้", NO: "ไม่มีของ", FOUND: "ตรวจพบเพิ่ม" };
+// «ตรวจพบเพิ่ม» = ร้านแจ้งความเสียหายที่เจอเพิ่มตอนทำรถ — แค่บันทึกไว้ ไม่ใช่ของที่สั่ง ไม่คิดราคา
+// บริษัทจะให้ทำ ต้องออกใบสั่งงานใหม่ (#สั่ง) เท่านั้น ร้านจึงทำได้ (หลักเดิม: ไม่มีเลข PO = ไม่ได้สั่ง)
 var PO_STOCK = "คลัง";
 
 // แท็บ «ร้านค้า» / «พนักงานสั่งของ» — แอดมินกรอกรหัส+ชื่อ แล้วให้รหัสไปพิมพ์ «ลงทะเบียน <รหัส>»
@@ -303,10 +305,14 @@ function poAll_() {
         operator: String(v[PC.OPERATOR - 1] || "").trim(),
         orderedBy: String(v[PC.ORDERED_BY - 1] || "").trim(),
         items: [],
+        found: [],
+        maxSeq: 0,
       };
     }
     var price = v[PC.PRICE - 1];
-    o.items.push({
+    var answer = String(v[PC.ANSWER - 1]).trim();
+    o.maxSeq = Math.max(o.maxSeq, Number(v[PC.SEQ - 1]) || 0);
+    (answer === ANS.FOUND ? o.found : o.items).push({
       row: i + 2,
       seq: Number(v[PC.SEQ - 1]) || o.items.length + 1,
       item: String(v[PC.ITEM - 1]).trim(),
@@ -323,10 +329,10 @@ function poGet_(id) {
   return poAll_()[String(id || "").trim().toUpperCase()] || null;
 }
 
-/** เขียนค่าเดียวกันลงทุกแถวของใบ (เช่น สถานะ) */
+/** เขียนค่าเดียวกันลงทุกแถวของใบ (เช่น สถานะ) — รวมแถวความเสียหายที่ตรวจพบด้วย */
 function poSetAll_(o, col, value) {
   var sh = poSheet_();
-  o.items.forEach(function (it) { sh.getRange(it.row, col).setValue(value); });
+  o.items.concat(o.found || []).forEach(function (it) { sh.getRange(it.row, col).setValue(value); });
 }
 
 function nowText_() {
@@ -376,6 +382,7 @@ function handlePoText_(ev, userId, text) {
   var cache = CacheService.getScriptCache();
   var flat = text.replace(/\s+/g, "");
 
+  if (/^#\s*ช่วยเหลือ/.test(text)) { poHelp_(ev, userId); return true; }
   if (/^#\s*สั่ง/.test(text)) { poCreate_(ev, userId, text); return true; }
   if (/^#\s*สถานะ/.test(text)) { poStatus_(ev, userId, text); return true; }
   if (/^#\s*ยกเลิก/.test(text)) { poCancel_(ev, userId, text); return true; }
@@ -385,16 +392,24 @@ function handlePoText_(ev, userId, text) {
 
   if (text === MENU_ORDERS || flat === "ออเดอร์" || flat === "ออเดอร์ของร้าน") {
     cache.remove("po_price_" + userId);
+    cache.remove("po_dmg_" + userId);
     poShopList_(ev, shop);
     return true;
   }
   if (text === MENU_PRICE || flat === "แจ้งราคา" || flat === "ปิดงาน" || flat === "แจ้งราคา/ปิดงาน") {
     cache.remove("po_price_" + userId);
+    cache.remove("po_dmg_" + userId);
     poPriceMenu_(ev, shop);
     return true;
   }
   if (text === MENU_CONTACT) {
     lineReply_(ev.replyToken, "📞 พิมพ์ข้อความทิ้งไว้ในแชทนี้ได้เลยครับ แอดมินจะตอบกลับในแชทนี้");
+    return true;
+  }
+  // กดปุ่ม «ความเสียหายที่ตรวจพบ» แล้ว — ข้อความถัดไปคือรายการที่เจอ
+  var dmg = cache.get("po_dmg_" + userId);
+  if (dmg) {
+    poDamageInput_(ev, userId, shop, dmg, text);
     return true;
   }
   // กำลังแจ้งราคาอยู่ — ข้อความถัดไปคือราคาของรายการที่ถาม
@@ -457,16 +472,21 @@ function parsePoText_(text) {
   return { shopText: shopText, plate: plates[0] || "", stock: stock, operator: operator, orderedBy: orderedBy, items: items };
 }
 
-/** «1. เปลี่ยนยาง 11R22.5 / จำนวน 2 เส้น» → {item, qty:2, unit:"เส้น"} · ไม่มี «/ จำนวน» = อ่านแบบสั้น */
+/**
+ * «1. เปลี่ยนยาง 11R22.5 / จำนวน 2 เส้น» → {item, qty:2, unit:"เส้น"}
+ * « / » (เว้นวรรคหน้า-หลัง) คั่นชื่อรายการกับจำนวนเสมอ — ชื่อที่มี / ติดกัน (เช่น 295/80R22.5) ไม่ถูกตัด
+ * ไม่มี « / » = ไม่รู้ว่าส่วนไหนคือจำนวน → ถามกลับ ไม่เดา
+ */
 function parsePoLabeledItem_(val, n) {
   var s = val.replace(/^\d+\s*[.)]\s*/, "").trim();
   if (!s) return { error: "รายการที่ " + n + " ว่าง" };
-  var cut = s.lastIndexOf("/");
-  if (cut < 0) return parsePoItem_(s);
-  var name = s.slice(0, cut).trim();
-  var m = s.slice(cut + 1).trim().match(/^(?:จำนวน)?\s*(\d+(?:\.\d+)?)\s*(\S.*)?$/);
+  var parts = s.split(/\s+\/\s+/);
+  if (parts.length < 2) return { error: "รายการที่ " + n + " «" + s + "» ไม่มี « / » คั่นจำนวน — พิมพ์แบบ «" + s + " / จำนวน 1 ชิ้น»" };
+  var rest = parts.pop().trim();
+  var name = parts.join(" / ").trim();
+  var m = rest.match(/^(?:จำนวน)?\s*(\d+(?:\.\d+)?)\s*(\S.*)?$/);
   if (!name) return { error: "รายการที่ " + n + " ไม่มีชื่อรายการ" };
-  if (!m) return { error: "รายการที่ " + n + " «" + name + "» จำนวนอ่านไม่ได้ — พิมพ์แบบ «/ จำนวน 2 เส้น»" };
+  if (!m) return { error: "รายการที่ " + n + " «" + name + "» จำนวนอ่านไม่ได้ — หลัง « / » ต้องเป็นตัวเลข เช่น «/ จำนวน 2 เส้น»" };
   return { item: name, qty: Number(m[1]), unit: (m[2] || "").trim() };
 }
 
@@ -571,6 +591,9 @@ function poSummary_(o) {
     return mark + " " + it.item + fmtQty_(it) +
       (it.answer === ANS.NO ? " — ร้านไม่มีของ" : it.price != null ? " — " + fmtBaht_(it.price) + " บาท" : "");
   });
+  (o.found || []).forEach(function (it) {
+    lines.push("🔍 ร้านตรวจพบเพิ่ม: " + it.item + fmtQty_(it) + " (ยังไม่ได้สั่ง)");
+  });
   return (PO_ICON[o.status] || "•") + " " + o.id + " · " + (o.status || "-") + "\n" +
     "ร้าน " + o.shopName + " · " + (o.target === PO_STOCK ? "เข้าคลัง" : "รถ " + o.target) + "\n" +
     "สั่งเมื่อ " + o.at.replace(/^'/, "") + " โดย " + (o.orderedBy || o.staffName || o.staffCode) + "\n" +
@@ -673,6 +696,11 @@ function poCard_(o) {
     var mark = it.answer === ANS.OK ? "✅ " : it.answer === ANS.NO ? "❌ " : (i + 1) + ". ";
     rows.push(flexText_(mark + it.item + fmtQty_(it) + (it.answer === ANS.NO ? " — ไม่มีของ" : ""), { size: "sm", margin: "sm" }));
   });
+  if (o.found && o.found.length) {
+    rows.push({ type: "separator", margin: "md" });
+    rows.push(flexText_("🔍 ร้านตรวจพบเพิ่ม (ยังไม่ได้สั่ง — ห้ามทำ)", { weight: "bold", margin: "md", color: "#b45309" }));
+    o.found.forEach(function (it) { rows.push(flexText_("• " + it.item + fmtQty_(it), { size: "sm", margin: "sm", color: "#b45309" })); });
+  }
   rows.push(flexText_("ไม่มีเลขใบสั่งงานนี้ หรือคนที่มาไม่ใช่คนดำเนินการ = บริษัทไม่ได้สั่ง กรุณาอย่าทำ/จ่ายของ", { size: "xxs", color: "#888888", margin: "lg" }));
 
   var buttons = [];
@@ -685,6 +713,10 @@ function poCard_(o) {
     if (!o.items.some(function (it) { return it.price != null; })) {
       buttons.push(flexButton_("✏️ แก้รายการที่ทำได้", "po|part|" + o.id, "#d97706", "แก้รายการ " + o.id));
     }
+  }
+  // งานรถ: ร้านเจอความเสียหายจุดอื่นเพิ่ม — แจ้งไว้ บริษัทตัดสินใจแล้วออกใบสั่งใหม่
+  if (!stock && (o.status === POS.WAIT || o.status === POS.ACCEPTED)) {
+    buttons.push(flexButton_("🔍 ความเสียหายที่ตรวจพบ", "po|dmg|" + o.id, "#475569", "แจ้งความเสียหายที่ตรวจพบ " + o.id));
   }
   var bubble = {
     type: "bubble",
@@ -808,6 +840,13 @@ function handlePoPostback_(ev, userId, data) {
               "\n\nทำเสร็จแล้วกดเมนู «" + MENU_PRICE + "»"
             : "รับทราบครับ ❌ ไม่มีของทุกรายการ — ปิดใบ " + id + " แล้ว" };
         }
+      }
+    } else if (act === "dmg") {
+      if (o.target === PO_STOCK || !(o.status === POS.WAIT || o.status === POS.ACCEPTED)) {
+        reply = { text: "ใบ " + id + " แจ้งความเสียหายเพิ่มไม่ได้ (" + (o.target === PO_STOCK ? "เป็นใบสั่งเข้าคลัง" : "สถานะ «" + o.status + "»") + ")" };
+      } else {
+        CacheService.getScriptCache().put("po_dmg_" + userId, o.id, 1800);
+        reply = { text: "🔍 " + id + " · รถ " + o.target + "\nพิมพ์ความเสียหายที่ตรวจพบ บรรทัดละ 1 รายการ แล้วส่งครั้งเดียว\n\nตัวอย่าง\nผ้าเบรกล้อหน้าซ้ายหมด / จำนวน 1 ชุด\nยางอะไหล่รั่ว / จำนวน 1 เส้น\n\n⚠️ แจ้งไว้เท่านั้น ยังไม่ใช่การสั่ง — บริษัทจะออกใบสั่งงานใหม่ถ้าให้ทำ\nพิมพ์ «ยกเลิก» ถ้าไม่แจ้งแล้ว" };
       }
     } else if (act === "price") {
       reply = { start: o };
@@ -957,4 +996,85 @@ function handlePoImage_(ev, userId) {
   cache.put("po_bill_" + userId, id, 1800);
   lineReply_(ev.replyToken, "📷 รับรูปบิล " + id + " แล้ว ✅ (ส่งเพิ่มได้อีกภายใน 30 นาที)");
   return true;
+}
+
+/** ร้านพิมพ์ความเสียหายที่ตรวจพบ (หลังกดปุ่ม) — บันทึกเป็นแถว «ตรวจพบเพิ่ม» ในใบเดิม ไม่คิดราคา ไม่ใช่การสั่ง */
+function poDamageInput_(ev, userId, shop, id, text) {
+  var cache = CacheService.getScriptCache();
+  if (text.replace(/\s+/g, "") === "ยกเลิก") {
+    cache.remove("po_dmg_" + userId);
+    lineReply_(ev.replyToken, "ยกเลิกการแจ้งความเสียหายแล้วครับ");
+    return;
+  }
+  var items = [];
+  var errors = [];
+  text.split(/\r?\n/).map(function (l) { return l.trim().replace(/^[-•*·]\s*/, ""); }).filter(Boolean).forEach(function (l, i) {
+    var it = parsePoLabeledItem_(l, i + 1);
+    if (it.error) errors.push(it.error); else items.push(it);
+  });
+  if (errors.length || !items.length) {
+    lineReply_(ev.replyToken, "❌ " + (errors.join("\n") || "ไม่พบรายการ") + "\n\nพิมพ์ใหม่บรรทัดละ 1 รายการ เช่น\nผ้าเบรกล้อหน้าซ้ายหมด / จำนวน 1 ชุด");
+    return;
+  }
+  var o;
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    o = poGet_(id);
+    if (!o || o.shopCode !== shop.code || !(o.status === POS.WAIT || o.status === POS.ACCEPTED)) {
+      cache.remove("po_dmg_" + userId);
+      lineReply_(ev.replyToken, "ใบ " + id + " แจ้งความเสียหายเพิ่มไม่ได้แล้ว (สถานะ «" + (o ? o.status : "ไม่พบ") + "»)");
+      return;
+    }
+    var sh = poSheet_();
+    var first = o.items[0];
+    var head = sh.getRange(first.row, 1, 1, PO_HEADER.length).getValues()[0];
+    var at = nowText_();
+    var rows = items.map(function (it, i) {
+      var r = head.slice();
+      r[PC.SEQ - 1] = o.maxSeq + i + 1;
+      r[PC.ITEM - 1] = it.item;
+      r[PC.QTY - 1] = it.qty;
+      r[PC.UNIT - 1] = it.unit;
+      r[PC.ANSWER - 1] = ANS.FOUND;
+      r[PC.PRICE - 1] = "";
+      r[PC.ANSWERED_AT - 1] = at;
+      r[PC.RAW - 1] = "";
+      r[PC.RESULT - 1] = "";
+      return r;
+    });
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, PO_HEADER.length).setValues(rows);
+  } finally {
+    lock.releaseLock();
+  }
+  cache.remove("po_dmg_" + userId);
+  log_("INFO", "ร้าน " + shop.code + " แจ้งความเสียหายเพิ่ม " + id + " " + items.length + " รายการ");
+  lineReply_(ev.replyToken,
+    "📝 บันทึกความเสียหายที่ตรวจพบ " + id + " แล้ว\n" +
+    items.map(function (it) { return "🔍 " + it.item + fmtQty_(it); }).join("\n") +
+    "\n\n⚠️ ยังไม่ใช่การสั่ง กรุณาอย่าทำรายการนี้ — บริษัทจะออกใบสั่งงานใหม่ถ้าให้ทำ\nงานเดิมในใบ " + id + " ทำต่อได้ตามปกติ");
+}
+
+/** #ช่วยเหลือ — คำสั่งทั้งหมดของคนที่พิมพ์ (พนักงาน / ร้าน / ยังไม่ลงทะเบียน) */
+function poHelp_(ev, userId) {
+  if (partyOf_(PO_TAB.STAFF, userId)) {
+    lineReply_(ev.replyToken,
+      "คำสั่งของพนักงาน\n" +
+      "• #สั่ง — สั่งงานรถ\n" +
+      "• #สั่งเข้าคลัง — สั่งของเข้าคลัง\n" +
+      "• #สถานะ PO-… — ดูสถานะใบสั่ง (พิมพ์ #สถานะ เฉยๆ = 5 ใบล่าสุด)\n" +
+      "• #ยกเลิก PO-… — ยกเลิกใบที่ร้านยังไม่ตอบ\n" +
+      "• #ช่วยเหลือ — ดูคำสั่งทั้งหมด\n\n" +
+      "« / » คั่นชื่อรายการกับจำนวนเสมอ\n\n" + PO_EXAMPLE);
+    return;
+  }
+  if (partyOf_(PO_TAB.SHOPS, userId)) {
+    lineReply_(ev.replyToken,
+      "เมนูของร้าน (กดที่เมนูด้านล่าง หรือพิมพ์คำในวงเล็บ)\n" +
+      "• " + MENU_ORDERS + " (ออเดอร์) — ดูออเดอร์ กดรับ / มีของไม่ครบ / ไม่มีของ / ความเสียหายที่ตรวจพบ\n" +
+      "• " + MENU_PRICE + " (แจ้งราคา) — ทำเสร็จแล้ว แจ้งราคาทีละรายการ แล้วส่งรูปบิล\n\n" +
+      "⚠️ ทำงาน/จ่ายของเฉพาะใบที่มีเลข PO และคนที่มาตรงกับคนดำเนินการในใบเท่านั้น");
+    return;
+  }
+  lineReply_(ev.replyToken, "ยังไม่ได้ลงทะเบียน — พิมพ์ «ลงทะเบียน <รหัส>» (ขอรหัสจากออฟฟิศ)");
 }
