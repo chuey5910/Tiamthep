@@ -311,7 +311,35 @@ export type JobCalc = {
   issues: string[];
   /** ช่องที่เป็นต้นเหตุของคำเตือน — หน้าเว็บใช้ระบายสีแดงเฉพาะช่องนั้น */
   badFields: JobField[];
+  /** ขานี้อยู่ในใบวางบิลที่ออกแล้ว — ยอด/ราคา/วันที่ ยึดตามใบ (applyInvoiced) */
+  invoiceNo?: string | null;
 };
+
+/** ขาที่อยู่ในใบวางบิลที่ออกแล้ว (CustomerBillingLine) — ค่าที่บันทึกไว้ตอนออกบิล/ปรับยอดล่าสุด */
+export type InvoicedLine = {
+  invoiceNo: string;
+  amount: number;
+  date: Date | null;
+  priceUnit: string | null;
+  rate: number | null;
+};
+
+/**
+ * ใบวางบิลที่ออกแล้วห้ามเปลี่ยนตามการตั้งค่าใหม่ (ราคาเส้นทาง · ราคาน้ำมัน · ช่วงราคา · เกณฑ์ลูกค้า)
+ * ขาที่วางบิลแล้ว รายได้ = ยอดในใบ ไม่คำนวณใหม่ — ทุกหน้า (วางบิล · รายได้ · กำไรขาดทุน · บันทึกงาน) จึงตรงกับใบเสมอ
+ * จะเปลี่ยนยอดได้ทางเดียว: คนกด «ปรับยอดใบนี้» ที่หน้ารายงานการวางบิลเอง (เคยพลาด: ตั้งค่าใหม่แล้วใบเก่าเปลี่ยนตาม ต้องไล่แก้)
+ * ค่าที่ไม่ใช่รายได้ (ค่าจ้างรถร่วม · เบี้ยเลี้ยง · ลิตร) ยังคิดตามข้อมูลจริงเหมือนเดิม
+ */
+export function applyInvoiced(c: JobCalc, l: InvoicedLine): JobCalc {
+  return {
+    ...c,
+    revenue: l.amount,
+    billingDate: l.date ?? c.billingDate,
+    priceUnit: l.priceUnit ?? c.priceUnit,
+    customerRate: l.priceUnit != null ? l.rate : c.customerRate,
+    invoiceNo: l.invoiceNo,
+  };
+}
 
 export function computeJob(ctx: CalcContext, job: JobInput): JobCalc {
   const issues: string[] = [];

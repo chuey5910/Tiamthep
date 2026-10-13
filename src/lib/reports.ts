@@ -9,10 +9,12 @@
  */
 
 import { prisma } from "./prisma";
+import { freezeLegacyInvoiceLines } from "./invoice-adjust";
 import { needsReorder } from "./stock-rules";
 import {
   buildContext,
   computeFuelBonuses,
+  applyInvoiced,
   computeJob,
   round2,
   type CalcContext,
@@ -59,6 +61,18 @@ export async function loadPeriod(period: Period) {
   const calcs = new Map<number, JobCalc>();
   for (const j of jobs) calcs.set(j.id, computeJob(ctx, j));
 
+  // ขาที่วางบิลไปแล้ว — รายได้/ราคา/วันที่ ยึดตามใบวางบิล ไม่คำนวณใหม่จากการตั้งค่าปัจจุบัน
+  await freezeLegacyInvoiceLines();
+  const invoicedRows = await prisma.customerBillingLine.findMany({
+    where: { jobId: { in: jobs.map((j) => j.id) } },
+    include: { billing: { select: { invoiceNo: true } } },
+  });
+  const invoiced = new Map(invoicedRows.map((l) => [l.jobId, l]));
+  for (const l of invoicedRows) {
+    const c = calcs.get(l.jobId);
+    if (c) calcs.set(l.jobId, applyInvoiced(c, { invoiceNo: l.billing.invoiceNo, amount: l.amount, date: l.date, priceUnit: l.priceUnit, rate: l.rate }));
+  }
+
   const overrides = new Map(overridesRaw.map((o) => [o.tripCode, o.actualLitres]));
   const bonuses = computeFuelBonuses(ctx, jobs, calcs, fuel, overrides);
 
@@ -74,6 +88,7 @@ export async function loadPeriod(period: Period) {
     period,
     jobs,
     calcs,
+    invoiced,
     billedJobs,
     ranJobs,
     fuel: fuelInPeriod,

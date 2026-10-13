@@ -5,7 +5,7 @@ import { formatThaiDate, toInputDate } from "@/lib/date";
 import { baht, num } from "@/lib/format";
 import { readRange, type SearchParams } from "@/lib/params";
 import { prisma } from "@/lib/prisma";
-import { buildContext, computeJob, resolveDriver } from "@/lib/calc";
+import { applyInvoiced, buildContext, computeJob, resolveDriver } from "@/lib/calc";
 import { sortOptionsThaiFirst } from "@/lib/sort";
 import { JobForm, JobRowActions, type JobInitial } from "./JobForm";
 
@@ -47,7 +47,17 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     : null;
 
   const customerById = new Map(customers.map((c) => [c.id, c]));
-  const allCalcs = jobs.map((j) => ({ job: j, calc: computeJob(ctx, j) }));
+  // ขาที่วางบิลแล้ว — รายได้ยึดตามใบวางบิล ไม่คำนวณใหม่จากราคาปัจจุบัน (ตัวเลขตรงกับหน้าวางบิล/รายงานเสมอ)
+  const invoicedRows = await prisma.customerBillingLine.findMany({
+    where: { jobId: { in: jobs.map((j) => j.id) } },
+    include: { billing: { select: { invoiceNo: true } } },
+  });
+  const invoiced = new Map(invoicedRows.map((l) => [l.jobId, l]));
+  const allCalcs = jobs.map((j) => {
+    const c = computeJob(ctx, j);
+    const l = invoiced.get(j.id);
+    return { job: j, calc: l ? applyInvoiced(c, { invoiceNo: l.billing.invoiceNo, amount: l.amount, date: l.date, priceUnit: l.priceUnit, rate: l.rate }) : c };
+  });
 
   // กรองตามลูกค้า / ทะเบียน / คำค้น — ยอดรวมด้านบนคิดจากชุดที่กรองแล้ว
   // จะได้เอาไปเทียบกับรายงานรายได้แยกตามลูกค้าได้ตรงๆ
@@ -328,6 +338,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                       </td>
                       <td className={`num font-semibold${bad("revenue")}`}>
                         {baht(calc.revenue)}
+                        {calc.invoiceNo && (
+                          <div className="whitespace-nowrap text-[10px] font-bold text-emerald-700" title="วางบิลแล้ว — ยอดยึดตามใบ ไม่เปลี่ยนตามราคา/การตั้งค่าใหม่ · แก้ได้ที่ «ปรับยอดใบนี้» หน้ารายงานการวางบิล">
+                            🔒 ตามใบ {calc.invoiceNo}
+                          </div>
+                        )}
                         {calc.customerRate != null && (
                           <div className="whitespace-nowrap text-[10px] font-normal text-slate-400">
                             {calc.priceUnit === "ต่อกิโลกรัม"

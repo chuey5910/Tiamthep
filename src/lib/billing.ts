@@ -234,16 +234,19 @@ export function billingLines(
     const c = d.calcs.get(j.id)!;
     const hasTwins = c.routeId != null && d.ctx.routeTwins.has(c.routeId);
     const rateMissing = c.customerRate == null;
+    // ขาที่วางบิลแล้ว แสดงตามที่พิมพ์ในใบ (ทะเบียน/เส้นทาง/น้ำหนัก ณ ตอนออกบิล) — ไม่ใช่ข้อมูลงานที่ถูกแก้ทีหลัง
+    const inv = d.invoiced.get(j.id);
+    const snap = inv && inv.priceUnit != null ? inv : null;
     lines.push({
       jobId: j.id,
       date: c.billingDate,
-      plate: j.headPlate.trim(),
+      plate: snap?.plate ?? j.headPlate.trim(),
       trailerPlate: j.trailerPlate?.trim() || null,
-      ticketOrigin: j.ticketOrigin ?? null,
-      origin: j.origin,
-      destination: j.destination,
-      weightOrigin: j.weightOrigin,
-      weightDest: j.weightDest,
+      ticketOrigin: snap ? snap.ticketOrigin : j.ticketOrigin ?? null,
+      origin: snap?.origin ?? j.origin,
+      destination: snap?.destination ?? j.destination,
+      weightOrigin: snap ? snap.weightOrigin : j.weightOrigin,
+      weightDest: snap ? snap.weightDest : j.weightDest,
       weightBasis,
       priceUnit: c.priceUnit,
       rate: rateOf(c.priceUnit, c.revenue, c.billingWeight, c.customerRate),

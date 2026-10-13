@@ -237,3 +237,29 @@ export function changeLines(changes: AdjustChange[]): string {
     .map((c) => `ลำดับ ${c.seq} · ${c.date} · ${c.plate} · ${c.what.join(" · ")} · ${money(c.oldAmount)} → ${money(c.newAmount)}`)
     .join("\n");
 }
+
+/**
+ * ใบวางบิลรุ่นแรกไม่ได้เก็บ น้ำหนัก/ราคา/ทะเบียน ณ ตอนออกบิล (priceUnit ว่าง) — PDF จึงเคยดึงค่าปัจจุบันมาพิมพ์
+ * แก้ราคา/ตั้งค่าใหม่ทีหลัง ใบเก่าเลยเปลี่ยนตาม · ตรงนี้ "แช่แข็ง" ขาเหล่านั้นครั้งเดียว ให้เหมือนใบรุ่นใหม่
+ *
+ * ยอดเงินของขา = ยอดที่บันทึกไว้ตอนออกบิลเสมอ (ไม่แตะ) · ถ้าข้อมูลปัจจุบันคิดได้ยอดเท่าเดิม = ข้อมูลยังเหมือนวันออกบิล เก็บตามนั้น
+ * ถ้ายอดไม่เท่า (ราคา/น้ำหนักถูกแก้ไปแล้ว) ย้อนราคาต่อหน่วยจากยอดในใบ ให้ ราคา × น้ำหนัก = ยอดในใบ — ใบที่พิมพ์ตรงกับเงินที่เรียกเก็บ
+ * ทำซ้ำได้ ไม่มีอะไรต้องแช่แข็งก็จบทันที
+ */
+export async function freezeLegacyInvoiceLines(): Promise<number> {
+  const legacy = await prisma.customerBillingLine.findMany({ where: { priceUnit: null } });
+  if (legacy.length === 0) return 0;
+  const live = await priceJobsLive(legacy.map((l) => l.jobId));
+  let n = 0;
+  for (const l of legacy) {
+    const v = live.get(l.jobId);
+    if (!v) continue; // งานถูกลบไปแล้ว — ไม่มีอะไรให้เก็บ
+    let rate = v.snap.rate;
+    if (Math.abs(v.exact - l.amount) >= 0.01) {
+      rate = v.snap.priceUnit === "ต่อเที่ยว" || !v.exact ? l.amount : rate != null ? Math.round((rate * l.amount * 10000) / v.exact) / 10000 : null;
+    }
+    await prisma.customerBillingLine.update({ where: { id: l.id }, data: { ...v.snap, rate } });
+    n++;
+  }
+  return n;
+}
