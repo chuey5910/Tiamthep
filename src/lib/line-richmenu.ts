@@ -5,7 +5,7 @@
  * ไลน์บอทหาเมนูนี้จากชื่อ (SHOP_RICHMENU_NAME) แล้วผูกให้ร้านที่ลงทะเบียนทีหลังเอง
  * การสร้าง/ผูกเมนูไม่ใช่การส่งข้อความ จึงไม่กินโควตาข้อความของไลน์
  *
- * ข้อความของปุ่มต้องตรงกับ MENU_ORDERS / MENU_PRICE / MENU_CONTACT ใน line-bot/Code.gs
+ * ข้อความของปุ่มต้องตรงกับ MENU_ORDERS / MENU_PRICE / MENU_CONTACT ใน line-bot/ShopOrders.gs
  */
 
 import { readFile } from "node:fs/promises";

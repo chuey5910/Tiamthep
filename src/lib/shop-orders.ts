@@ -1,7 +1,7 @@
 /**
  * ใบสั่งงานร้านค้า (PO) — ซ่อมบำรุง/อะไหล่ สั่งผ่านไลน์บอท
  *
- * ไลน์บอท (line-bot/Code.gs) เขียนแท็บ «ใบสั่งงานร้าน» ในชีต → เว็บดึงมาเก็บ (ShopOrder)
+ * ไลน์บอท (line-bot/ShopOrders.gs) เขียนแท็บ «ใบสั่งงานร้าน» ในชีต → เว็บดึงมาเก็บ (ShopOrder)
  * แอดมินตรวจแล้วกดลงบัญชี: รายการของรถ → ค่าใช้จ่ายรายคัน · รายการเข้าคลัง → รับเข้าคลัง
  *
  * หลักความถูกต้อง
@@ -15,7 +15,7 @@ import { parseDate } from "./date";
 import { poLineAmounts, round2 } from "./calc";
 import { batchWriteValues, readValues, sheetConfig } from "./google-sheets";
 
-// ── โครงแท็บ — ต้องตรงกับ PC / PO_HEADER ใน line-bot/Code.gs ──
+// ── โครงแท็บ — ต้องตรงกับ PC / PO_HEADER ใน line-bot/ShopOrders.gs ──
 export const PO_TAB = "ใบสั่งงานร้าน";
 export const SHOPS_TAB = "ร้านค้า";
 const LAST_COL = "S";
