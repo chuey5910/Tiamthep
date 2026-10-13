@@ -141,9 +141,13 @@ export function routeProblem(folder: string, route: ShipRoute | undefined, custo
  *   9 = ตั๋วแบบ blocks: Gate In = ตัวที่เวลาก่อนใน 2 ตัวที่อยู่ใกล้ป้ายที่สุด (OCR วางค่า Gate In ไว้เหนือป้ายได้)
  *       เดิมหยิบ "แรกสุดหลังป้าย" ได้ Gate Out 9 ใบ (ใบ R261000653 ข้ามเที่ยงคืน วันที่ผิดเป็น 7 ต.ค.)
  *       (ชีตจริง 374 รูป: เปลี่ยนเฉพาะ 9 ใบนั้น ตรงกับรูปทุกใบ · ศรีราชาไม่เปลี่ยน)
+ *  10 = ตั๋วแบบ blocks ตัดท่อนที่หัวตั๋ว (ชื่อบริษัท) เมื่อแต่ละท่อนมีเลขที่พอดี 1 เลข — OCR วาง "SUPPLIER" ไว้กลางใบถัดไปได้
+ *       (ทะเบียน/วันที่ของ R261000288 ไปตกใบ R261000350 · R261000382 ได้เวลา Port Out แทน Gate In)
+ *       ชีตจริง 447 รูป: เปลี่ยน 3 รูป จี สตีล ที่เคยผิด/ขาด ตรงรูปทุกใบ · ที่เหลือไม่เปลี่ยน
+ *       รูปที่บางใบยืนยันแล้ว อ่านใหม่เฉพาะใบที่ยังรอตรวจ (redoPendingOnly)
  * หลังจากนั้นตัวอ่านที่สอง (Tesseract) อ่านซ้ำเบื้องหลัง แล้วแทนที่ด้วยผลรวม 2 ตัวอ่าน (ShipPhoto.localStatus)
  */
-export const PARSER_VERSION = 9;
+export const PARSER_VERSION = 10;
 
 /**
  * รูปนี้เป็นสำเนาของรูปที่อ่านไปแล้วไหม (คัดลอก/อัปโหลดรูปเดิมซ้ำ → Drive ให้รหัสไฟล์ใหม่)
@@ -180,13 +184,16 @@ export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number
     create: { fileId: p.fileId, ...info },
   });
 
-  const seen = await prisma.shipTicket.findMany({ where: { fileId: p.fileId }, select: { status: true, parserVersion: true } });
+  const seen = await prisma.shipTicket.findMany({
+    where: { fileId: p.fileId },
+    select: { status: true, parserVersion: true, ticketNo: true, part: true },
+  });
   if (seen.length > 0) {
     // อ่านด้วยตัวอ่านรุ่นเก่า หรือเปลี่ยนแบบตั๋วของเส้นทางนี้ และทั้งรูปยังไม่มีใครตัดสิน → ลบแล้วอ่านใหม่
-    // รูปที่มีใบยืนยัน/ไม่ใช้ไปแล้ว ไม่แตะ (กันงานซ้ำ และไม่ทับสิ่งที่คนตัดสินไปแล้ว)
-    const stale = seen.some((x) => x.parserVersion < PARSER_VERSION) || before?.format !== f.key;
-    const redo = stale && seen.every((x) => x.status === "รอตรวจ");
-    if (!redo) return 0;
+    const stale = seen.some((x) => x.parserVersion < PARSER_VERSION && x.status === "รอตรวจ") || before?.format !== f.key;
+    if (!stale) return 0;
+    const decided = seen.filter((x) => x.status !== "รอตรวจ");
+    if (decided.length > 0) return redoPendingOnly(p, f, decided);
     await prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } });
   }
   // ตัวอ่านที่สองต้องอ่านรูปนี้ (ใหม่) ด้วยแบบตั๋วเดียวกัน — แบบที่ไม่มีจุดยึดแบ่งช่อง ใช้ตัวอ่านเดียว ไม่ต้องเข้าคิว
@@ -195,6 +202,25 @@ export async function ingestPhoto(p: ShipPhoto, f: TicketFormat): Promise<number
     data: { format: f.key, localStatus: f.localAnchor ? "รอ" : "ข้าม", localError: null, localTries: 0 },
   });
   return createTickets(p, parseTicketPhoto(p.ocr, f).map((t) => ({ ...t, readNote: t.note ?? null })));
+}
+
+/**
+ * รูปที่บางใบยืนยัน/ไม่ใช้ไปแล้ว — อ่านใหม่เฉพาะใบที่ยังรอตรวจ ใบที่คนตัดสินแล้วไม่แตะ (กันงานซ้ำ)
+ * จับใบด้วยเลขที่ตั๋ว: ทุกใบที่อ่านใหม่ต้องมีเลขที่ และเลขที่ของใบที่ตัดสินแล้วต้องอ่านเจอ ไม่งั้นไม่แตะเลย (ไม่เดา)
+ */
+async function redoPendingOnly(p: ShipPhoto, f: TicketFormat, decided: { ticketNo: string | null; part: number }[]): Promise<number> {
+  const parsed = parseTicketPhoto(p.ocr, f);
+  const decidedNos = new Set(decided.map((d) => d.ticketNo));
+  if (parsed.some((t) => !t.ticketNo) || decided.some((d) => !d.ticketNo || !parsed.some((t) => t.ticketNo === d.ticketNo))) return 0;
+  const fresh = parsed.filter((t) => !decidedNos.has(t.ticketNo));
+  if (fresh.length === 0) return 0;
+  let next = Math.max(...decided.map((d) => d.part));
+  const rows = ticketRows(p, fresh.map((t) => ({ ...t, readNote: t.note ?? null }))).map((r) => ({ ...r, part: ++next }));
+  await prisma.$transaction([
+    prisma.shipTicket.deleteMany({ where: { fileId: p.fileId, status: "รอตรวจ" } }),
+    prisma.shipTicket.createMany({ data: rows }),
+  ]);
+  return fresh.length;
 }
 
 /** สร้างแถวตั๋วรอตรวจของรูปหนึ่ง — อ่านไม่ออกเลยสักใบ ก็ยังต้องมีแถวให้คนเห็น ไม่งั้นรูปหายเงียบ */

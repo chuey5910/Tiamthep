@@ -41,9 +41,10 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
   });
   // งานที่ยืนยันไปแล้วแต่ถูกลบทิ้งทีหลัง — ให้เอาตั๋วกลับมาตรวจใหม่ได้
   const jobIds = recent.map((t) => t.jobId).filter((n): n is number => n != null);
-  const liveJobs = new Set(
-    (await prisma.job.findMany({ where: { id: { in: jobIds } }, select: { id: true } })).map((j) => j.id),
-  );
+  // ทะเบียน/วันที่ที่บันทึกจริงอยู่ในงาน (คนอาจเลือกทะเบียน/แก้วันที่ตอนยืนยัน) — โชว์จากงาน ไม่ใช่จากที่ OCR อ่านได้
+  const jobRows = await prisma.job.findMany({ where: { id: { in: jobIds } }, select: { id: true, headPlate: true, loadDate: true } });
+  const liveJobs = new Set(jobRows.map((j) => j.id));
+  const jobById = new Map(jobRows.map((j) => [j.id, j]));
 
   return (
     <>
@@ -153,11 +154,15 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
                 </tr>
               </thead>
               <tbody>
-                {recent.map((t) => (
+                {recent.map((t) => {
+                  const job = t.jobId != null ? jobById.get(t.jobId) : undefined;
+                  const plate = job?.headPlate ?? (route?.plateFrom === "ticket" ? t.plateOnTicket : t.folderPlate);
+                  const date = job?.loadDate ?? t.ticketDate;
+                  return (
                   <tr key={t.id}>
                     <td>{t.ticketNo ?? "-"}</td>
-                    <td>{route?.plateFrom === "ticket" ? (t.plateOnTicket ?? "-") : t.folderPlate}</td>
-                    <td>{t.ticketDate ? formatThaiDate(t.ticketDate) : "-"}</td>
+                    <td>{plate ?? "-"}</td>
+                    <td className="whitespace-nowrap">{date ? formatThaiDate(date) : "-"}</td>
                     <td>
                       {t.status === "ยืนยันแล้ว" && t.jobId != null && liveJobs.has(t.jobId) ? (
                         <a className="font-bold text-emerald-700 underline" href={`/entry/jobs?edit=${t.jobId}`}>
@@ -178,7 +183,8 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

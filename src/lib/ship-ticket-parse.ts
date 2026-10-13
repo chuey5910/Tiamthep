@@ -565,7 +565,26 @@ function analyse(t: string, f: TicketFormat) {
 
 const DT_ANY = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/g;
 
+/**
+ * ตัดท่อนที่หัวตั๋ว (ชื่อบริษัทอยู่บนสุดของทุกใบ) — ใช้ได้เมื่อแต่ละท่อนมีเลขที่ตั๋วพอดี 1 เลข
+ * แม่นกว่าคำท้ายใบ: OCR วาง "SUPPLIER" ไว้กลางใบถัดไปได้ (เคยเจอ: ทะเบียน/วันที่ของ R261000288 ไปตกอยู่ใบ R261000350)
+ */
+function splitAtHeaders(t: string, f: TicketFormat): string[] | null {
+  if (!f.mustContain || !f.noPattern) return null;
+  const heads = [...t.matchAll(new RegExp(f.mustContain.re.source, "gi"))].map((m) => t.lastIndexOf("\n", m.index!) + 1);
+  if (heads.length < 2) return null;
+  const cuts = [0, ...heads.slice(1), t.length];
+  const parts = cuts.slice(0, -1).map((c, i) => t.slice(c, cuts[i + 1]));
+  const nosIn = (s: string) => new Set([...s.matchAll(new RegExp(f.noPattern!.find.source, "g"))].map((m) => m[1]));
+  const all = nosIn(t);
+  const each = parts.map(nosIn);
+  if (each.some((s) => s.size !== 1) || new Set(each.flatMap((s) => [...s])).size !== all.size) return null;
+  return parts;
+}
+
 function parseBlocks(t: string, f: TicketFormat): ParsedTicket[] {
+  const byHeader = splitAtHeaders(t, f);
+  if (byHeader) return byHeader.flatMap((part) => parseBlock(part, f));
   // ตัดท่อนที่คำท้ายใบ (ข้อความหลังใบสุดท้ายเป็นเศษ) — ไม่มีคำท้ายเลย = ทั้งรูปเป็นท่อนเดียว
   const parts: string[] = [];
   let from = 0;
