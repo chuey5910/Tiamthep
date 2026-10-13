@@ -6,7 +6,6 @@ import { isAdmin } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { poLineAmounts, round2 } from "@/lib/calc";
 import { ANS, POS, PO_STOCK, syncShopOrders, thaiDay, writeOrderToSheet } from "@/lib/shop-orders";
-import { installShopMenu } from "@/lib/line-richmenu";
 
 type Result = { ok: true; message: string; warning?: string } | { ok: false; error: string };
 
@@ -166,17 +165,4 @@ export async function postOrder(id: string, lines: PostLine[]): Promise<Result> 
     stockSum ? `รับเข้าคลัง ${stockSum.toLocaleString("th-TH")} บาท` : "",
   ].filter(Boolean).join(" · ");
   return { ok: true, message: `✅ ลงบัญชี ${id} แล้ว — ${msg}`, warning };
-}
-
-/** ติดตั้ง/ติดตั้งใหม่ เมนูร้านในไลน์ */
-export async function installMenu(): Promise<Result> {
-  const who = await admin();
-  if ("error" in who) return { ok: false, error: who.error };
-  try {
-    const r = await installShopMenu();
-    revalidatePath("/stock/orders");
-    return { ok: true, message: `✅ ติดตั้งเมนูร้านแล้ว — ผูกให้ร้านที่ลงทะเบียนแล้ว ${r.linked} ร้าน (ร้านที่ลงทะเบียนทีหลัง บอทผูกให้เอง)` };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
 }

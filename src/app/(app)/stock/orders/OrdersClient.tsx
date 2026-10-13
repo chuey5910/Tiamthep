@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { SearchSelect, type SearchOption } from "@/components/SearchSelect";
-import { cancelOrder, installMenu, postOrder, refreshOrders, type PostLine } from "./actions";
+import { cancelOrder, postOrder, refreshOrders, type PostLine } from "./actions";
 
 export type PostOptions = { plates: string[]; categories: string[]; items: SearchOption[] };
 export type PostDefaults = { kind: "vehicle" | "stock"; plate: string; category: string; itemCode: string };
@@ -69,31 +69,6 @@ export function CancelButton({ id }: { id: string }) {
         {pending ? "⏳" : "ยกเลิก"}
       </button>
     </>
-  );
-}
-
-export function InstallMenuButton({ installed }: { installed: boolean }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
-  return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        className={`btn ${installed ? "btn-ghost" : "btn-primary"}`}
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            const r = await installMenu();
-            setMsg(r.ok ? r.message : `❌ ${r.error}`);
-            router.refresh();
-          })
-        }
-      >
-        {pending ? "⏳ กำลังติดตั้ง…" : installed ? "🔁 ติดตั้งเมนูร้านใหม่" : "📲 ติดตั้งเมนูร้านในไลน์"}
-      </button>
-      <Msg text={msg} />
-    </div>
   );
 }
 

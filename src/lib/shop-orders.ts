@@ -18,11 +18,11 @@ import { batchWriteValues, readValues, sheetConfig } from "./google-sheets";
 // ── โครงแท็บ — ต้องตรงกับ PC / PO_HEADER ใน line-bot/ShopOrders.gs ──
 export const PO_TAB = "ใบสั่งงานร้าน";
 export const SHOPS_TAB = "ร้านค้า";
-const LAST_COL = "S";
+const LAST_COL = "U";
 const C = {
   id: 0, seq: 1, at: 2, staff: 3, staffName: 4, shop: 5, shopName: 6, target: 7,
   item: 8, qty: 9, unit: 10, status: 11, answer: 12, price: 13, answeredAt: 14, pricedAt: 15,
-  bill: 16, result: 17, raw: 18,
+  bill: 16, result: 17, raw: 18, operator: 19, orderedBy: 20,
 } as const;
 const STATUS_COL = "L";
 const RESULT_COL = "R";
@@ -35,7 +35,8 @@ export const POS = {
   POSTED: "ลงบัญชีแล้ว",
   CANCELLED: "ยกเลิก",
 } as const;
-export const ANS = { OK: "ทำได้", NO: "ไม่มีของ" } as const;
+/** FOUND = ร้านแจ้งความเสียหายที่ตรวจพบเพิ่ม — แค่บันทึกไว้ ไม่ใช่ของที่สั่ง ไม่คิดราคา ลงบัญชีไม่ได้ */
+export const ANS = { OK: "ทำได้", NO: "ไม่มีของ", FOUND: "ตรวจพบเพิ่ม" } as const;
 export const PO_STOCK = "คลัง";
 
 /** "13/10/2026 14:05" (เวลาไทย) → Date · ปี พ.ศ. แปลงให้ · อ่านไม่ได้ = null */
@@ -123,6 +124,8 @@ export async function ingestPoRows(values: string[][]): Promise<{ orders: number
       pricedAt: parseSheetDateTime(v(C.pricedAt)),
       billUrls: v(C.bill) || null,
       rawText: v(C.raw) || null,
+      operatorName: v(C.operator) || null,
+      orderedBy: v(C.orderedBy) || null,
     };
     const ex = exById.get(id);
     const items = rows.map((r, i) => ({
@@ -206,9 +209,10 @@ export function orderState(o: {
   postedAt: Date | null;
   items: { answer: string | null; shopPrice: number | null; expenseId: number | null; stockInId: number | null }[];
 }): { key: StateKey; icon: string; label: string; tone: string; note?: string } {
-  const ok = o.items.filter((i) => i.answer === ANS.OK);
+  const main = o.items.filter((i) => i.answer !== ANS.FOUND); // ไม่นับรายการที่ร้านตรวจพบเพิ่ม (ไม่ได้สั่ง)
+  const ok = main.filter((i) => i.answer === ANS.OK);
   const posted = ok.filter((i) => i.expenseId != null || i.stockInId != null).length;
-  const part = ok.length < o.items.length && ok.length > 0 ? `ทำได้ ${ok.length} จาก ${o.items.length} รายการ` : undefined;
+  const part = ok.length < main.length && ok.length > 0 ? `ทำได้ ${ok.length} จาก ${main.length} รายการ` : undefined;
   if (o.status === POS.CANCELLED) return { key: "cancelled", icon: "🚫", label: "ยกเลิก", tone: "text-slate-500" };
   if (o.status === POS.WAIT) return { key: "wait", icon: "⏳", label: "รอร้านตอบ", tone: "text-amber-700" };
   if (o.status === POS.NONE) return { key: "none", icon: "❌", label: "ร้านไม่มีของ — ปิดใบ", tone: "text-red-700" };

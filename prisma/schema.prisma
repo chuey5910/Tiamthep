@@ -762,6 +762,10 @@ model ShopOrder {
   /// ลิงก์รูปบิลที่ร้านส่ง (คั่นบรรทัด)
   billUrls    String?
   rawText     String?
+  /// คนดำเนินการ — คนที่เอารถเข้าร้าน/ไปรับของ (ร้านใช้ยืนยันตัว)
+  operatorName String?
+  /// คนสั่ง ตามที่พิมพ์ในข้อความ (ไม่ได้พิมพ์ = ชื่อพนักงานที่ส่งข้อความ)
+  orderedBy    String?
   postedAt    DateTime?
   postedBy    String?
   syncedAt    DateTime  @default(now())

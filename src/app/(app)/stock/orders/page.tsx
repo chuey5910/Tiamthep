@@ -6,9 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { readRange, readString, type SearchParams } from "@/lib/params";
 import { ANS, PO_STOCK, thaiDay, loadOrders, orderState, shopTotal, syncShopOrdersIfStale } from "@/lib/shop-orders";
-import { shopMenuStatus } from "@/lib/line-richmenu";
 import { round2 } from "@/lib/calc";
-import { CancelButton, InstallMenuButton, PostButton, RefreshButton, type PostDefaults, type PostOptions } from "./OrdersClient";
+import { CancelButton, PostButton, RefreshButton, type PostDefaults, type PostOptions } from "./OrdersClient";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +79,6 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
       }
     }
   }
-  const menu = admin ? await shopMenuStatus() : null;
 
   return (
     <>
@@ -145,11 +143,21 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                         {formatThaiDate(thaiDay(o.orderedAt))}
                         <div className="text-[12px] text-slate-500">{formatThaiDateTime(o.orderedAt).split(" ").pop()} น.</div>
                       </td>
-                      <td className="min-w-[5.5rem]">{o.staffName || o.staffCode}</td>
-                      <td className="min-w-[7.5rem]">{o.shopName}</td>
+                      <td className="min-w-[5.5rem]">
+                        {o.orderedBy || o.staffName || o.staffCode}
+                        {o.operatorName && <div className="text-[12px] text-slate-500">คนดำเนินการ: <b className="text-slate-700">{o.operatorName}</b></div>}
+                      </td>
+                      <td className="min-w-[6rem]">{o.shopName}</td>
                       <td className="whitespace-nowrap">{o.target === PO_STOCK ? "📦 เข้าคลัง" : `🚚 รถ ${o.target}`}</td>
-                      <td className="min-w-[13rem] text-left text-[13px] leading-relaxed">
+                      <td className="min-w-[12rem] text-left text-[13px] leading-relaxed">
                         {o.items.map((it) => {
+                          if (it.answer === ANS.FOUND) {
+                            return (
+                              <div key={it.id} className="text-amber-700">
+                                🔍 {it.description} · {n(it.qty)} {it.unit ?? ""} — ร้านตรวจพบเพิ่ม (ยังไม่ได้สั่ง)
+                              </div>
+                            );
+                          }
                           const mark = it.answer === ANS.OK ? "✅" : it.answer === ANS.NO ? "❌" : `${it.seq}.`;
                           const posted = it.expenseId != null ? ` · 📗 ค่าใช้จ่ายรถ ${it.postedTarget}` : it.stockInId != null ? ` · 📗 เข้าคลัง ${it.postedItemCode}` : "";
                           return (
@@ -161,7 +169,7 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
                           );
                         })}
                       </td>
-                      <td className={`min-w-[8rem] text-[13px] font-bold ${o.view.tone}`}>
+                      <td className={`min-w-[7rem] text-[13px] font-bold ${o.view.tone}`}>
                         <div>
                           {o.view.icon} {o.view.label}
                         </div>
@@ -236,22 +244,15 @@ export default async function ShopOrdersPage({ searchParams }: { searchParams: P
           <ul className="space-y-1 text-[13px] leading-relaxed text-slate-700">
             <li>
               – <b>ร้าน / พนักงานสั่งของ:</b> กรอกรหัส+ชื่อ ในแท็บ «ร้านค้า» / «พนักงานสั่งของ» ของชีตสั่งงาน แล้วให้แต่ละคนพิมพ์{" "}
-              <b>ลงทะเบียน &lt;รหัส&gt;</b> ในไลน์บริษัท (ครั้งแรกกดเมนู 🚚 ไลน์บอท › ④ ในชีตเพื่อสร้างแท็บ)
+              <b>ลงทะเบียน &lt;รหัส&gt;</b> ในไลน์ «จัดซื้อ เทียมเทพ»
             </li>
             <li>
-              – <b>เมนูร้าน:</b>{" "}
-              {menu && "error" in menu ? (
-                <span className="font-bold text-amber-700">⚠️ ตรวจไม่ได้ — {menu.error}</span>
-              ) : menu?.installed ? (
-                <span className="font-bold text-emerald-700">✅ ติดตั้งแล้ว</span>
-              ) : (
-                <span className="font-bold text-red-700">❌ ยังไม่ได้ติดตั้ง — ร้านต้องพิมพ์ «ออเดอร์» / «แจ้งราคา» เองแทนการกดเมนู</span>
-              )}
+              – <b>คำสั่งในไลน์:</b> #สั่ง · #สั่งเข้าคลัง · #สถานะ · #ยกเลิก · #ช่วยเหลือ — « / » คั่นชื่อรายการกับจำนวนเสมอ
+            </li>
+            <li>
+              – <b>เมนูร้าน</b> ตั้งไว้ใน LINE Official Account Manager ของบัญชีจัดซื้อ (ริชเมนู) — แก้รูป/ปุ่มที่นั่น
             </li>
           </ul>
-          <div className="mt-3">
-            <InstallMenuButton installed={!!menu && "installed" in menu && menu.installed} />
-          </div>
         </Card>
       )}
     </>
