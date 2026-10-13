@@ -10,7 +10,7 @@
  * PDF จึงตรงกับหน้าจอและ Excel ทุกสตางค์
  */
 
-import { allocateSatang, billRate, billingLines, billingTotals } from "./billing";
+import { allocateSatang, billRate, billingLines, billingTotals, rateOf } from "./billing";
 import { formatThaiDate } from "./date";
 import { priceJobsLive, storedSnap, type LineSnap } from "./invoice-adjust";
 import { prisma } from "./prisma";
@@ -144,8 +144,14 @@ export async function issuedInvoiceDoc(id: number): Promise<InvoiceDoc | null> {
 
   const needLive = inv.lines.filter((l) => !storedSnap(l)).map((l) => l.jobId);
   const live = await priceJobsLive(needLive);
+  // ใบรุ่นแรก (ไม่ได้เก็บค่าตอนออกบิล): ราคาต่อหน่วยย้อนจากยอดในใบ ÷ น้ำหนัก — ไม่ดึงราคาจากการตั้งค่าใหม่ (อ่านอย่างเดียว ไม่เขียนลงใบ)
+  const basisOf = (s: LineSnap) => (inv.customer.weightBasis === "น้ำหนักต้นทาง" ? s.weightOrigin : s.weightDest) ?? 0;
+  const legacy = (l: (typeof inv.lines)[number]): LineSnap | null => {
+    const s = live.get(l.jobId)?.snap;
+    return s ? { ...s, rate: rateOf(s.priceUnit, l.amount, basisOf(s), null) } : null;
+  };
   const lines = inv.lines
-    .map((l) => ({ amount: l.amount, jobId: l.jobId, snap: storedSnap(l) ?? live.get(l.jobId)?.snap ?? null }))
+    .map((l) => ({ amount: l.amount, jobId: l.jobId, snap: storedSnap(l) ?? legacy(l) }))
     .filter((l): l is { amount: number; jobId: number; snap: LineSnap } => l.snap != null)
     .sort((a, b) => a.snap.date.getTime() - b.snap.date.getTime() || a.jobId - b.jobId);
   const c = inv.customer;

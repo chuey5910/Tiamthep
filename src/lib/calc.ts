@@ -336,7 +336,8 @@ export function applyInvoiced(c: JobCalc, l: InvoicedLine): JobCalc {
     revenue: l.amount,
     billingDate: l.date ?? c.billingDate,
     priceUnit: l.priceUnit ?? c.priceUnit,
-    customerRate: l.priceUnit != null ? l.rate : c.customerRate,
+    // ใบรุ่นแรกไม่ได้เก็บราคาต่อหน่วย → ไม่ใช้ราคาจากการตั้งค่าปัจจุบัน ให้ย้อนจากยอดในใบ (rateOf) แทน
+    customerRate: l.priceUnit != null ? l.rate : null,
     invoiceNo: l.invoiceNo,
   };
 }
