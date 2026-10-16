@@ -1,4 +1,5 @@
 import { Card, Empty, Formula, PageHeader } from "@/components/ui";
+import { Pager, pageSlice } from "@/components/Pager";
 import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
@@ -34,11 +35,16 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
   const rows = route ? data.rows.filter((x) => x.routeFolder === route.folder) : [];
   // รูปซ้ำที่ข้าม — ของเส้นทางที่กำลังตรวจ (ไม่มีตั๋วรอตรวจเลย = ทุกเส้นทาง)
   const skipped = await skippedPhotos(route?.folder);
-  const recent = await prisma.shipTicket.findMany({
-    where: { status: { not: "รอตรวจ" }, ...(route ? { routeFolder: route.folder } : {}) },
-    orderBy: { decidedAt: "desc" },
-    take: 30,
-  });
+  // ตั๋วที่ตรวจแล้วทั้งหมดของเส้นทางนี้ (ไม่ตัดจำนวน) — แบ่งหน้าแสดง ล่าสุดอยู่บน
+  const decided = pageSlice(
+    await prisma.shipTicket.findMany({
+      where: { status: { not: "รอตรวจ" }, ...(route ? { routeFolder: route.folder } : {}) },
+      orderBy: { decidedAt: "desc" },
+    }),
+    200,
+    sp.page,
+  );
+  const recent = decided.rows;
   // งานที่ยืนยันไปแล้วแต่ถูกลบทิ้งทีหลัง — ให้เอาตั๋วกลับมาตรวจใหม่ได้
   const jobIds = recent.map((t) => t.jobId).filter((n): n is number => n != null);
   // ทะเบียน/วันที่ที่บันทึกจริงอยู่ในงาน (คนอาจเลือกทะเบียน/แก้วันที่ตอนยืนยัน) — โชว์จากงาน ไม่ใช่จากที่ OCR อ่านได้
@@ -140,7 +146,7 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
       )}
 
       {recent.length > 0 && (
-        <Card title={`ตรวจแล้วล่าสุด${route ? ` · ${route.origin ?? route.folder} → ${route.destination ?? "❓"}` : ""}`} bodyClass="p-0">
+        <Card title={`ตรวจแล้ว ${decided.total.toLocaleString("th-TH")} ใบ (ล่าสุดอยู่บน)${route ? ` · ${route.origin ?? route.folder} → ${route.destination ?? "❓"}` : ""}`} bodyClass="p-0">
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
@@ -188,6 +194,7 @@ export default async function ShipTicketsPage({ searchParams }: { searchParams: 
               </tbody>
             </table>
           </div>
+          <Pager {...decided} qs={route ? `route=${encodeURIComponent(route.folder)}` : ""} unit="ใบ" />
         </Card>
       )}
     </>

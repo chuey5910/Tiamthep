@@ -23,13 +23,10 @@ export type ExportTable = {
   fileBase: string;
 };
 
-/** กันไฟล์ใหญ่เกินจนเครื่องค้าง — ตารางในระบบนี้ไม่มีตารางไหนใกล้ตัวเลขนี้ */
-const MAX_ROWS = 20000;
-
 export async function crudExportTable(resource: Resource, searchParams: SearchParams): Promise<ExportTable> {
   const [options, cq] = await Promise.all([loadOptions(resource), crudQuery(resource, searchParams)]);
   const model = (prisma as never as Record<string, { findMany: (a: unknown) => Promise<Record<string, unknown>[]> }>)[resource.model];
-  const data = await model.findMany({ where: cq.where, orderBy: resource.orderBy, take: MAX_ROWS });
+  const data = await model.findMany({ where: cq.where, orderBy: resource.orderBy });
 
   const fields = resource.fields.filter((f) => !f.hideInTable);
   const label = (field: string, value: string) => options[field]?.find((o) => o.value === value)?.label ?? value;

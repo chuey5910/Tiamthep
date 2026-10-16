@@ -79,7 +79,7 @@ export default async function Dashboard() {
           bodyClass="p-4"
         >
           <ul className="space-y-1.5 text-[13px]">
-            {issues.slice(0, 8).map(([msg, count]) => (
+            {issues.map(([msg, count]) => (
               <li key={msg} className="flex items-start gap-2">
                 <Badge tone="warn">{count} ขา</Badge>
                 <span className="text-slate-700">{msg}</span>
@@ -129,7 +129,7 @@ export default async function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vehicles.slice(0, 12).map((v) => (
+                  {vehicles.map((v) => (
                     <tr key={v.plate}>
                       <td className="font-medium">{v.plate}</td>
                       <td className="num">{v.legs}</td>
@@ -170,7 +170,7 @@ export default async function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {alerts.slice(0, 30).map((a, i) => (
+                  {alerts.map((a, i) => (
                     <tr key={i}>
                       <td className="text-slate-500">{a.kind}</td>
                       <td className="font-medium">{a.subject}</td>

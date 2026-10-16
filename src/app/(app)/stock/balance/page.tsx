@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
+import { Pager, pageSlice } from "@/components/Pager";
+import type { SearchParams } from "@/lib/params";
 import { baht, num } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { stockBalance } from "@/lib/reports";
@@ -7,13 +9,14 @@ import { formatThaiDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
-export default async function StockBalancePage() {
+export default async function StockBalancePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const sp = await searchParams;
   const rows = await stockBalance();
 
   const [ins, outs, bills, stockOuts] = await Promise.all([
     prisma.stockIn.aggregate({ _sum: { qty: true } }),
     prisma.stockOut.aggregate({ _sum: { cost: true } }),
-    prisma.vendorBill.findMany({ orderBy: [{ date: "desc" }], take: 200 }),
+    prisma.vendorBill.findMany({ orderBy: [{ date: "desc" }] }), // ครบทุกใบ — ตัวนับ «ไม่ตรง» คิดจากทุกใบ
     prisma.stockOut.findMany({ select: { workOrder: true, vendor: true, qty: true, plate: true } }),
   ]);
 
@@ -41,6 +44,7 @@ export default async function StockBalancePage() {
   });
 
   const mismatches = checks.filter((c) => c.status !== "ตรงกัน");
+  const shownChecks = pageSlice(checks, 300, sp.page);
   const needsReorder = rows.filter((r) => r.needsReorder);
 
   return (
@@ -151,7 +155,7 @@ export default async function StockBalancePage() {
                 </tr>
               </thead>
               <tbody>
-                {checks.map((c) => (
+                {shownChecks.rows.map((c) => (
                   <tr key={c.id}>
                     <td className="whitespace-nowrap">{formatThaiDate(c.date)}</td>
                     <td className="font-mono text-[12px]">{c.workOrder}</td>
@@ -178,6 +182,7 @@ export default async function StockBalancePage() {
             </table>
           </div>
         )}
+        <Pager {...shownChecks} qs="" unit="ใบ" />
       </Card>
     </>
   );

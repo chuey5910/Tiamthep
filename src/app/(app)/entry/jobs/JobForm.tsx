@@ -238,25 +238,9 @@ export function JobRowActions({ id, canReturn }: { id: number; canReturn: boolea
   const [pending, start] = useTransition();
 
   return (
-    <div className="flex gap-1">
-      {canReturn && (
-        <button
-          type="button"
-          className="btn btn-ghost px-2 py-1 text-[12px]"
-          title="สร้างขากลับ: สลับต้นทาง-ปลายทาง ใช้รหัสรอบเดิม"
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              const res = await createReturnLeg(id);
-              if (!res.ok) alert(res.error);
-              else router.refresh();
-            })
-          }
-        >
-          + ขากลับ
-        </button>
-      )}
-      <a href={`?edit=${id}`} className="btn btn-ghost px-2 py-1 text-[12px]">
+    // แก้ไข | ลบ เต็มช่อง · «+ ขากลับ» เต็มแถวล่าง — ช่องกว้างเท่า 2 ปุ่ม ไม่เหลือที่ว่างขวา
+    <div className="grid grid-cols-[repeat(2,minmax(max-content,1fr))] gap-1">
+      <a href={`?edit=${id}`} className="btn btn-ghost justify-center px-2 py-1 text-[12px]">
         แก้ไข
       </a>
       <button
@@ -274,6 +258,23 @@ export function JobRowActions({ id, canReturn }: { id: number; canReturn: boolea
       >
         ลบ
       </button>
+      {canReturn && (
+        <button
+          type="button"
+          className="btn btn-ghost col-span-2 px-2 py-1 text-[12px]"
+          title="สร้างขากลับ: สลับต้นทาง-ปลายทาง ใช้รหัสรอบเดิม"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const res = await createReturnLeg(id);
+              if (!res.ok) alert(res.error);
+              else router.refresh();
+            })
+          }
+        >
+          + ขากลับ
+        </button>
+      )}
     </div>
   );
 }

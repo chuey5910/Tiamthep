@@ -1,4 +1,6 @@
 import { Badge, Card, Empty, Formula, PageHeader } from "@/components/ui";
+import { Pager, pageSlice } from "@/components/Pager";
+import type { SearchParams } from "@/lib/params";
 import { formatThaiDate } from "@/lib/date";
 import { sheetConfig } from "@/lib/google-sheets";
 import { num } from "@/lib/format";
@@ -11,16 +13,22 @@ export const dynamic = "force-dynamic";
  * งานจากไลน์ — ปลายทางของชีตสั่งงานคนขับ
  * เว็บเป็นฝ่ายดึงข้อมูล (pull) เฉพาะแถวที่พนักงานตรวจและกด «ยืนยัน» ในชีตแล้วเท่านั้น
  */
-export default async function LineJobsPage() {
+export default async function LineJobsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const sp = await searchParams;
   const cfg = sheetConfig();
   const configured = !("error" in cfg);
 
-  const recent = await prisma.job.findMany({
-    where: { sheetRef: { not: null } },
-    orderBy: [{ createdAt: "desc" }],
-    take: 50,
-    include: { customer: true },
-  });
+  // งานจากชีตทั้งหมด (ไม่ตัดจำนวน) — แบ่งหน้าแสดง ล่าสุดอยู่บน
+  const pulled = pageSlice(
+    await prisma.job.findMany({
+      where: { sheetRef: { not: null } },
+      orderBy: [{ createdAt: "desc" }],
+      include: { customer: true },
+    }),
+    200,
+    sp.page,
+  );
+  const recent = pulled.rows;
 
   return (
     <>
@@ -56,7 +64,7 @@ export default async function LineJobsPage() {
         )}
       </Card>
 
-      <Card title="งานที่ดึงมาจากชีตล่าสุด" bodyClass="p-0">
+      <Card title={`งานที่ดึงมาจากชีต ${pulled.total.toLocaleString("th-TH")} ขา (ล่าสุดอยู่บน)`} bodyClass="p-0">
         {recent.length === 0 ? (
           <Empty>ยังไม่เคยดึงงานจากชีต</Empty>
         ) : (
@@ -105,6 +113,7 @@ export default async function LineJobsPage() {
             </table>
           </div>
         )}
+        <Pager {...pulled} qs="" unit="ขา" />
       </Card>
     </>
   );

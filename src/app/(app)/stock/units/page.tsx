@@ -1,4 +1,5 @@
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
+import { Pager, pageSlice } from "@/components/Pager";
 import { SearchFilter } from "@/components/Filters";
 import { formatThaiDate, toInputDate } from "@/lib/date";
 import { baht } from "@/lib/format";
@@ -24,8 +25,8 @@ export default async function SerialUnitsPage({ searchParams }: { searchParams: 
             ],
           }
         : {},
+      // ดึงครบทุกชิ้น — ตัวนับสถานะคิดจากทุกชิ้น · ตารางแบ่งหน้าแทน
       orderBy: [{ receivedAt: "desc" }, { code: "desc" }],
-      take: 500,
       include: { item: true },
     }),
     prisma.inventoryItem.findMany({ where: { trackingType: "รายชิ้น" }, orderBy: { code: "asc" } }),
@@ -61,6 +62,7 @@ export default async function SerialUnitsPage({ searchParams }: { searchParams: 
     installed: units.filter((u) => statusOf(u.code) === "ติดตั้งอยู่").length,
     waiting: units.filter((u) => statusOf(u.code) === "ถอดออกแล้ว — รอขาย").length,
   };
+  const shown = pageSlice(units, 300, sp.page);
   const soldValue = scraps
     .filter((s) => s.status === "ขายแล้ว")
     .reduce((a, s) => a + (s.salePrice ?? 0), 0);
@@ -124,7 +126,7 @@ export default async function SerialUnitsPage({ searchParams }: { searchParams: 
                 </tr>
               </thead>
               <tbody>
-                {units.map((u) => {
+                {shown.rows.map((u) => {
                   const s = statusOf(u.code);
                   const install = installedBy.get(u.code);
                   return (
@@ -152,6 +154,7 @@ export default async function SerialUnitsPage({ searchParams }: { searchParams: 
             </table>
           </div>
         )}
+        <Pager {...shown} qs={q ? `q=${encodeURIComponent(q)}` : ""} unit="ชิ้น" />
       </Card>
 
       <Card

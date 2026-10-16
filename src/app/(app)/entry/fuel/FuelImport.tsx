@@ -115,13 +115,13 @@ function ImportResult({ result }: { result: ImportPreview }) {
           <b>ต้องเพิ่มในฐานข้อมูลก่อน ตัวเลขจึงจะเข้ารายงานครบ</b>
           {result.unknownPlates.length > 0 && (
             <div className="mt-0.5">
-              ทะเบียนที่ยังไม่มี ({result.unknownPlates.length} คัน): {result.unknownPlates.slice(0, 20).join(", ")}
+              ทะเบียนที่ยังไม่มี ({result.unknownPlates.length} คัน): {result.unknownPlates.join(", ")}
               {result.unknownPlates.length > 20 && ` และอีก ${result.unknownPlates.length - 20} คัน`}
             </div>
           )}
           {result.unknownDrivers.length > 0 && (
             <div className="mt-0.5">
-              รหัส พขร. ที่ยังไม่มี ({result.unknownDrivers.length} คน): {result.unknownDrivers.slice(0, 20).join(", ")}
+              รหัส พขร. ที่ยังไม่มี ({result.unknownDrivers.length} คน): {result.unknownDrivers.join(", ")}
               {result.unknownDrivers.length > 20 && ` และอีก ${result.unknownDrivers.length - 20} คน`}
             </div>
           )}
