@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FitScreen } from "@/components/FitScreen";
+import { FitText } from "@/components/FitText";
 import { requireAdmin } from "@/lib/auth";
 import { endOfMonth, utcDate } from "@/lib/date";
 import { round2 } from "@/lib/calc";
@@ -14,8 +15,6 @@ export const dynamic = "force-dynamic";
 const M = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const fmt = (n: number) => Math.round(n).toLocaleString("th-TH");
 const signed = (n: number) => `${n < 0 ? "−" : ""}${fmt(Math.abs(n))}`;
-/** ตัวเลขยาวเกินกล่อง (หลักสิบล้นขึ้นไป) — ย่อตัวอักษรลงตามความยาว ไม่ให้ล้นกล่อง */
-const shrink = (text: string, base: number, fits: number) => ({ fontSize: text.length > fits ? (base * fits) / text.length : base });
 
 type Month = { revenue: number; cost: number; profit: number };
 
@@ -69,16 +68,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const monthHref = (i: number) => `/reports/company?year=${year}&month=${i + 1}`;
   const isNow = (i: number) => year === curY && i + 1 === curM;
 
+  // ช่องเดือนที่มีตัวเลขกว้างกว่า ช่องที่ไม่มีรายการ/ยังไม่ถึงแคบลง — ตัวเลขจะได้ใหญ่ อ่านง่าย
+  const GAP = 5;
+  const weights = months.map((m) => (has(m) ? 1 : 0.5));
+
   const ring = (p: number) => {
     const r = 40;
     const c = 2 * Math.PI * r;
     const shown = Math.max(0, Math.min(1, p));
     const label = `${(p * 100).toFixed(1)}%`;
     return (
-      <svg width="104" height="104" viewBox="0 0 104 104" style={{ flex: "none" }}>
+      <svg width="78" height="78" viewBox="0 0 104 104" style={{ flex: "none" }}>
         <circle cx="52" cy="52" r={r} fill="none" stroke="#e8fbf3" strokeWidth="13" />
         <circle cx="52" cy="52" r={r} fill="none" stroke={p < 0 ? "#ff5a5f" : "#12b886"} strokeWidth="13" strokeLinecap="round" strokeDasharray={`${c * shown} ${c}`} transform="rotate(-90 52 52)" />
-        <text x="52" y="51" textAnchor="middle" fontSize={shrink(label, 22, 6).fontSize} fontWeight="800" fill="#1b1440">
+        <text x="52" y="51" textAnchor="middle" fontSize={Math.min(22, 84 / (label.length * 0.62))} fontWeight="800" fill="#1b1440">
           {label}
         </text>
         <text x="52" y="70" textAnchor="middle" fontSize="12" fill="#6b6390">อัตรากำไร</text>
@@ -92,21 +95,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const mn = Math.min(...vals);
     const pts = vals.map((v, i) => `${(i * 200) / (vals.length - 1)},${34 - ((v - mn) / (mx - mn || 1)) * 28}`).join(" ");
     return (
-      <svg width="200" height="38" style={{ marginTop: 4, display: "block" }}>
-        <polyline points={pts} fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="200" height="38" viewBox="0 0 200 38" style={{ marginLeft: "auto", width: 80, height: 22, flex: "none" }}>
+        <polyline points={pts} fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   };
 
   return (
-    <FitScreen width={1600} height={900} maxHeight={1600}>
+    <FitScreen width={1000} height={580} maxHeight={1000}>
       <div className={s.canvas}>
         <section className={s.hero}>
           <div className={s.top}>
-            <div>
-              <div className={s.title}>📊 แดชบอร์ดกิจการ ปี {year + 543}</div>
-              <div className={s.sub}>รายได้ · ค่าใช้จ่าย · กำไรสุทธิ ทุกเดือนในหน้าเดียว — กดที่เดือนไหน ดูรายละเอียดเดือนนั้นได้ทันที</div>
-            </div>
+            <div className={s.title}>📊 แดชบอร์ดกิจการ ปี {year + 543}</div>
             <div className={s.pills}>
               {years.map((y) => (
                 <Link key={y} href={`/dashboard?year=${y}`} className={`${s.pill} ${y === year ? s.pillOn : ""}`}>
@@ -116,38 +116,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
           </div>
           <div className={s.kpis}>
-            <div className={s.kpi}>
-              <div className={s.kpiLbl}>
-                <span className={s.dot} style={{ background: "#7fb2ff" }} />
-                รายได้รวมทั้งปี
-              </div>
-              <div className={s.big}>
-                {fmt(revenue)} <small>บาท</small>
-              </div>
-              <div className={s.hint}>{n ? `เฉลี่ยเดือนละ ${fmt(revenue / n)} บาท (${n} เดือน)` : "ยังไม่มีข้อมูลในปีนี้"}</div>
-              {spark(withData.map((x) => x.m.revenue))}
-            </div>
-            <div className={s.kpi}>
-              <div className={s.kpiLbl}>
-                <span className={s.dot} style={{ background: "#ffb3b5" }} />
-                ค่าใช้จ่ายรวมทั้งปี
-              </div>
-              <div className={s.big}>
-                {fmt(cost)} <small>บาท</small>
-              </div>
-              <div className={s.hint}>{n ? `เฉลี่ยเดือนละ ${fmt(cost / n)} บาท (${n} เดือน)` : "ยังไม่มีข้อมูลในปีนี้"}</div>
-              {spark(withData.map((x) => x.m.cost))}
-            </div>
+            {[
+              { label: "รายได้รวมทั้งปี", dot: "#7fb2ff", total: revenue, vals: withData.map((x) => x.m.revenue) },
+              { label: "ค่าใช้จ่ายรวมทั้งปี", dot: "#ffb3b5", total: cost, vals: withData.map((x) => x.m.cost) },
+            ].map((k) => {
+              const hint = n ? `เฉลี่ยเดือนละ ${fmt(k.total / n)} บาท` : "ยังไม่มีข้อมูลในปีนี้";
+              return (
+                <div key={k.label} className={s.kpi}>
+                  <div className={s.kpiBody}>
+                    <div className={s.kpiLbl}>
+                      <span className={s.dot} style={{ background: k.dot }} />
+                      {k.label}
+                      {spark(k.vals)}
+                    </div>
+                    <FitText className={s.big}>
+                      {fmt(k.total)} <small>บาท</small>
+                    </FitText>
+                    <FitText className={s.hint}>
+                      {hint}
+                    </FitText>
+                  </div>
+                </div>
+              );
+            })}
             <div className={`${s.kpi} ${s.kpiProfit}`}>
               {ring(margin)}
-              <div>
+              <div className={s.kpiBody}>
                 <div className={s.kpiLbl}>💰 กำไรสุทธิทั้งปี</div>
-                <div className={`${s.big} ${profit < 0 ? s.loss : ""}`}>
+                <FitText className={`${s.big} ${profit < 0 ? s.loss : ""}`}>
                   {signed(profit)} <small>บาท</small>
-                </div>
-                <div className={s.hint}>
-                  = รายได้ {fmt(revenue)} − ค่าใช้จ่าย {fmt(cost)}
-                </div>
+                </FitText>
+                <FitText className={s.hint}>= รายได้ {fmt(revenue)}</FitText>
+                <FitText className={s.hint}>− ค่าใช้จ่าย {fmt(cost)}</FitText>
               </div>
             </div>
           </div>
@@ -156,16 +156,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <section className={s.card}>
           <div className={s.h2}>
             🚚 ถนนกำไร 12 เดือน
-            <span className={s.tag}>ความสูงกระบะ = รายได้ · แดง = ค่าใช้จ่าย · เขียว = กำไร · แถบบนกล่อง เขียว = กำไร แดง = ขาดทุน</span>
             <span className={s.legend}>
-              <span>
-                <i style={{ background: "var(--cost)" }} />
-                ค่าใช้จ่าย
-              </span>
-              <span>
+              <span>ตัวเลขในกล่อง:</span>
+              <span style={{ color: "var(--profit)" }}>
                 <i style={{ background: "var(--profit)" }} />
                 กำไร
               </span>
+              <span style={{ color: "var(--rev)" }}>
+                <i style={{ background: "var(--rev)" }} />
+                รายได้
+              </span>
+              <span style={{ color: "var(--cost)" }}>
+                <i style={{ background: "var(--cost)" }} />
+                ค่าใช้จ่าย
+              </span>
+              <span>▲▼ เทียบเดือนก่อน</span>
+              {year === curY && (
+                <span>
+                  <span className={s.nowName}>ชมพู</span> = เดือนนี้
+                </span>
+              )}
             </span>
           </div>
 
@@ -175,15 +185,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             hrefs={M.map((_, i) => monthHref(i))}
             nowIdx={year === curY ? curM - 1 : -1}
             year={year}
+            weights={weights}
+            gap={GAP}
           />
 
-          <div className={s.strip}>
+          <div className={s.strip} style={{ gridTemplateColumns: weights.map((w) => `${w}fr`).join(" "), gap: GAP }}>
             {months.map((m, i) => {
               if (!m) {
                 return (
                   <div key={i} className={`${s.mi} ${s.empty}`}>
                     <div className={s.nm}>{M[i]}</div>
-                    <div className={s.wait}>⏳ ยังไม่ถึง</div>
+                    <div className={s.wait}>⏳</div>
                   </div>
                 );
               }
@@ -191,7 +203,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 return (
                   <Link key={i} href={monthHref(i)} className={`${s.mi} ${s.empty} ${isNow(i) ? s.now : ""}`}>
                     <div className={s.nm}>{M[i]}</div>
-                    <div className={s.wait}>ไม่มีรายการ</div>
+                    <div className={s.wait}>–</div>
                   </Link>
                 );
               }
@@ -200,55 +212,56 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               return (
                 <Link key={i} href={monthHref(i)} className={`${s.mi} ${isNow(i) ? s.now : ""}`}>
                   <div className={s.stripe} style={{ background: loss ? "linear-gradient(90deg,#ff5a5f,#ff8a5b)" : "linear-gradient(90deg,#12b886,#3bd6a0)" }} />
-                  {isNow(i) && <span className={s.badge}>กำลังวิ่ง</span>}
-                  <div className={s.nm}>{M[i]}</div>
-                  <div className={s.lb}>{loss ? "ขาดทุน" : "กำไร"}</div>
-                  <div className={`${s.pf} ${loss ? s.loss : ""}`} style={shrink(signed(m.profit), 19, 9)}>
+                  <div className={s.nm}>
+                    {/* เดือนนี้ (ยังไม่จบเดือน) = ชื่อเดือนในป้ายชมพู */}
+                    <span className={isNow(i) ? s.nowName : undefined}>{M[i]}</span>
+                  </div>
+                  <FitText className={`${s.pf} ${loss ? s.loss : ""}`}>
                     {signed(m.profit)}
-                  </div>
-                  <div className={s.lb}>รายได้</div>
-                  <div className={s.rv} style={shrink(fmt(m.revenue), 14, 12)}>
+                  </FitText>
+                  <FitText className={s.rv}>
                     {fmt(m.revenue)}
-                  </div>
-                  <div className={s.lb}>ค่าใช้จ่าย</div>
-                  <div className={s.cs} style={shrink(fmt(m.cost), 14, 12)}>
+                  </FitText>
+                  <FitText className={s.cs}>
                     {fmt(m.cost)}
-                  </div>
+                  </FitText>
                   {has(prev) ? (
-                    <div className={`${s.dl} ${m.profit >= prev.profit ? s.up : s.down}`}>
+                    <FitText className={`${s.dl} ${m.profit >= prev.profit ? s.up : s.down}`}>
                       {m.profit >= prev.profit ? "▲" : "▼"} {fmt(Math.abs(m.profit - prev.profit))}
-                      <br />
-                      จาก {M[i - 1]}
-                    </div>
+                    </FitText>
                   ) : (
-                    <div className={s.dl} style={{ color: "#b3abd3" }}>
-                      {i === 0 ? "เดือนแรก" : "เดือนก่อน"}
-                      <br />
-                      {i === 0 ? "ของปี" : "ไม่มีรายการ"}
+                    <div className={s.dl} style={{ color: "#8f86b8" }}>
+                      –
                     </div>
                   )}
                 </Link>
               );
             })}
           </div>
-          <div className={s.tap}>👆 กดที่รถหรือกล่องของเดือนไหน — เปิดงบกำไรขาดทุนของเดือนนั้น (ต้นทุนแยกประเภท)</div>
+          <div className={s.tap}>👆 กดที่รถหรือกล่องเดือนไหน — เปิดงบกำไรขาดทุนของเดือนนั้น</div>
         </section>
 
         <section className={s.hl}>
           <div className={s.h} style={{ background: "linear-gradient(135deg,#12b886,#0ca678)" }}>
             <div className={s.ht}>🏆 เดือนกำไรสูงสุด</div>
-            <div className={s.hv}>{best ? `${M[best.i]} · ${signed(best.m.profit)}` : "–"}</div>
-            <div className={s.hs}>{best && best.m.revenue > 0 ? `อัตรากำไร ${((best.m.profit / best.m.revenue) * 100).toFixed(1)}%` : "ยังไม่มีข้อมูล"}</div>
+            <FitText className={s.hv}>
+              {best ? `${M[best.i]} · ${signed(best.m.profit)}` : "–"}
+            </FitText>
+            <div className={s.hs}>{!best ? "ยังไม่มีข้อมูล" : best.m.revenue > 0 ? `อัตรากำไร ${((best.m.profit / best.m.revenue) * 100).toFixed(1)}%` : "เดือนนั้นไม่มีรายได้"}</div>
           </div>
           <div className={s.h} style={{ background: "linear-gradient(135deg,#ff5a5f,#ff8a5b)" }}>
             <div className={s.ht}>🧐 เดือนกำไรต่ำสุด</div>
-            <div className={s.hv}>{worst ? `${M[worst.i]} · ${signed(worst.m.profit)}` : "–"}</div>
-            <div className={s.hs}>{worst ? "กดที่เดือนนั้นด้านบน ดูว่าค่าใช้จ่ายไหนสูง" : "ยังไม่มีข้อมูล"}</div>
+            <FitText className={s.hv}>
+              {worst ? `${M[worst.i]} · ${signed(worst.m.profit)}` : "–"}
+            </FitText>
+            <div className={s.hs}>{worst ? "กดเดือนนั้น ดูค่าใช้จ่าย" : "ยังไม่มีข้อมูล"}</div>
           </div>
           <div className={s.h} style={{ background: "linear-gradient(135deg,#2f6bff,#5c8dff)" }}>
             <div className={s.ht}>📈 กำไรเฉลี่ยต่อเดือน</div>
             <div className={s.hv}>{n ? signed(profit / n) : "–"}</div>
-            <div className={s.hs}>{n ? `= กำไร ${signed(profit)} ÷ ${n} เดือนที่มีรายการ` : "ยังไม่มีข้อมูล"}</div>
+            <FitText className={s.hs}>
+              {n ? `= กำไร ${signed(profit)} ÷ ${n} เดือน` : "ยังไม่มีข้อมูล"}
+            </FitText>
           </div>
           <div className={s.h} style={{ background: "linear-gradient(135deg,#7b2ff7,#b14bff)" }}>
             <div className={s.ht}>
@@ -257,14 +270,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             {prevHas ? (
               <>
                 <div className={s.hv}>{yoy == null ? signed(thisSame - prevSame) : `${yoy >= 0 ? "▲" : "▼"} ${Math.abs(yoy * 100).toFixed(1)}%`}</div>
-                <div className={s.hs}>
-                  กำไร {year + 543}: {signed(thisSame)} · {year + 542}: {signed(prevSame)}
-                </div>
+                <FitText className={s.hs}>
+                  {year + 543}: {signed(thisSame)} · {year + 542}: {signed(prevSame)}
+                </FitText>
               </>
             ) : (
               <>
                 <div className={s.hv}>–</div>
-                <div className={s.hs}>ปี {year + 542} ไม่มีรายการในระบบ ให้เทียบ</div>
+                <div className={s.hs}>ปี {year + 542} ไม่มีรายการให้เทียบ</div>
               </>
             )}
           </div>
