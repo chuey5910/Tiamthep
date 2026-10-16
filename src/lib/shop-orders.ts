@@ -62,7 +62,7 @@ function num(s: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export type SyncResult = { ok: true; orders: number; changed: number } | { ok: false; error: string };
+export type SyncResult = { ok: true; orders: number; changed: number; removed: number; kept: string[] } | { ok: false; error: string };
 
 const SYNC_KEY = "shopOrders.syncedAt";
 
@@ -93,7 +93,7 @@ export async function syncShopOrders(): Promise<SyncResult> {
 }
 
 /** แถวจากแท็บ «ใบสั่งงานร้าน» (ไม่รวมหัวตาราง) → ฐานข้อมูล · แยกออกมาให้ทดสอบกับแถวจริงได้โดยไม่ต้องต่อชีต */
-export async function ingestPoRows(values: string[][]): Promise<{ orders: number; changed: number }> {
+export async function ingestPoRows(values: string[][]): Promise<{ orders: number; changed: number; removed: number; kept: string[] }> {
   type Row = { cells: string[] };
   const byId = new Map<string, Row[]>();
   for (const cells of values) {
@@ -161,9 +161,27 @@ export async function ingestPoRows(values: string[][]): Promise<{ orders: number
           create: { orderId: id, ...it },
         });
       }
+      // รายการที่ไม่อยู่ในชีตแล้ว (คนลบแถว / เลขใบถูกใช้ใหม่หลังลบใบทดสอบ) — ลบตาม เว้นรายการที่ลงบัญชีแล้ว
+      await tx.shopOrderItem.deleteMany({
+        where: { orderId: id, seq: { notIn: items.map((it) => it.seq) }, expenseId: null, stockInId: null },
+      });
     });
   }
-  return { orders: byId.size, changed };
+
+  // ใบที่ไม่อยู่ในชีตแล้ว (คนลบแถวในชีต เช่น ใบทดสอบ) — ลบออกจากเว็บตาม ชีตคือต้นทาง
+  // ใบที่ลงบัญชีไปแล้วห้ามลบเอง (มีค่าใช้จ่าย/รับเข้าคลังผูกอยู่) — เก็บไว้ แล้วบอกให้ไปลบรายการบัญชีก่อน
+  let removed = 0;
+  const kept: string[] = [];
+  for (const o of existing) {
+    if (byId.has(o.id)) continue;
+    if (o.items.some((i) => i.expenseId != null || i.stockInId != null)) {
+      kept.push(o.id);
+      continue;
+    }
+    await prisma.shopOrder.delete({ where: { id: o.id } });
+    removed++;
+  }
+  return { orders: byId.size, changed, removed, kept };
 }
 
 /** เขียนสถานะ/ผลลงบัญชีกลับลงทุกแถวของใบในชีต — หาแถวจากเลขใบตอนเขียน (กันชีตถูกแทรกแถว) */

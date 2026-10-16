@@ -23,7 +23,10 @@ export async function refreshOrders(): Promise<Result> {
   const res = await syncShopOrders();
   if (!res.ok) return res;
   revalidatePath("/stock/orders");
-  return { ok: true, message: `✅ ดึงล่าสุดแล้ว — ${res.orders} ใบ · มีเปลี่ยนแปลง ${res.changed} ใบ` };
+  const parts = [`✅ ดึงล่าสุดแล้ว — ${res.orders} ใบ · มีเปลี่ยนแปลง ${res.changed} ใบ`];
+  if (res.removed) parts.push(`🗑 ลบใบที่ไม่อยู่ในชีตแล้ว ${res.removed} ใบ`);
+  if (res.kept.length) parts.push(`⚠️ ${res.kept.join(", ")} ถูกลบในชีต แต่ลงบัญชีไปแล้ว — ลบรายการในหน้า ค่าใช้จ่าย / คลังอะไหล่ ก่อน แล้วกดดึงใหม่`);
+  return { ok: true, message: parts.join("\n") };
 }
 
 /** แอดมินยกเลิกใบ — เขียนลงชีต ร้านจะไม่เห็นใบนี้ในเมนูอีก · ใบที่ลงบัญชีแล้วยกเลิกไม่ได้ */
