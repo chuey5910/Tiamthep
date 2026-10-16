@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { DateRangeFilter } from "@/components/Filters";
 import { Badge, Card, Empty, Formula, PageHeader, Stat } from "@/components/ui";
 import { formatThaiDate } from "@/lib/date";
@@ -16,8 +17,8 @@ export default async function FuelPage({ searchParams }: { searchParams: Promise
   const [entries, vehicles, drivers, plates] = await Promise.all([
     prisma.fuelEntry.findMany({
       where: { date: { gte: from, lte: to } },
+      // ดึงครบทุกรายการในช่วง — ยอดลิตร/เงินรวมต้องมาจากทุกรายการ (เคยจำกัด 500 ยอดรวมจึงขาด) · ตารางแบ่งหน้าแทน
       orderBy: [{ date: "desc" }, { id: "desc" }],
-      take: 500,
     }),
     prisma.vehicle.findMany({ where: { active: true }, orderBy: { plate: "asc" } }),
     prisma.driver.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
@@ -32,6 +33,10 @@ export default async function FuelPage({ searchParams }: { searchParams: Promise
     unknown: entries.filter((e) => !knownPlates.has(e.plate)).length,
   };
   const avgPrice = totals.litres > 0 ? totals.amount / totals.litres : 0;
+  const PAGE_SIZE = 300;
+  const pages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  const page = Math.min(pages, Math.max(1, Number(sp.page) || 1));
+  const pageRows = entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
@@ -97,7 +102,7 @@ export default async function FuelPage({ searchParams }: { searchParams: Promise
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {pageRows.map((e) => (
                   <tr key={e.id}>
                     <td className="whitespace-nowrap">{formatThaiDate(e.date)}</td>
                     <td>
@@ -130,6 +135,18 @@ export default async function FuelPage({ searchParams }: { searchParams: Promise
                 </tr>
               </tfoot>
             </table>
+          </div>
+        )}
+        {pages > 1 && (
+          <div className="no-print flex flex-wrap items-center justify-center gap-2 border-t border-[var(--border)] px-4 py-3 text-[13px]">
+            <span className="text-slate-600">
+              แสดงรายการที่ {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, entries.length)} จาก {entries.length} (ยอดรวมคิดจากทุกรายการ)
+            </span>
+            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+              <Link key={n} href={`?from=${fromStr}&to=${toStr}&page=${n}`} className={`btn px-3 py-1 text-[12px] ${n === page ? "btn-primary" : "btn-ghost"}`}>
+                {n}
+              </Link>
+            ))}
           </div>
         )}
       </Card>

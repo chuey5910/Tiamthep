@@ -17,6 +17,13 @@ export default async function AllowancePage({ searchParams }: { searchParams: Pr
 
   const data = await loadPeriod({ from, to });
   const all = allowanceDetail(data);
+  // ขาที่หาคนขับไม่เจอ (ไม่มีรหัส พขร. และไม่มีแถวจับคู่รถ) — ไม่ถูกนับเบี้ยเลี้ยงของใคร ต้องบอก ห้ามหายเงียบ
+  const noDriver = data.ranJobs.filter((j) => {
+    const c = data.calcs.get(j.id)!;
+    return !c.driverCode && c.ownerType !== "รถร่วม";
+  });
+  const noDriverPlates = [...new Set(noDriver.map((j) => j.headPlate.trim()))].sort();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
   const rows = driverCode ? all.filter((r) => r.driverCode === driverCode) : all;
 
   // วันที่ต้องแปลงเป็นข้อความก่อนส่งให้ฝั่งเบราว์เซอร์ (ตารางรายละเอียดเป็น client component)
@@ -134,6 +141,16 @@ export default async function AllowancePage({ searchParams }: { searchParams: Pr
         <Stat label="เงินเดินทางที่จ่ายไปแล้ว" value={baht(t.advance)} hint="บาท" />
         <Stat label="ยอดจ่ายสุทธิรวม" value={baht(t.netPay)} hint="บาท" tone="good" />
       </div>
+
+      {noDriver.length > 0 && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-medium leading-relaxed text-amber-900">
+          ⚠️ มี <b>{noDriver.length} ขา</b> ในงวดนี้ที่หาคนขับไม่เจอ — <b>ยังไม่ถูกนับเบี้ยเลี้ยงของใคร</b> · ทะเบียน {noDriverPlates.join(", ")} ·
+          แก้: ใส่รหัส พขร. ในงาน หรือเพิ่มแถวที่หน้า จับคู่รถ + พขร. (ให้วันที่มีผลครอบคลุมวันที่วิ่ง){" "}
+          <a className="font-bold underline" href={`/entry/jobs?from=${iso(from)}&to=${iso(to)}&problems=1`}>
+            ดูขาที่ต้องแก้ →
+          </a>
+        </p>
+      )}
 
       <Card
         title={`งวดที่ ${period} — ${TH_MONTHS_FULL[month - 1]} ${year + 543}${driverCode ? ` · เฉพาะ ${driverCode}` : ""}`}

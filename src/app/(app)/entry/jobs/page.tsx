@@ -31,8 +31,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     prisma.driver.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.job.findMany({
       where: { loadDate: { gte: from, lte: to } },
+      // ดึงครบทุกขาในช่วงเสมอ — เคยจำกัด 500 ขา เดือนที่มีขามากกว่านั้น (ตั๋วเรือ) ตัวเลข/ตัวกรองทะเบียนจึงขาดหาย
+      // ไม่ตรงกับหน้าวางบิล/เบี้ยเลี้ยง · ตารางแบ่งหน้าด้านล่างแทน (ยอดรวมคิดจากทุกขาเสมอ)
       orderBy: [{ loadDate: "desc" }, { tripCode: "asc" }, { id: "asc" }],
-      take: 500,
     }),
     buildContext(),
   ]);
@@ -96,6 +97,12 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   if (customerFilter) keep.set("customer", customerFilter);
   if (plateFilter) keep.set("plate", plateFilter);
   const baseQs = keep.toString();
+  // แบ่งหน้าเฉพาะตาราง — ตัวเลขสรุปทุกตัวคิดจากทุกขาที่ตรงตัวกรอง
+  const PAGE_SIZE = 200;
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const page = Math.min(pages, Math.max(1, Number(sp.page) || 1));
+  const pageRows = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageQs = `${baseQs}${onlyProblems ? "&problems=1" : ""}`;
 
   // ขาที่ยังไม่มีคู่ในรอบเดียวกัน — เสนอปุ่มสร้างขากลับให้
   const legsPerTrip = new Map<string, number>();
@@ -288,7 +295,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                 </tr>
               </thead>
               <tbody>
-                {shown.map(({ job, calc }) => {
+                {pageRows.map(({ job, calc }) => {
                   const customer = customerById.get(job.customerId);
                   // ระบายแดงเฉพาะช่องที่เป็นต้นเหตุ ให้เห็นตำแหน่งที่ต้องแก้ทันที
                   const bad = (f: string) =>
@@ -382,6 +389,18 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                 </tr>
               </tfoot>
             </table>
+          </div>
+        )}
+        {pages > 1 && (
+          <div className="no-print flex flex-wrap items-center justify-center gap-2 border-t border-[var(--border)] px-4 py-3 text-[13px]">
+            <span className="text-slate-600">
+              แสดงขาที่ {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, shown.length)} จาก {shown.length} ขา (ยอดรวมด้านบนคิดจากทุกขา)
+            </span>
+            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+              <Link key={n} href={`?${pageQs}&page=${n}`} className={`btn px-3 py-1 text-[12px] ${n === page ? "btn-primary" : "btn-ghost"}`}>
+                {n}
+              </Link>
+            ))}
           </div>
         )}
       </Card>
