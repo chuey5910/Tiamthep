@@ -37,7 +37,8 @@ export function Shell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  const groups = NAV.filter((g) => !g.adminOnly || user.role === "ADMIN");
+  const admin = user.role === "ADMIN";
+  const groups = NAV.filter((g) => !g.adminOnly || admin).map((g) => ({ ...g, items: g.items.filter((i) => !i.adminOnly || admin) }));
 
   return (
     <div className="min-h-screen lg:flex">

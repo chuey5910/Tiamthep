@@ -1,0 +1,112 @@
+/* แดชบอร์ดกิจการ — กว้าง 1600 สูงตามสัดส่วนจอ (900–1600) แล้ว FitScreen ย่อทั้งก้อนให้พอดีจอ (ห้ามเลื่อน)
+   ความสูงที่เพิ่มไปลงที่กราฟถนนกำไร (.card flex: 1) */
+.canvas {
+  --ink: #1b1440;
+  --muted: #6b6390;
+  --rev: #2f6bff;
+  --cost: #ff5a5f;
+  --profit: #12b886;
+  width: 1600px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--ink);
+}
+
+/* ── หัว ── */
+.hero {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  border-radius: 26px;
+  padding: 20px 28px 22px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 10% 15%, #ffb400 0, transparent 38%),
+    radial-gradient(circle at 90% 5%, #ff2e93 0, transparent 40%),
+    linear-gradient(120deg, #ff6b35 0%, #ff2e93 48%, #7b2ff7 100%);
+  box-shadow: 0 18px 40px -20px #7b2ff799;
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  bottom: -110px;
+  width: 340px;
+  height: 340px;
+  border-radius: 50%;
+  background: #ffffff1f;
+}
+.top { display: flex; align-items: center; gap: 16px; }
+.title { font-size: 32px; font-weight: 800; line-height: 1.15; }
+.sub { font-size: 15px; opacity: 0.92; }
+.pills { margin-left: auto; display: flex; gap: 8px; position: relative; z-index: 1; }
+.pill { padding: 7px 18px; border-radius: 999px; background: #ffffff2e; font-weight: 700; font-size: 16px; color: #fff; }
+.pill:hover { background: #ffffff4d; }
+.pillOn { background: #fff; color: #ff2e93; }
+.pillOn:hover { background: #fff; }
+
+.kpis { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 16px; margin-top: 16px; position: relative; z-index: 1; }
+.kpi { background: #ffffff26; border: 1px solid #ffffff55; border-radius: 20px; padding: 14px 20px; }
+.kpiLbl { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 3px #ffffff66; }
+.big { font-size: 40px; font-weight: 800; line-height: 1.12; margin-top: 4px; }
+.big small { font-size: 17px; font-weight: 600; opacity: 0.85; }
+.hint { font-size: 14px; opacity: 0.92; }
+.kpiProfit { display: flex; align-items: center; gap: 18px; background: #fff; color: var(--ink); border-color: #fff; }
+.kpiProfit .big { color: var(--profit); }
+.kpiProfit .kpiLbl, .kpiProfit .hint, .kpiProfit small { color: var(--muted); }
+.loss { color: var(--cost) !important; }
+
+/* ── ถนนกำไร ── */
+.card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 24px;
+  padding: 14px 24px 12px;
+  box-shadow: 0 10px 30px -20px #1b144055;
+}
+.h2 { font-size: 21px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+.tag { font-size: 13px; font-weight: 600; color: var(--muted); }
+.legend { margin-left: auto; display: flex; gap: 16px; font-size: 14px; font-weight: 700; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; }
+
+.strip { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px; margin-top: 8px; }
+.mi {
+  position: relative;
+  display: block;
+  border-radius: 16px;
+  background: #fff;
+  border: 2px solid #eee9ff;
+  padding: 11px 4px 8px;
+  text-align: center;
+  overflow: hidden;
+  color: var(--ink);
+}
+a.mi:hover { border-color: #b9a6ff; box-shadow: 0 6px 18px -10px #7b2ff7aa; }
+.stripe { position: absolute; inset: 0 0 auto 0; height: 7px; }
+.nm { font-size: 16px; font-weight: 800; }
+.lb { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.1; }
+.pf { font-size: 19px; font-weight: 800; color: var(--profit); line-height: 1.15; }
+.rv { font-size: 14px; font-weight: 700; color: var(--rev); line-height: 1.15; }
+.cs { font-size: 14px; font-weight: 700; color: var(--cost); line-height: 1.15; }
+.dl { font-size: 12px; font-weight: 700; margin-top: 5px; line-height: 1.25; }
+.up { color: var(--profit); }
+.down { color: var(--cost); }
+.now { border-color: #ff2e93; box-shadow: 0 0 0 4px #ff2e9322; }
+.badge { position: absolute; top: 9px; right: 4px; background: #ff2e93; color: #fff; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 99px; }
+.empty { background: repeating-linear-gradient(135deg, #faf8ff 0 10px, #f3effe 10px 20px); border-style: dashed; color: #b3abd3; }
+.empty .nm { color: #b3abd3; }
+.wait { margin-top: 44px; font-size: 13px; font-weight: 700; }
+.tap { margin-top: auto; padding-top: 6px; text-align: center; font-size: 14px; font-weight: 700; color: #7b2ff7; }
+
+/* ── ไฮไลต์ ── */
+.hl { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.h { border-radius: 20px; padding: 14px 20px; color: #fff; min-height: 112px; }
+.ht { font-size: 15px; font-weight: 700; opacity: 0.95; }
+.hv { font-size: 28px; font-weight: 800; margin-top: 2px; line-height: 1.15; }
+.hs { font-size: 13.5px; opacity: 0.92; margin-top: 2px; }

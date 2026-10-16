@@ -1,5 +1,5 @@
-/** icon = อีโมจิหน้าหัวข้อของหน้านั้น (ไม่ใส่จะใช้ของกลุ่ม) */
-export type NavItem = { href: string; label: string; icon?: string };
+/** icon = อีโมจิหน้าหัวข้อของหน้านั้น (ไม่ใส่จะใช้ของกลุ่ม) · adminOnly = เมนูนี้เห็นเฉพาะผู้ดูแลระบบ */
+export type NavItem = { href: string; label: string; icon?: string; adminOnly?: boolean };
 /** สีพาสเทลประจำหัวข้อหลัก — หัวข้อย่อยในกลุ่มใช้สีเดียวกัน (ชุดคลาสอยู่ใน Shell.tsx) */
 export type NavTone = "sky" | "emerald" | "violet" | "amber" | "orange" | "pink" | "indigo";
 /** adminOnly = แสดงเฉพาะผู้ที่มีสิทธิ์ผู้ดูแลระบบ */
@@ -11,6 +11,7 @@ export const NAV: NavGroup[] = [
     icon: "🧭",
     tone: "sky",
     items: [
+      { href: "/dashboard", icon: "📊", label: "แดชบอร์ดกิจการ", adminOnly: true },
       { href: "/", icon: "🏠", label: "หน้าหลัก" },
       { href: "/guide", icon: "📖", label: "คู่มือการใช้งาน" },
     ],
