@@ -3,7 +3,7 @@
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireWrite } from "@/lib/auth";
-import { buildContext, computeJob } from "@/lib/calc";
+import { buildContext, computeJob, routeKey } from "@/lib/calc";
 import { allocateSatang, billingTotals, invoicePrefix, nextInvoiceNo, rateLabel } from "@/lib/billing";
 import { addDays, formatThaiDate, parseDate, startOfDay } from "@/lib/date";
 import { snapOf } from "@/lib/invoice-adjust";
@@ -252,20 +252,19 @@ export async function createMissingRoutes(
     if (clean.length === 0) return { ok: false, error: "ยังไม่ได้เลือกเส้นทางที่จะสร้าง" };
 
     // มีอยู่แล้วก็ข้ามไป ไม่ถือว่าผิด — กดซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
+    // เทียบด้วย routeKey (ไม่สนช่องว่าง/ตัวพิมพ์) — «บ้านแลงระยอง» กับ «บ้านแลง ระยอง» ถือว่ามีแล้ว ไม่สร้างซ้ำ
     const created = await prisma.$transaction(async (tx) => {
+      const have = new Set(
+        (await tx.route.findMany({ select: { origin: true, destination: true, vehicleType: true } })).map((r) =>
+          routeKey(r.origin, r.destination, r.vehicleType),
+        ),
+      );
       let n = 0;
       for (const r of clean) {
-        const existing = await tx.route.findUnique({
-          where: {
-            origin_destination_vehicleType: {
-              origin: r.origin,
-              destination: r.destination,
-              vehicleType: r.vehicleType,
-            },
-          },
-        });
-        if (existing) continue;
+        const k = routeKey(r.origin, r.destination, r.vehicleType);
+        if (have.has(k)) continue;
         await tx.route.create({ data: { ...r, allowance: 0 } });
+        have.add(k);
         n++;
       }
       return n;

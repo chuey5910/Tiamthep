@@ -197,12 +197,20 @@ export async function buildContext() {
 }
 
 /**
- * คีย์จับคู่งาน ↔ เส้นทาง — ต้นทาง/ปลายทางเทียบแบบไม่สนช่องว่างซ้ำและตัวพิมพ์ใหญ่-เล็ก
+ * ชื่อสถานที่สำหรับเทียบ — ตัดช่องว่างทิ้งทั้งหมด + ไม่สนตัวพิมพ์ใหญ่-เล็ก
+ * ภาษาไทยเว้นวรรคไม่แน่นอน «บ้านแลงระยอง» กับ «บ้านแลง ระยอง» คือที่เดียวกัน
+ * (เคยพลาด: เทียบเว้นวรรคด้วย เส้นทางที่มีอยู่แล้วขึ้นเตือนว่า "ไม่มีในฐานข้อมูล")
+ */
+export function placeKey(s: string): string {
+  return s.replace(/\s+/g, "").toLowerCase();
+}
+
+/**
+ * คีย์จับคู่งาน ↔ เส้นทาง — ต้นทาง/ปลายทางเทียบด้วย placeKey (ไม่สนช่องว่างและตัวพิมพ์ใหญ่-เล็ก)
  * ประเภทรถเทียบผ่าน vehicleTypeKey ("หัวลาก" กับ "รถหัวลาก" ถือว่าตัวเดียวกัน)
  */
 export function routeKey(origin: string, destination: string, vehicleType: string): string {
-  const place = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
-  return `${place(origin)}|${place(destination)}|${vehicleTypeKey(vehicleType)}`;
+  return `${placeKey(origin)}|${placeKey(destination)}|${vehicleTypeKey(vehicleType)}`;
 }
 
 /** หาช่วงราคาน้ำมันที่ราคานี้ตกอยู่ (นอกช่วงให้ใช้ช่วงต่ำสุด/สูงสุด) */

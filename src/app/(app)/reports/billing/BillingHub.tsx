@@ -44,7 +44,7 @@ export type LineView = {
   vehicleType: string | null;
   issues: string[];
   fix: { href: string; label: string } | null;
-  missingRoute: { origin: string; destination: string; vehicleType: string } | null;
+  missingRoute: { origin: string; destination: string; vehicleType: string; near: string | null } | null;
   invoiceNo: string | null;
 };
 
@@ -170,7 +170,7 @@ export function BillingHub({
 
   // เส้นทางที่ยังไม่มีในระบบ รวมให้เหลือเส้นละแถว พร้อมนับว่ามีกี่ขาค้างอยู่เพราะเส้นนี้
   const missingRoutes = useMemo(() => {
-    const m = new Map<string, { origin: string; destination: string; vehicleType: string; legs: number }>();
+    const m = new Map<string, { origin: string; destination: string; vehicleType: string; near: string | null; legs: number }>();
     for (const l of lines) {
       if (!l.missingRoute) continue;
       const k = `${l.missingRoute.origin}|${l.missingRoute.destination}|${l.missingRoute.vehicleType}`;
@@ -528,7 +528,10 @@ export function BillingHub({
                             />
                           </td>
                           <td>{r.origin}</td>
-                          <td>{r.destination}</td>
+                          <td>
+                            {r.destination}
+                            {r.near && <div className="mt-0.5 text-[12px] font-bold text-amber-800">{r.near}</div>}
+                          </td>
                           <td className="text-slate-500">{r.vehicleType}</td>
                           <td className="num font-bold">{r.legs}</td>
                           <td>

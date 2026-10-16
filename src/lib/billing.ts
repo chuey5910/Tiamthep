@@ -9,10 +9,11 @@
  *   2. 1 ขา อยู่ได้ใบเดียว (jobId เป็น unique ใน CustomerBillingLine) จึงวางบิลซ้ำไม่ได้
  */
 
-import { round2 } from "./calc";
+import { placeKey, round2 } from "./calc";
 import { daysInMonth, startOfDay, utcDate } from "./date";
 import { isWeightPriced } from "./price-unit";
 import type { PeriodData } from "./reports";
+import { vehicleTypeKey } from "./vehicle-type";
 
 /** ค่ากลางเมื่อยังไม่ได้ตั้งในหน้าตั้งค่าระบบ — ตามธรรมเนียมของบริษัทคือวันที่ 25 */
 export const DEFAULT_BILLING_DUE_DAY = 25;
@@ -142,8 +143,11 @@ export type BillingLine = {
   issues: string[];
   /** ปุ่มพาไปแก้ต้นเหตุ — พาไปถึงแถวที่ต้องแก้ ไม่ใช่แค่หน้ารวม */
   fix: { href: string; label: string } | null;
-  /** เส้นทางที่ยังไม่มีในฐานข้อมูล — ใช้สร้างรวดเดียวหลายเส้น */
-  missingRoute: { origin: string; destination: string; vehicleType: string } | null;
+  /**
+   * เส้นทางที่ยังไม่มีในฐานข้อมูล — ใช้สร้างรวดเดียวหลายเส้น
+   * near = มีเส้นที่ใกล้กันในระบบ (ชื่อต่างกันเล็กน้อย / คนละประเภทรถ) — บอกให้คนดู ระบบไม่ตัดสินเอง
+   */
+  missingRoute: { origin: string; destination: string; vehicleType: string; near: string | null } | null;
   /** วางบิลไปแล้วในใบไหน (null = ยังไม่วางบิล) */
   invoiceNo: string | null;
 };
@@ -219,6 +223,43 @@ function fixTargetFor(args: {
   return { href: `/entry/jobs?edit=${jobId}`, label: "แก้ข้อมูลงาน" };
 }
 
+/** จำนวนตัวอักษรที่ต้องแก้ให้สองคำเหมือนกัน */
+function editDistance(a: string, b: string): number {
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+
+/**
+ * เส้นทางที่หาไม่เจอ — ในระบบมีเส้นที่ใกล้กันไหม (บอกคนว่าต้องไปแก้ตรงไหน ไม่ใช่แค่ "ไม่มี")
+ * – ต้นทาง/ปลายทางตรงกัน แต่ตั้งไว้คนละประเภทรถ
+ * – ประเภทรถตรงกัน ชื่อต่างกันไม่เกิน 2 ตัวอักษร (ชื่อยาว 6 ตัวขึ้นไป กันชื่อสั้นที่ต่างกันจริงมาชนกัน)
+ */
+function nearRoute(
+  routes: { origin: string; destination: string; vehicleType: string }[],
+  origin: string,
+  destination: string,
+  vehicleType: string,
+): string | null {
+  const o = placeKey(origin);
+  const de = placeKey(destination);
+  const vt = vehicleTypeKey(vehicleType);
+  const other = routes.find((r) => placeKey(r.origin) === o && placeKey(r.destination) === de && vehicleTypeKey(r.vehicleType) !== vt);
+  if (other) return `⚠️ ในระบบมีเส้นนี้ของ «${other.vehicleType}» แต่งานนี้เป็น${vehicleType} — ตรวจทะเบียนรถของงาน หรือสร้างเส้นของ${vehicleType}`;
+  const close = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 6 && editDistance(a, b) <= 2);
+  const typo = routes.find((r) => vehicleTypeKey(r.vehicleType) === vt && close(placeKey(r.origin), o) && close(placeKey(r.destination), de));
+  if (typo) return `⚠️ ในระบบสะกดว่า «${typo.origin} → ${typo.destination}» — ชื่อในงานต่างไปนิดเดียว แก้ชื่อในงานให้ตรง (ไม่ต้องสร้างใหม่)`;
+  return null;
+}
+
 /** รายการขาทั้งหมดของลูกค้ารายหนึ่งในช่วงที่เลือก (เรียงตามวันที่) */
 export function billingLines(
   d: PeriodData,
@@ -267,7 +308,7 @@ export function billingLines(
       }),
       missingRoute:
         !c.routeFound && c.vehicleType
-          ? { origin: j.origin, destination: j.destination, vehicleType: c.vehicleType }
+          ? { origin: j.origin, destination: j.destination, vehicleType: c.vehicleType, near: nearRoute(d.ctx.routes, j.origin, j.destination, c.vehicleType) }
           : null,
       invoiceNo: invoiceByJob.get(j.id) ?? null,
     });
