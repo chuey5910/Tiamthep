@@ -9,10 +9,14 @@ import { folderVehicle, pullShipTickets, readSkippedPhoto, resetShipTickets, rou
 import { formatOf, validTicketNo } from "@/lib/ship-ticket-formats";
 import { nameKey } from "@/lib/ship-ticket-parse";
 
-export type ShipResult = { ok: true; message: string } | { ok: false; error: string };
+/** askDup = เลขที่ตั๋วที่คนแก้ ซ้ำกับงาน/ตั๋วที่มีอยู่ — ให้คนตัดสิน แล้วส่งซ้ำพร้อม allowDupNo */
+export type ShipResult = { ok: true; message: string } | { ok: false; error: string; askDup?: true };
 
-/** plate = ทะเบียนที่คนเลือก (เฉพาะแบบตั๋วที่เอาทะเบียนจากตั๋ว แล้วอ่านไม่ได้/ไม่พบ) */
-export type ConfirmInput = { id: number; ticketNo: string; date: string; netKg: string; driverCode: string; plate?: string };
+/**
+ * plate = ทะเบียนที่คนเลือก (เฉพาะแบบตั๋วที่เอาทะเบียนจากตั๋ว — อ่านไม่ได้/ไม่พบ หรือคนกด ✏️ แก้ไข)
+ * allowDupNo = คนดูแล้วว่าเลขที่ซ้ำไม่ใช่งานซ้ำ ให้บันทึกได้
+ */
+export type ConfirmInput = { id: number; ticketNo: string; date: string; netKg: string; driverCode: string; plate?: string; allowDupNo?: boolean };
 
 /** ดึงรูปใหม่จากชีต (ปุ่ม 🔄) */
 export async function refreshShipTickets(): Promise<ShipResult> {
@@ -78,6 +82,17 @@ async function confirmOne(input: ConfirmInput, userName: string): Promise<ShipRe
   if (!driverCode) return { ok: false, error: "⚠️ เลือก พขร. ก่อน" };
   const driver = await prisma.driver.findUnique({ where: { code: driverCode } });
   if (!driver) return { ok: false, error: `❌ ไม่พบ พขร. รหัส ${driverCode}` };
+
+  // เลขที่ตั๋วที่คนแก้/กรอกเอง ระบบยังไม่ได้ตรวจซ้ำ (หน้าตรวจเตือนจากเลขที่อ่านได้) — ตรวจตรงนี้ ซ้ำ = ถามคนก่อน ไม่ตัดสินเอง
+  if (ticketNo !== (t.ticketNo ?? "").toUpperCase() && !input.allowDupNo) {
+    const job = await prisma.job.findFirst({ where: { ticketOrigin: ticketNo, origin, destination }, select: { id: true } });
+    const other = await prisma.shipTicket.findFirst({
+      where: { ticketNo, routeFolder: t.routeFolder, id: { not: t.id }, status: { not: "ไม่ใช้" } },
+      select: { fileName: true, part: true, status: true },
+    });
+    if (job) return { ok: false, askDup: true, error: `⚠️ เลขที่ตั๋ว ${ticketNo} มีในงาน #${job.id} แล้ว` };
+    if (other) return { ok: false, askDup: true, error: `⚠️ เลขที่ตั๋ว ${ticketNo} ตรงกับตั๋วที่${other.status} (รูป «${other.fileName}» ใบที่ ${other.part})` };
+  }
 
   const route = ctx.routeByKey.get(routeKey(origin, destination, vehicle.vehicleType)) ?? null;
   const tons = Math.round(netKg) / 1000;

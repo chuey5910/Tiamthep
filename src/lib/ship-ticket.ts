@@ -587,6 +587,8 @@ export type ShipRow = {
   /** ทะเบียนในข้อมูลรถ · null = ทะเบียนจากตั๋วอ่านไม่ได้/ไม่พบ → ให้คนเลือกในแถว (plateNote บอกเหตุ) */
   plate: string | null;
   plateNote: string | null;
+  /** ทะเบียนมาจากตั๋ว (แก้ได้ในแถว) — false = มาจากชื่อโฟลเดอร์ใน Drive แก้ในแถวไม่ได้ */
+  plateFromTicket: boolean;
   /** โฟลเดอร์เส้นทาง (ShipRoute.folderName) — หน้าตรวจแยกกลุ่มตามนี้ */
   routeFolder: string;
   /** null = อ่านไม่ได้/ไม่ชัด → ตัวแดง เว้นว่างให้กรอก */
@@ -873,6 +875,7 @@ export async function shipReview(): Promise<ShipPage> {
       part: t.part,
       plate,
       plateNote,
+      plateFromTicket,
       routeFolder: t.routeFolder,
       ticketNo,
       date: date ? toInputDate(date) : null,
