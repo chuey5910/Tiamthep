@@ -77,7 +77,14 @@ export function ExpenseImport() {
         setError(res.error);
         return;
       }
-      setDone(`✅ นำเข้าแล้ว ${res.saved} รายการ · รวมเงิน ${n(res.amount)} บาท`);
+      setDone(
+        [
+          `✅ นำเข้าแล้ว — ค่าใช้จ่าย ${res.saved} รายการ ${n(res.amount)} บาท`,
+          res.stockSaved ? `📦 รับเข้าคลัง ${res.stockSaved} รายการ ${n(res.stockAmount)} บาท${res.newItems ? ` (สินค้าใหม่ ${res.newItems} รายการ)` : ""}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
       close();
       router.refresh();
     });

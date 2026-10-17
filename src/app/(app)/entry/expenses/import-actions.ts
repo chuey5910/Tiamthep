@@ -24,7 +24,9 @@ export async function previewExpenseImport(form: FormData): Promise<ImportPrevie
 }
 
 /** บันทึกแถวที่ติ๊ก — อ่านไฟล์ใหม่ฝั่งเซิร์ฟเวอร์ (ไม่เชื่อค่าจากหน้าเว็บ) · แถวที่มี ❌ ไม่บันทึกแม้ส่งมา */
-export async function commitExpenseImport(form: FormData): Promise<{ ok: true; saved: number; amount: number } | { ok: false; error: string }> {
+export async function commitExpenseImport(
+  form: FormData,
+): Promise<{ ok: true; saved: number; amount: number; stockSaved: number; stockAmount: number; newItems: number } | { ok: false; error: string }> {
   await requireWrite();
   const buf = await readFile(form);
   if (typeof buf === "string") return { ok: false, error: buf };
