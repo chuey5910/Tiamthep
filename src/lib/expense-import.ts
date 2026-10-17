@@ -11,7 +11,7 @@
  *  – ทะเบียนรถ = ค่าใช้จ่ายของรถคันนั้น
  *  – «คลังอะไหล่» (หรือ store) = ซื้อเข้าคลังของบริษัท → รับเข้าคลัง (StockIn) ไม่ลงค่าใช้จ่าย
  *    รถคันไหนเบิกไปใช้ ค่อยเป็นต้นทุนของคันนั้นตอนเบิก (ไม่นับซ้ำ)
- *    ชื่อสินค้า = รายละเอียด · ไม่มีในคลัง = สร้างสินค้าใหม่ให้ (รหัส IM0001…) โชว์ให้คนเห็นก่อนกดนำเข้า
+ *    ชื่อสินค้า = รายละเอียด · ไม่มีในคลัง = สร้างสินค้าใหม่ให้ — หมวด/รหัสตาม stock-groups.ts โชว์ให้คนเห็นก่อนกดนำเข้า
  */
 
 import * as XLSX from "xlsx";
@@ -19,6 +19,7 @@ import { expenseAmount, poLineAmounts } from "./calc";
 import { formatThaiDate, parseDate } from "./date";
 import { prisma } from "./prisma";
 import { nameKey } from "./ship-ticket-parse";
+import { groupOf, maxCodeNumber } from "./stock-groups";
 
 /** ชื่อหัวคอลัมน์ที่รับ (ตัดช่องว่าง/วงเล็บหน่วยออกก่อนเทียบ) — ลำดับคอลัมน์ในไฟล์สลับได้ */
 const HEADERS: Record<string, string[]> = {
@@ -91,7 +92,7 @@ type Parsed = ImportRow & {
     amount: number;
     vendor: string | null;
     note: string | null;
-    newItem: { code: string; name: string; unit: string } | null;
+    newItem: NewItem | null;
   } | null;
 };
 
@@ -100,8 +101,8 @@ const STOCK_WORDS = ["คลังอะไหล่", "store", "สโตร์
 const isStock = (s: string | null) => !!s && STOCK_WORDS.includes(s.replace(/\s+/g, "").toLowerCase());
 /** ชื่อสินค้าสำหรับเทียบ — ไม่สนช่องว่างและตัวพิมพ์ */
 const itemKey = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-/** รหัสสินค้าที่ระบบสร้างให้ตอนนำเข้า — แยกชุดจากรหัสที่คนตั้งเอง */
-const NEW_ITEM_PREFIX = "IM";
+/** สินค้าที่ต้องสร้างใหม่ตอนนำเข้า — หมวดจากชื่อ (stock-groups.ts) · รหัส = ตัวอักษรหมวด + เลขรันต่อทั้งคลัง */
+type NewItem = { code: string; name: string; unit: string; category: string };
 
 /**
  * วันที่ในไฟล์ค่าใช้จ่าย — ปี 2 หลัก = พ.ศ. ย่อ (01/09/69 = 1 ก.ย. 2569 · เจ้าของกำหนด)
@@ -162,19 +163,18 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
     .map((c) => HEADERS[c][0]);
 
   // ข้อมูลในระบบที่ต้องเทียบ
-  const [vehicles, drivers, lookups, items, lastNew] = await Promise.all([
+  const [vehicles, drivers, lookups, items] = await Promise.all([
     prisma.vehicle.findMany({ select: { plate: true } }),
     prisma.driver.findMany({ select: { code: true, firstName: true, lastName: true } }),
     prisma.lookup.findMany({ where: { kind: { in: ["supplier", "expenseCategory", "unit"] } }, select: { kind: true, value: true } }),
     prisma.inventoryItem.findMany({ select: { code: true, name: true, unit: true } }),
-    prisma.inventoryItem.findFirst({ where: { code: { startsWith: NEW_ITEM_PREFIX } }, orderBy: { code: "desc" }, select: { code: true } }),
   ]);
   const itemsByName = new Map<string, typeof items>();
   for (const it of items) itemsByName.set(itemKey(it.name), [...(itemsByName.get(itemKey(it.name)) ?? []), it]);
   const itemByCode = new Map(items.map((it) => [it.code.toUpperCase(), it]));
   // สินค้าใหม่ในไฟล์ — ชื่อเดียวกันหลายแถวใช้รหัสเดียวกัน (สร้างครั้งเดียว)
-  let nextNew = Number(lastNew?.code.slice(NEW_ITEM_PREFIX.length)) || 0;
-  const newItems = new Map<string, { code: string; name: string; unit: string }>();
+  let nextNew = maxCodeNumber(items.map((i) => i.code));
+  const newItems = new Map<string, NewItem>();
   const plates = new Map(vehicles.map((v) => [v.plate.replace(/\s+/g, ""), v.plate]));
   const driverByName = new Map<string, string[]>();
   for (const d of drivers) {
@@ -273,17 +273,21 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
         const byCode = itemByCode.get(detail.toUpperCase());
         const byName = itemsByName.get(itemKey(detail)) ?? [];
         let item: { code: string; name: string; unit: string } | null = byCode ?? (byName.length === 1 ? byName[0] : null);
-        let newItem: { code: string; name: string; unit: string } | null = null;
+        let newItem: NewItem | null = null;
         if (!item && byName.length > 1) bad(`ชื่อสินค้า «${detail}» ตรงกับหลายรายการในคลัง (${byName.map((i) => i.code).join(", ")}) — ใส่รหัสสินค้าในช่องรายละเอียดแทน`);
         else if (!item) {
           newItem = newItems.get(itemKey(detail)) ?? null;
+          const g = groupOf(detail);
           if (!newItem) {
             nextNew++;
-            newItem = { code: `${NEW_ITEM_PREFIX}${String(nextNew).padStart(4, "0")}`, name: detail, unit: unit ?? "ชิ้น" };
+            newItem = { code: `${g.group.letter}${String(nextNew).padStart(4, "0")}`, name: detail, unit: unit ?? "ชิ้น", category: g.group.name };
             newItems.set(itemKey(detail), newItem);
           }
           item = newItem;
-          warn(`📦 ยังไม่มีสินค้า «${detail}» ในคลัง — จะสร้างสินค้าใหม่ให้ รหัส ${newItem.code} หน่วย ${newItem.unit} แล้วรับเข้าคลัง`);
+          warn(
+            `📦 ยังไม่มีสินค้า «${detail}» ในคลัง — จะสร้างใหม่ รหัส ${newItem.code} หมวด «${newItem.category}»` +
+              `${g.because ? ` (ชื่อมีคำว่า «${g.because}»)` : " (ชื่อไม่ตรงหมวดไหน)"} · ${newItem.category} = ${g.group.about} · หน่วย ${newItem.unit}`,
+          );
         } else if (unit && unit !== item.unit) warn(`หน่วยในไฟล์ «${unit}» ไม่ตรงหน่วยของสินค้า «${item.unit}» (${item.code}) — ตรวจจำนวนให้ตรงหน่วยในคลัง`);
         if (item && date && amount != null && !notes.some((n) => n.startsWith("❌"))) {
           const a = poLineAmounts(amount, qtyN);
@@ -396,7 +400,8 @@ export async function saveExpenseRows(
   await prisma.$transaction([
     prisma.lookup.createMany({ data: suppliers.map((value) => ({ kind: "supplier", value })), skipDuplicates: true }),
     prisma.lookup.createMany({ data: units.map((value) => ({ kind: "unit", value })), skipDuplicates: true }),
-    prisma.inventoryItem.createMany({ data: newItems.map((i) => ({ code: i.code, name: i.name, unit: i.unit, trackingType: "จำนวน" })) }),
+    prisma.lookup.createMany({ data: [...new Set(newItems.map((i) => i.category))].map((value) => ({ kind: "stockCategory", value })), skipDuplicates: true }),
+    prisma.inventoryItem.createMany({ data: newItems.map((i) => ({ code: i.code, name: i.name, unit: i.unit, category: i.category, trackingType: "จำนวน" })) }),
     prisma.stockIn.createMany({
       data: pickStock.map((r) => {
         const k = r.stock!;
