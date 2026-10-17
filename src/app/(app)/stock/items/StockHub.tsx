@@ -8,7 +8,7 @@ import { createRecord, deleteRecord, updateRecord } from "../../crud/actions";
 import type { Option } from "@/lib/crud";
 import { NO_FILTER, StockFilterBar, stockMatch, type StockFilter } from "@/components/StockFilterBar";
 import { needsReorder } from "@/lib/stock-rules";
-import { STOCK_GROUPS } from "@/lib/stock-groups";
+import { STOCK_GROUPS, groupByName } from "@/lib/stock-groups";
 
 export type MoveView = {
   id: number;
@@ -239,7 +239,10 @@ export function StockHub({
           {(item = dialog.item) => (
             <>
               <p className="lg:col-span-4 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[12px] font-medium text-brand-900">
-                – คงเหลือตอนนี้ <b>{num(item.balance, 0)} {item.unit}</b> · เบิกแล้วระบบตัดสต็อกและคิดเป็นต้นทุนของรถคันที่เลือกให้เอง
+                – คงเหลือตอนนี้ <b>{num(item.balance, 0)} {item.unit}</b> ·{" "}
+                {groupByName(item.category)?.companyExpense
+                  ? "ของหมวดทั่วไป — นับเป็นค่าใช้จ่ายบริษัทแล้วตอนซื้อ เบิกนี้ตัดแค่จำนวนในคลัง ไม่คิดเงินกับรถซ้ำ"
+                  : "เบิกแล้วระบบตัดสต็อกและคิดเป็นต้นทุนของรถคันที่เลือกให้เอง"}
                 {item.trackingType === "รายชิ้น" && " · ของรายชิ้น ให้กรอกรหัสอุปกรณ์ใหม่/เก่าด้วย"}
               </p>
               <F label="วันที่เบิก" required>

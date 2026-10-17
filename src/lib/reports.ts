@@ -10,6 +10,11 @@
 
 import { prisma } from "./prisma";
 import { needsReorder } from "./stock-rules";
+import { STOCK_GROUPS } from "./stock-groups";
+
+/** หมวดที่ซื้อแล้วนับเป็นค่าใช้จ่ายบริษัททันที (ทั่วไป) — เข้าคลังเพื่อนับจำนวนเท่านั้น เบิกออกไม่คิดเงินซ้ำ */
+const COMPANY_EXPENSE_CATEGORIES = STOCK_GROUPS.filter((g) => g.companyExpense).map((g) => g.name);
+export const GENERAL_PURCHASE_LABEL = "ของใช้ทั่วไป (ซื้อเข้าคลัง)";
 import {
   buildContext,
   computeFuelBonuses,
@@ -41,7 +46,7 @@ export async function loadPeriod(period: Period) {
   // ขยายช่วงที่ดึงงานออกไปข้างละ 1 เดือน เผื่องานที่วันขึ้นกับวันลงสินค้าคนละเดือน
   const wide = { from: addDays(period.from, -35), to: addDays(period.to, 35) };
 
-  const [jobsRaw, fuel, expenses, advances, overridesRaw, stockOuts, vendorBills, drivers] =
+  const [jobsRaw, fuel, expenses, advances, overridesRaw, stockOutsRaw, vendorBills, drivers, generalItems, stockInsRaw] =
     await Promise.all([
       prisma.job.findMany({
         where: { loadDate: { gte: wide.from, lte: wide.to } },
@@ -54,7 +59,17 @@ export async function loadPeriod(period: Period) {
       prisma.stockOut.findMany({ where: { date: { gte: period.from, lte: period.to } } }),
       prisma.vendorBill.findMany({ where: { date: { gte: period.from, lte: period.to } } }),
       prisma.driver.findMany(),
+      prisma.inventoryItem.findMany({ where: { category: { in: COMPANY_EXPENSE_CATEGORIES } }, select: { code: true, name: true } }),
+      prisma.stockIn.findMany({ where: { date: { gte: period.from, lte: period.to } } }),
     ]);
+
+  // ของหมวดทั่วไป (เจ้าของกำหนด แบบ ก.): นับเป็นค่าใช้จ่ายบริษัท "ตอนซื้อ" = รายการรับเข้าคลังในช่วงนี้
+  // เบิกออกไม่คิดเงินซ้ำ (ต้นทุนเบิก = 0) — คลังยังนับจำนวนคงเหลือได้ ซื้อซ้ำโดยไม่รู้ไม่ได้
+  const generalName = new Map(generalItems.map((i) => [i.code, i.name]));
+  const stockOuts = stockOutsRaw.map((s) => (generalName.has(s.itemCode) ? { ...s, cost: 0 } : s));
+  const generalPurchases = stockInsRaw
+    .filter((s) => generalName.has(s.itemCode))
+    .map((s) => ({ ...s, name: generalName.get(s.itemCode)!, amount: round2(s.qty * s.unitCost) }));
 
   const jobs: JobInput[] = jobsRaw;
   const calcs = new Map<number, JobCalc>();
@@ -95,6 +110,7 @@ export async function loadPeriod(period: Period) {
     bonuses: bonusesInPeriod,
     allBonuses: bonuses,
     stockOuts,
+    generalPurchases,
     vendorBills,
     drivers,
   };
@@ -320,6 +336,7 @@ export function companyPnl(d: PeriodData): CompanyPnl {
   const fuelBonus = sum(d.bonuses.map((b) => b.bonus));
   const outsourcePay = sum(d.billedJobs.map((j) => d.calcs.get(j.id)!.outsourcePay));
   const parts = sum(d.stockOuts.map((s) => s.cost));
+  const generalBought = sum(d.generalPurchases.map((s) => s.amount));
   const garage = sum(d.vendorBills.map((b) => b.amount));
 
   const byCategory = new Map<string, number>();
@@ -335,6 +352,7 @@ export function companyPnl(d: PeriodData): CompanyPnl {
     { label: "เงินพิเศษค่าน้ำมัน (ซื้อคืน)", amount: fuelBonus },
     { label: "ค่าจ้างรถร่วม", amount: outsourcePay },
     { label: "ต้นทุนอะไหล่จากสต็อก", amount: parts },
+    { label: GENERAL_PURCHASE_LABEL, amount: generalBought },
     { label: "ค่าแรงอู่ (บิลผู้ขาย)", amount: garage },
     ...[...byCategory.entries()].map(([label, amount]) => ({ label, amount })),
   ].filter((c) => c.amount !== 0);
@@ -476,6 +494,12 @@ function costLedger(d: PeriodData): CostItem[] {
       supplier: s.vendor,
       amount: s.cost,
     });
+  }
+
+  // ของใช้ทั่วไป: ค่าใช้จ่ายบริษัทตอนซื้อ (ไม่ผูกรถ)
+  for (const s of d.generalPurchases) {
+    if (s.amount === 0) continue;
+    items.push({ category: GENERAL_PURCHASE_LABEL, plate: null, driverCode: null, supplier: s.vendor, amount: s.amount });
   }
 
   const plateByWorkOrder = new Map<string, string>();
