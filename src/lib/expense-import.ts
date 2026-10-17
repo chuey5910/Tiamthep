@@ -12,6 +12,8 @@
  *  – «คลังอะไหล่» (หรือ store) = ซื้อเข้าคลังของบริษัท → รับเข้าคลัง (StockIn) ไม่ลงค่าใช้จ่าย
  *    รถคันไหนเบิกไปใช้ ค่อยเป็นต้นทุนของคันนั้นตอนเบิก (ไม่นับซ้ำ)
  *    ชื่อสินค้า = รายละเอียด · ไม่มีในคลัง = สร้างสินค้าใหม่ให้ — หมวด/รหัสตาม stock-groups.ts โชว์ให้คนเห็นก่อนกดนำเข้า
+ *    หมวด «ทั่วไป» (ถุงมือ เชือก …) = ค่าใช้จ่ายบริษัททันที ไม่เข้าคลัง (เจ้าของกำหนด) · ลงทีละรายการตามไฟล์
+ *    ชื่อที่ไม่รู้หมวด = ❌ ให้คนเพิ่มสินค้าที่หน้าคลังอะไหล่ก่อน (ห้ามปัดเข้าทั่วไปเอง — เงินจะไปผิดที่)
  */
 
 import * as XLSX from "xlsx";
@@ -19,7 +21,7 @@ import { expenseAmount, poLineAmounts } from "./calc";
 import { formatThaiDate, parseDate } from "./date";
 import { prisma } from "./prisma";
 import { nameKey } from "./ship-ticket-parse";
-import { groupOf, maxCodeNumber } from "./stock-groups";
+import { STOCK_GROUPS, groupByName, groupOf, maxCodeNumber } from "./stock-groups";
 
 /** ชื่อหัวคอลัมน์ที่รับ (ตัดช่องว่าง/วงเล็บหน่วยออกก่อนเทียบ) — ลำดับคอลัมน์ในไฟล์สลับได้ */
 const HEADERS: Record<string, string[]> = {
@@ -154,7 +156,7 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
     prisma.vehicle.findMany({ select: { plate: true } }),
     prisma.driver.findMany({ select: { code: true, firstName: true, lastName: true } }),
     prisma.lookup.findMany({ where: { kind: { in: ["supplier", "expenseCategory", "unit"] } }, select: { kind: true, value: true } }),
-    prisma.inventoryItem.findMany({ select: { code: true, name: true, unit: true } }),
+    prisma.inventoryItem.findMany({ select: { code: true, name: true, unit: true, category: true } }),
   ]);
   const itemsByName = new Map<string, typeof items>();
   for (const it of items) itemsByName.set(itemKey(it.name), [...(itemsByName.get(itemKey(it.name)) ?? []), it]);
@@ -224,12 +226,14 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
       else bad(`ไม่รู้จักคนขับ «${driverText}» — แก้ชื่อให้ตรงหน้า ข้อมูลคนขับ หรือใส่รหัส พขร.`);
     }
 
-    // ประเภท (ต้องมี · ต้องตรงรายการตัวเลือก — สะกดผิดแล้วรายงานแยกหมวดผิด) · ของเข้าคลังยังไม่ใช่ค่าใช้จ่าย ไม่ตรวจประเภท
-    if (toStock) {
-      /* เป็นต้นทุนของรถตอนเบิก */
-    } else if (!category) bad("ไม่มีประเภทค่าใช้จ่าย");
-    else if (!has("expenseCategory", category))
-      bad(`ไม่มีประเภท «${category}» ในรายการ — แก้ให้ตรง หรือเพิ่มที่ ตั้งค่า › รายการตัวเลือก › ประเภทค่าใช้จ่าย`);
+    // ประเภท (ต้องมี · ต้องตรงรายการตัวเลือก — สะกดผิดแล้วรายงานแยกหมวดผิด)
+    // ของเข้าคลังยังไม่ใช่ค่าใช้จ่าย ไม่ตรวจตรงนี้ (ของหมวดทั่วไปที่ลงค่าใช้จ่ายบริษัท ตรวจหลังรู้หมวด)
+    const checkCategory = () => {
+      if (!category) bad("ไม่มีประเภทค่าใช้จ่าย");
+      else if (!has("expenseCategory", category))
+        bad(`ไม่มีประเภท «${category}» ในรายการ — แก้ให้ตรง หรือเพิ่มที่ ตั้งค่า › รายการตัวเลือก › ประเภทค่าใช้จ่าย`);
+    };
+    if (!toStock) checkCategory();
 
     // ผู้ให้บริการ / หน่วย — ยังไม่มีในรายการ เพิ่มให้ตอนนำเข้า
     const supplier = text(get(row, "supplier"));
@@ -259,6 +263,8 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
 
     // รับเข้าคลัง: หาสินค้าจากชื่อ (รายละเอียด) หรือรหัสสินค้า — ไม่เจอ = สร้างใหม่ให้ (บอกรหัสก่อนกดนำเข้า)
     let stock: Parsed["stock"] = null;
+    // ของหมวดทั่วไปจากแถวคลังอะไหล่ → ค่าใช้จ่ายบริษัท (ไม่ผูกรถ ไม่เข้าคลัง)
+    let toCompany = false;
     const detail = text(get(row, "detail"));
     if (toStock) {
       if (!detail) bad("ของเข้าคลังต้องมีรายละเอียด (= ชื่อสินค้า)");
@@ -268,10 +274,23 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
         const byName = itemsByName.get(itemKey(detail)) ?? [];
         let item: { code: string; name: string; unit: string } | null = byCode ?? (byName.length === 1 ? byName[0] : null);
         let newItem: NewItem | null = null;
+        const g = item ? null : groupOf(detail);
         if (!item && byName.length > 1) bad(`ชื่อสินค้า «${detail}» ตรงกับหลายรายการในคลัง (${byName.map((i) => i.code).join(", ")}) — ใส่รหัสสินค้าในช่องรายละเอียดแทน`);
-        else if (!item) {
+        else if (item && groupByName((byCode ?? byName[0]).category)?.companyExpense) {
+          // สินค้าที่มีอยู่แล้วแต่อยู่หมวดทั่วไป = ค่าใช้จ่ายบริษัทเหมือนกัน
+          toCompany = true;
+          item = null;
+          notes.push(`✅ 🏢 ค่าใช้จ่ายบริษัท — «${detail}» อยู่หมวดทั่วไปในคลัง · ไม่เข้าคลัง`);
+        } else if (!item && !g) {
+          bad(
+            `ไม่รู้ว่า «${detail}» อยู่หมวดไหน — เพิ่มสินค้านี้ที่หน้า คลังอะไหล่ (เลือกหมวด) แล้วเลือกไฟล์ใหม่ · ` +
+              `หมวดที่มี: ${STOCK_GROUPS.map((x) => x.name).join(" · ")}`,
+          );
+        } else if (!item && g!.group.companyExpense) {
+          toCompany = true;
+          notes.push(`✅ 🏢 ค่าใช้จ่ายบริษัท — หมวดทั่วไป (ชื่อมีคำว่า «${g!.because}») · ไม่เข้าคลัง · ทั่วไป = ${g!.group.about}`);
+        } else if (!item && g) {
           newItem = newItems.get(itemKey(detail)) ?? null;
-          const g = groupOf(detail);
           if (!newItem) {
             nextNew++;
             newItem = { code: `${g.group.letter}${String(nextNew).padStart(4, "0")}`, name: detail, unit: unit ?? "ชิ้น", category: g.group.name };
@@ -280,15 +299,16 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
           item = newItem;
           warn(
             `📦 ยังไม่มีสินค้า «${detail}» ในคลัง — จะสร้างใหม่ รหัส ${newItem.code} หมวด «${newItem.category}»` +
-              `${g.because ? ` (ชื่อมีคำว่า «${g.because}»)` : " (ชื่อไม่ตรงหมวดไหน)"} · ${newItem.category} = ${g.group.about} · หน่วย ${newItem.unit}`,
+              ` (ชื่อมีคำว่า «${g.because}») · ${newItem.category} = ${g.group.about} · หน่วย ${newItem.unit}`,
           );
-        } else if (unit && unit !== item.unit) warn(`หน่วยในไฟล์ «${unit}» ไม่ตรงหน่วยของสินค้า «${item.unit}» (${item.code}) — ตรวจจำนวนให้ตรงหน่วยในคลัง`);
+        } else if (item && unit && unit !== item.unit) warn(`หน่วยในไฟล์ «${unit}» ไม่ตรงหน่วยของสินค้า «${item.unit}» (${item.code}) — ตรวจจำนวนให้ตรงหน่วยในคลัง`);
         if (item && date && amount != null && !notes.some((n) => n.startsWith("❌"))) {
           const a = poLineAmounts(amount, qtyN);
           stock = { date, itemCode: item.code, qty: a.qty, unitCost: a.unitPrice, amount: a.amount, vendor: supplier, note: text(get(row, "note")), newItem };
           if (!newItem) notes.push(`✅ 📦 รับเข้าคลัง ${item.code} ${item.name} — รถคันไหนเบิก คิดเป็นค่าใช้จ่ายคันนั้น`);
         }
       }
+      if (toCompany) checkCategory();
     }
 
     const ok = !notes.some((n) => n.startsWith("❌"));
@@ -310,8 +330,20 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
       ok,
       checked: ok,
       data:
-        ok && !toStock && date && category && amount != null
-          ? { date, plate, driverCode, supplier, category, detail, unitPrice, qty, unit, amount, note: text(get(row, "note")) }
+        ok && (!toStock || toCompany) && date && category && amount != null
+          ? {
+              date,
+              plate,
+              driverCode,
+              supplier,
+              category,
+              detail,
+              unitPrice,
+              qty,
+              unit,
+              amount,
+              note: text(get(row, "note")) ?? (toCompany ? "ของทั่วไปจากแถว «คลังอะไหล่» — ค่าใช้จ่ายบริษัท ไม่เข้าคลัง" : null),
+            }
           : null,
       newSupplier,
       newUnit,
