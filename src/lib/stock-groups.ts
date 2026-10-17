@@ -93,6 +93,9 @@ export const STOCK_GROUPS: StockGroup[] = [
   },
 ];
 
+/** สำหรับแสดงให้คนเลือก/อ่าน — เรียงตามตัวอักษรรหัสหมวด A B C H I J K L (STOCK_GROUPS เรียงตามลำดับการจับคำ ไม่ใช่ลำดับแสดง) */
+export const STOCK_GROUPS_BY_LETTER = [...STOCK_GROUPS].sort((a, b) => a.letter.localeCompare(b.letter));
+
 /** จัดหมวดจากชื่อสินค้า — คืนหมวด + คำที่ทำให้เข้าหมวดนี้ (ไว้บอกคน) · ไม่ตรงหมวดไหน = null (ห้ามเดา) */
 export function groupOf(name: string): { group: StockGroup; because: string } | null {
   const n = name.replace(/\s+/g, "");

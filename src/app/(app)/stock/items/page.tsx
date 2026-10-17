@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { sortOptionsThaiFirst } from "@/lib/sort";
 import { needsReorder } from "@/lib/stock-rules";
 import { StockHub, type ItemView, type MoveView } from "./StockHub";
+import { groupByName } from "@/lib/stock-groups";
 
 export const dynamic = "force-dynamic";
 
@@ -135,7 +136,10 @@ export default async function StockItemsPage() {
           <StockHub
             items={views}
             units={sortOptionsThaiFirst(unitLookups.map((l) => ({ value: l.value, label: l.value })))}
-            categories={categoryLookups.map((l) => ({ value: l.value, label: l.value }))}
+            categories={categoryLookups
+              .map((l) => ({ value: l.value, label: groupByName(l.value) ? `${l.value} (${groupByName(l.value)!.letter})` : l.value }))
+              // เรียงตามตัวอักษรรหัสหมวด A B C … ทุกหน้า (หมวดที่ไม่อยู่ใน 8 หมวด ต่อท้าย)
+              .sort((a, b) => (groupByName(a.value)?.letter ?? "~").localeCompare(groupByName(b.value)?.letter ?? "~"))}
             suppliers={sortOptionsThaiFirst(supplierLookups.map((l) => ({ value: l.value, label: l.value })))}
             vehicles={vehicles.map((v) => ({ value: v.plate, label: `${v.plate} (${v.vehicleType})` }))}
           />

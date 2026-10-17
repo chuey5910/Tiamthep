@@ -22,7 +22,7 @@ import { expenseAmount, poLineAmounts } from "./calc";
 import { formatThaiDate, parseDate } from "./date";
 import { prisma } from "./prisma";
 import { nameKey } from "./ship-ticket-parse";
-import { STOCK_GROUPS, groupByName, groupOf, maxCodeNumber } from "./stock-groups";
+import { STOCK_GROUPS_BY_LETTER, groupByName, groupOf, maxCodeNumber } from "./stock-groups";
 
 /** ชื่อหัวคอลัมน์ที่รับ (ตัดช่องว่าง/วงเล็บหน่วยออกก่อนเทียบ) — ลำดับคอลัมน์ในไฟล์สลับได้ */
 const HEADERS: Record<string, string[]> = {
@@ -277,7 +277,7 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
         else if (!item && !g) {
           bad(
             `ไม่รู้ว่า «${detail}» อยู่หมวดไหน — เพิ่มสินค้านี้ที่หน้า คลังอะไหล่ (เลือกหมวด) แล้วเลือกไฟล์ใหม่ · ` +
-              `หมวดที่มี: ${STOCK_GROUPS.map((x) => x.name).join(" · ")}`,
+              `หมวดที่มี: ${STOCK_GROUPS_BY_LETTER.map((x) => `${x.name} (${x.letter})`).join(" · ")}`,
           );
         } else if (!item && g) {
           newItem = newItems.get(itemKey(detail)) ?? null;

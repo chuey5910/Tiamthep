@@ -8,7 +8,7 @@ import { createRecord, deleteRecord, updateRecord } from "../../crud/actions";
 import type { Option } from "@/lib/crud";
 import { NO_FILTER, StockFilterBar, stockMatch, type StockFilter } from "@/components/StockFilterBar";
 import { needsReorder } from "@/lib/stock-rules";
-import { STOCK_GROUPS, groupByName } from "@/lib/stock-groups";
+import { STOCK_GROUPS_BY_LETTER, groupByName } from "@/lib/stock-groups";
 
 export type MoveView = {
   id: number;
@@ -313,7 +313,7 @@ export function StockHub({
                 <input name="name" className="inp" defaultValue={item?.name ?? ""} required />
               </F>
               {/* หมวดอะไร คืออะไร — ที่เดียวกับที่ใช้จัดหมวดสินค้าใหม่ตอนนำเข้า (stock-groups.ts) */}
-              <F label="หมวดหมู่" wide help={STOCK_GROUPS.map((g) => `${g.name} (${g.letter}) = ${g.about}`).join(" · ")}>
+              <F label="หมวดหมู่" wide help={STOCK_GROUPS_BY_LETTER.map((g) => `${g.name} (${g.letter}) = ${g.about}`).join(" · ")}>
                 <Select name="category" options={categories} empty="— ไม่ระบุ —" value={item?.category ?? undefined} />
               </F>
               <F label="หน่วยนับ">

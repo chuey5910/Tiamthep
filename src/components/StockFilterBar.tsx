@@ -1,7 +1,7 @@
 "use client";
 
 import { needsReorder } from "@/lib/stock-rules";
-import { STOCK_GROUPS, groupByName } from "@/lib/stock-groups";
+import { STOCK_GROUPS_BY_LETTER, groupByName } from "@/lib/stock-groups";
 
 /**
  * ตัวกรองคลังอะไหล่ — ใช้ชุดเดียวกันทั้งหน้า คลังอะไหล่ (รับเข้า/เบิกใช้) และ สรุปคงเหลือ
@@ -72,7 +72,7 @@ export function StockFilterBar({
           <label className="lbl">หมวด</label>
           <select className="inp w-56" value={value.cat} onChange={(e) => set({ cat: e.target.value })}>
             <option value="">— ทุกหมวด —</option>
-            {STOCK_GROUPS.map((g) => (
+            {STOCK_GROUPS_BY_LETTER.map((g) => (
               <option key={g.name} value={g.name}>
                 {g.name} ({g.letter})
               </option>
