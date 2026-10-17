@@ -5,6 +5,7 @@ import type { SearchParams } from "@/lib/params";
 import { baht, num } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { stockBalance } from "@/lib/reports";
+import { BalanceTable } from "./BalanceTable";
 import { formatThaiDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
@@ -71,52 +72,7 @@ export default async function StockBalancePage({ searchParams }: { searchParams:
         <Stat label="มูลค่าที่เบิกใช้สะสม" value={baht(outs._sum.cost ?? 0)} hint="บาท" />
       </div>
 
-      <Card title="คงเหลือรายสินค้า" className="mb-4" bodyClass="p-0">
-        {rows.length === 0 ? (
-          <Empty>
-            ยังไม่มีรายการสินค้า — เพิ่มได้ที่หน้า <b>คลังอะไหล่</b>
-          </Empty>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>รหัสสินค้า</th>
-                  <th>ชื่อสินค้า</th>
-                  <th>หน่วย</th>
-                  <th className="num">รับเข้าสะสม</th>
-                  <th className="num">เบิกออกสะสม</th>
-                  <th className="num">คงเหลือ</th>
-                  <th className="num">จุดสั่งซื้อ</th>
-                  <th>สถานะ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.code}>
-                    <td className="font-mono text-[12px]">{r.code}</td>
-                    <td>{r.name}</td>
-                    <td className="text-slate-500">{r.unit}</td>
-                    <td className="num">{num(r.inQty, 2)}</td>
-                    <td className="num">{num(r.outQty, 2)}</td>
-                    <td className={`num font-bold ${r.balance < 0 ? "text-red-700" : ""}`}>{num(r.balance, 2)}</td>
-                    <td className="num text-slate-500">{num(r.reorderPoint, 2)}</td>
-                    <td>
-                      {r.balance < 0 ? (
-                        <Badge tone="error">ติดลบ — ตรวจการบันทึก</Badge>
-                      ) : r.needsReorder ? (
-                        <Badge tone="warn">ต้องสั่งซื้อ</Badge>
-                      ) : (
-                        <Badge tone="ok">เพียงพอ</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      <BalanceTable rows={rows} />
 
       <Formula>
         <b>ตรวจใบวางบิลอู่:</b> ระบบจับคู่ใบวางบิลกับใบเบิกโดยใช้ <b>รหัสสั่งซ่อม + ชื่ออู่</b> ร่วมกันเสมอ

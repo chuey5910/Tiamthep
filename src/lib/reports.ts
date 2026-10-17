@@ -902,6 +902,7 @@ export async function documentAlerts(alertDays: number, today = new Date()): Pro
 export type StockBalanceRow = {
   code: string;
   name: string;
+  category: string | null;
   unit: string;
   inQty: number;
   outQty: number;
@@ -926,6 +927,7 @@ export async function stockBalance(): Promise<StockBalanceRow[]> {
     return {
       code: it.code,
       name: it.name,
+      category: it.category,
       unit: it.unit,
       inQty: round2(inQty),
       outQty: round2(outQty),

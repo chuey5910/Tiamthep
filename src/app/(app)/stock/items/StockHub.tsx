@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui";
 import { baht, num } from "@/lib/format";
 import { createRecord, deleteRecord, updateRecord } from "../../crud/actions";
 import type { Option } from "@/lib/crud";
+import { NO_FILTER, StockFilterBar, stockMatch, type StockFilter } from "@/components/StockFilterBar";
 import { needsReorder } from "@/lib/stock-rules";
 import { STOCK_GROUPS } from "@/lib/stock-groups";
 
@@ -47,7 +48,6 @@ type Dialog =
   | { kind: "moves"; item: ItemView };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const fold = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/\s+/g, "");
 
 export function StockHub({
   items,
@@ -63,49 +63,38 @@ export function StockHub({
   vehicles: Option[];
 }) {
   const router = useRouter();
-  const [q, setQ] = useState("");
-  const [only, setOnly] = useState<"all" | "low" | "moved">("all");
+  const [filter, setFilter] = useState<StockFilter>(NO_FILTER);
   const [dialog, setDialog] = useState<Dialog | null>(null);
 
-  const shown = useMemo(() => {
-    const fq = fold(q);
-    return items.filter((it) => {
-      if (only === "low" && !needsReorder(it.balance, it.reorderPoint)) return false;
-      if (only === "moved" && it.moves.length === 0) return false;
-      if (!fq) return true;
-      return [it.code, it.name, it.category, it.unit, it.trackingType, it.note].some((v) => fold(v).includes(fq));
-    });
-  }, [items, q, only]);
+  const shown = useMemo(
+    () =>
+      items.filter((it) =>
+        stockMatch(
+          { category: it.category, balance: it.balance, reorderPoint: it.reorderPoint, moved: it.moves.length > 0, search: [it.code, it.name, it.note] },
+          filter,
+        ),
+      ),
+    [items, filter],
+  );
 
   const totalValue = shown.reduce((a, it) => a + it.value, 0);
 
   return (
     <>
-      <div className="no-print card mb-4 flex flex-wrap items-end gap-3 p-3">
-        <div>
-          <label className="lbl">ค้นหา</label>
-          <input
-            className="inp w-72"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="รหัส ชื่อสินค้า หมวดหมู่ หน่วย…"
-          />
-        </div>
-        <div>
-          <label className="lbl">แสดง</label>
-          <select className="inp w-56" value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
-            <option value="all">— ทุกรายการ —</option>
-            <option value="low">เฉพาะที่ต้องสั่งซื้อ</option>
-            <option value="moved">เฉพาะที่เคยมีความเคลื่อนไหว</option>
-          </select>
-        </div>
+      <StockFilterBar
+        value={filter}
+        onChange={setFilter}
+        categories={items.map((it) => it.category)}
+        summary={
+          <>
+            พบ {shown.length} จาก {items.length} รายการ · มูลค่าคงเหลือรวม {baht(totalValue)} บาท
+          </>
+        }
+      >
         <button type="button" className="btn btn-primary" onClick={() => setDialog({ kind: "item" })}>
           + เพิ่มสินค้าใหม่
         </button>
-        <span className="pb-2 text-[12px] text-slate-500">
-          พบ {shown.length} จาก {items.length} รายการ · มูลค่าคงเหลือรวม {baht(totalValue)} บาท
-        </span>
-      </div>
+      </StockFilterBar>
 
       <div className="overflow-x-auto">
         <table className="tbl">
