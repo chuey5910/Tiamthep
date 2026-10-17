@@ -296,8 +296,12 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
           const a = poLineAmounts(amount, qtyN);
           stock = { date, itemCode: item.code, qty: a.qty, unitCost: a.unitPrice, amount: a.amount, vendor: supplier, note: text(get(row, "note")), newItem };
           const general = !!groupByName(newItem ? newItem.category : (byCode ?? byName[0])?.category)?.companyExpense;
-          if (general) notes.push("✅ 🏢 หมวดทั่วไป — เข้าคลังเพื่อนับจำนวน · เงินนับเป็นค่าใช้จ่ายบริษัทเดือนที่ซื้อ · เบิกไม่คิดซ้ำ");
-          else if (!newItem) notes.push(`✅ 📦 รับเข้าคลัง ${item.code} ${item.name} — รถคันไหนเบิก คิดเป็นค่าใช้จ่ายคันนั้น`);
+          // ทุกแถวของคลังอะไหล่มีบรรทัดเขียวบอกปลายทางของเงิน รูปแบบเดียวกัน (หลักการ: สถานะรูปแบบเดียวกันทุกแถว)
+          notes.push(
+            general
+              ? `✅ 🏢 เข้าคลัง ${item.code} · หมวดทั่วไป — เงินนับเป็นค่าใช้จ่ายบริษัทเดือนที่ซื้อ · เบิกไม่คิดซ้ำ`
+              : `✅ 📦 เข้าคลัง ${item.code} — รถคันไหนเบิก คิดเป็นค่าใช้จ่ายคันนั้น`,
+          );
         }
       }
     }
