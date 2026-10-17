@@ -104,19 +104,6 @@ const itemKey = (s: string) => s.replace(/\s+/g, "").toLowerCase();
 /** สินค้าที่ต้องสร้างใหม่ตอนนำเข้า — หมวดจากชื่อ (stock-groups.ts) · รหัส = ตัวอักษรหมวด + เลขรันต่อทั้งคลัง */
 type NewItem = { code: string; name: string; unit: string; category: string };
 
-/**
- * วันที่ในไฟล์ค่าใช้จ่าย — ปี 2 หลัก = พ.ศ. ย่อ (01/09/69 = 1 ก.ย. 2569 · เจ้าของกำหนด)
- * ข้อความที่ไม่ใช่ วัน/เดือน/ปี = อ่านไม่ได้ (ไม่ปล่อยให้เครื่องเดา — เคยกลายเป็น 9 ม.ค. 1969)
- */
-function readDate(raw: unknown): Date | null {
-  if (typeof raw !== "string") return parseDate(raw);
-  const s = raw.trim();
-  const short = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2})$/);
-  if (short) return parseDate(`${short[1]}/${short[2]}/${2500 + Number(short[3])}`);
-  if (/^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$/.test(s)) return parseDate(s.replace(/\./g, "/"));
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return parseDate(s);
-  return null;
-}
 
 const text = (v: unknown) => {
   const s = String(v ?? "").replace(/\s+/g, " ").trim();
@@ -209,8 +196,15 @@ export async function parseExpenseFile(buf: Buffer): Promise<{ ok: true; rows: P
     const warn = (s: string) => notes.push(`⚠️ ${s}`);
 
     // วันที่
-    const date = readDate(rawDate);
-    if (!date) bad(text(rawDate) ? `วันที่ «${text(rawDate)}» อ่านไม่ได้ — ใช้รูปแบบ วัน/เดือน/ปี เช่น 10/10/2569 หรือ 10/10/69` : "ไม่มีวันที่ — ใส่วันที่ในไฟล์");
+    const date = parseDate(typeof rawDate === "string" ? rawDate.trim() : rawDate);
+    if (!date)
+      bad(
+        !text(rawDate)
+          ? "ไม่มีวันที่ — ใส่วันที่ในไฟล์"
+          : /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2}$/.test(text(rawDate)!)
+            ? `วันที่ «${text(rawDate)}» ปีไม่ครบ — ใส่ปี พ.ศ. 4 หลัก เช่น 01/09/2569`
+            : `วันที่ «${text(rawDate)}» อ่านไม่ได้ — ใช้รูปแบบ วัน/เดือน/ปี พ.ศ. 4 หลัก เช่น 10/10/2569`,
+      );
 
     // ทะเบียน (ไม่ใส่ได้ = ค่าใช้จ่ายส่วนกลาง) · «คลังอะไหล่» = รับเข้าคลัง
     const plateText = text(get(row, "plate"));

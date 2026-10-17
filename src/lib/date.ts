@@ -52,6 +52,8 @@ export function toInputDate(d: Date | null | undefined): string {
  * แปลงข้อความวันที่เป็น Date (00:00 UTC)
  * รองรับ: "YYYY-MM-DD", "DD/MM/YYYY" และปี พ.ศ. (เช่น 31/03/2570 → 2027-03-31)
  * ปีที่มากกว่า 2400 ถือว่าเป็น พ.ศ. จึงลบ 543
+ * **ปีต้องมี 4 หลักเสมอ** (เจ้าของสั่ง) — ปี 2 หลัก (01/09/69) หรือรูปแบบอื่น = อ่านไม่ได้ (null) ให้ขึ้นเตือน
+ * ห้ามส่งต่อให้ new Date() เดา — เคยอ่าน 01/09/69 เป็น 9 ม.ค. 1969 (เอาเดือนขึ้นก่อนแบบฝรั่ง) เงียบๆ
  */
 export function parseDate(input: unknown): Date | null {
   if (input == null || input === "" || input === "-") return null;
@@ -73,17 +75,17 @@ export function parseDate(input: unknown): Date | null {
   if (m) return normalizeYear(+m[1], +m[2], +m[3]);
 
   // DD/MM/YYYY หรือ DD-MM-YYYY
-  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?!\d)/);
   if (m) return normalizeYear(+m[3], +m[2], +m[1]);
 
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : startOfDay(d);
+  return null;
 }
 
 function normalizeYear(y: number, m: number, d: number): Date | null {
   // ปี พ.ศ. → ค.ศ.
   if (y > 2400) y -= 543;
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  // วันที่เกินจำนวนวันของเดือน (31/09) = ผิด ไม่ปัดไปเดือนถัดไป
+  if (m < 1 || m > 12 || d < 1 || d > daysInMonth(y, m)) return null;
   const dt = utcDate(y, m, d);
   return isNaN(dt.getTime()) ? null : dt;
 }
